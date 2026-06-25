@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glnis"
+version = "0.2.0"
+description = "Flexible application of MadNIS for the calculation of GammaLoop integrands."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Nic Fink", email = "nic.fink@students.unibe.ch" }
+]
+keywords = ["MadNIS", "GammaLoop", "numerical integration", "high-energy physics"]
+
+dependencies = [
+    "tomlkit>=0.10",
+    "numpy>=2.2,<3",
+    "torch>=2.6,<3",
+    "vegas>=6.2",
+    "pydot>=3.0",
+    "matplotlib>=3.6",
+    "symbolica>=1.5.0",
+    "madnis @ git+https://github.com/madgraph-ml/madnis.git@main",
+    "momtrop @ git+https://github.com/Fink-Nic/momtrop.git@main",
+]
+
+[project.scripts]
+glnis = "glnis.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

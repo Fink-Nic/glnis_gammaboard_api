@@ -1,0 +1,74 @@
+# Ghost bump with the MADNIS process sampler.
+
+name = "ghost_bump_madnis"
+
+# Use this on UBELIX to ensure the job is scheduled on a GPU node
+# sampler_requirements = { gpu = 1 }
+
+[evaluator]
+kind = "symbolica"
+expr = "1/((x-1/4)^2+(y-1/4)^2+1/20) + 1/((x-3/4)^2+(y-3/4)^2+1/20) - 1/2"
+args = ["x", "y"]
+
+[[task_queue]]
+name = "accumulator"
+kind = "set_accumulator"
+accumulator = "scalar"
+
+[[task_queue]]
+name = "madnis-train"
+kind = "sample"
+
+[task_queue.stop_condition]
+max_samples = 200000
+
+[task_queue.sampler_aggregator.config]
+kind = "process_sampler"
+# Direct venv deployment. From the GammaBoard workspace:
+#   cd integrations/madnis
+#   uv venv --python 3.13 --seed .venv
+#   . .venv/bin/activate
+#   python -m pip install .
+command = ["$resources/../glnis_gammaboard_api/madnis/.venv/bin/glnis-gammaboard-sampler"]
+# Alternative with Apptainer when the host supports Apptainer/SIF execution:
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/madnis/madnis.sif", "madnis-gammaboard-sampler"]
+# Alternative with the Nix runtime when Nix is available:
+# command = ["$resources/../integrations/madnis/result/bin/python", "-u", "-m", "run_sampler"]
+cwd = "$resources/.."
+requires_training_values = true
+
+[task_queue.sampler_aggregator.config.args]
+seed = 0
+training_steps = 200
+training_batch_size = 1000
+use_gpu = true
+cuda_id = 0
+save_path = "integrations/madnis/checkpoints/ghost_bump_madnis"
+parameterisation = {
+    condition_integrand_first = false,
+    layer = [
+        {
+            parameterisation_type = "identity"
+        }
+    ]
+}
+
+[[task_queue]]
+name = "pdf-2d"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+offset = [0.0, 0.0]
+u_vector = [1.0, 0.0]
+v_vector = [0.0, 1.0]
+
+[task_queue.geometry.u_linspace]
+start = 0.0
+stop = 1.0
+count = 128
+
+[task_queue.geometry.v_linspace]
+start = 0.0
+stop = 1.0
+count = 128

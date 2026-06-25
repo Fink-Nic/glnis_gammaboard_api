@@ -1,0 +1,10 @@
+.venv/
+result
+result-*
+madnis.sif
+build
+madnis_gammaboard_api.egg-info
+checkpoints/
+__pycache__/
+*.py[cod]
+*.egg-info*
