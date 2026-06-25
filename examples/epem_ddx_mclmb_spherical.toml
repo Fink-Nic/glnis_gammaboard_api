@@ -1,0 +1,105 @@
+# =============================================================================
+# e+ e- -> d d~  at LO, sqrt(s) = 1000 GeV  --  GammaLoop engine
+# =============================================================================
+#
+# Total LO cross section of e+ e- -> d d~ (gamma + Z s-channel, full SM) at a
+# fixed centre-of-mass energy of 1000 GeV, via Local Unitarity (optical-theorem
+# cut of the photon/Z self-energy with the d d~ pair in the loop).
+#
+# This is the GammaLoop half of a two-engine comparison; the MadGraph7/MadSpace
+# half lives in ee_ddx_madgraph.toml. Both use identical SM inputs
+# (aEWM1=132.507, Gf=1.16639e-5, MZ=91.188, ...) and the same fixed
+# sqrt(s)=1000 GeV (beams 500+500 GeV, no PDF), so the cross sections are
+# directly comparable in picobarns. The reference value is 3.097e-2 pb.
+#
+# Run with:
+#   gammaboard run add resources/templates/runs/ee_ddx_gammaloop.toml
+#
+# -----------------------------------------------------------------------------
+# ARTIFACT -- GammaLoop state for e+ e- -> d d~ @ LO
+# -----------------------------------------------------------------------------
+# The CLI example card ships with the gammaloop checkout. Generate the state and
+# copy it under resources/states so the relative state_folder below resolves:
+#
+#   cd /home/cedricsigrist/Workspace/repos/gammaloop
+#   ./gammaloop --clean-state ./examples/cli/epem_a_ddx/LO/epem_a_ddx.toml \
+#       run generate integrate -c "quit -o"
+#   mkdir -p /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/epem_a_ddx/LO
+#   cp -r ./examples/cli/epem_a_ddx/LO/state \
+#       /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/epem_a_ddx/LO/state
+#
+# (The card already sets e_cm = 1000.0 and integral_unit = "picobarn".)
+# =============================================================================
+
+replacements = { run_name = "ee_ddx_gammaloop", train_samples = 1000000, sample_samples = 10000000, havana_bins = 128, samples_for_update = 50000, max_batch_size = 10000 }
+
+name = '$(run_name:"ee_ddx_gammaloop")'
+target = { kind = "vector", components = { real = 3.097e-2, imag = 0.0 } }
+
+[evaluator]
+kind = "gammaloop"
+state_folder = "states/epem_a_ddx/LO/state"
+integrand_name = "LO"
+
+[evaluator.preprocessing]
+read_only = true
+commands = [
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[task_queue]]
+name = "accumulator"
+kind = "set_accumulator"
+accumulator = "gammaloop"
+
+[[task_queue]]
+name = "havana-train"
+kind = "sample"
+stop_condition = { max_samples = "$(train_samples:1000000)" }
+accumulator = "latest"
+
+[task_queue.sampler_aggregator.config]
+kind = "process_sampler"
+command = ["$resources/../integrations/glnis_gammaboard_api/.venv/bin/glnis-gammaboard-sampler"]
+# Alternative with Apptainer when the host supports Apptainer/SIF execution:
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
+# Alternative with the Nix runtime when Nix is available:
+# command = ["$resources/../integrations/glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
+cwd = "$resources/.."
+requires_training_values = true
+
+[task_queue.sampler_aggregator.config.args]
+seed = 0
+training_steps = 200
+training_batch_size = 1000
+use_gpu = true
+cuda_id = 0
+save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
+parser.override_lmb_heuristics = true
+parameterisation.condition_integrand_first = true
+parameterisation.layer = [
+    {param_type = "spherical"},
+    {param_type = "mc_layer", subtype = "ose", ose_exponent = 1.0}
+    ]
+
+[task_queue.queue_tuning]
+target_batch_eval_ms = 1000.0
+max_batch_size = "$(max_batch_size:10000)"
+
+[[task_queue]]
+name = "sample"
+kind = "sample"
+measurement = { quantity = "central_value" }
+stop_condition = { max_samples = "$(sample_samples:10000000)" }
+sampler_aggregator = { config = { kind = "havana_inference", source = "latest_training_sampler_aggregator" } }
+accumulator = "latest"
+
+[task_queue.queue_tuning]
+target_batch_eval_ms = 1000.0
+max_batch_size = "$(max_batch_size:10000)"

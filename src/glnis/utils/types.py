@@ -30,6 +30,11 @@ class ParameterisationLayerConfig:
         )
 
 
+@dataclass
+class ParserConfig:
+    override_lmb_heuristics: bool = False
+
+
 type LayerResult = NDArray | List | None
 
 

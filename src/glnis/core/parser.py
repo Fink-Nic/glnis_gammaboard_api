@@ -1,5 +1,5 @@
 # type: ignore
-from glnis.utils.types import GraphProperties
+from glnis.utils.types import GraphProperties, ParserConfig
 from symbolica import E, S, Expression
 from typing import Dict, List, Set
 import pydot
@@ -8,8 +8,8 @@ from glnis.core.parameterisation import LayeredParameterisation
 
 
 class MetaDataParser:
-    def __init__(self, madnis_config: Dict | None = None, metadata: Dict | None = None, graph_properties: Dict | None = None):
-        self.madnis_config = madnis_config if madnis_config is not None else {}
+    def __init__(self, config: Dict | None = None, metadata: Dict | None = None, graph_properties: Dict | None = None):
+        self.config = ParserConfig(**(config or {}))
         self.metadata = metadata if metadata is not None else {}
         self.graph_properties_dict = graph_properties
 
@@ -56,10 +56,11 @@ class MetaDataParser:
             master_id = [g.graph_id for g in graph_group.graphs if g.is_master][0]
             graph_properties = Dot.get_graph_properties(master_id, ext_momenta)
             lmbs = graph_group.loop_momentum_bases
-            # if self.settings['graph'].get('overwrite_lmb_heuristics', False):
-            #     active_lmbs = lmbs
-            active_lmbs = [lmb for lmb in lmbs if lmb.channel_id is not None]
-            active_lmbs = active_lmbs if len(active_lmbs) > 0 else lmbs
+            if self.config.override_lmb_heuristics:
+                active_lmbs = lmbs
+            else:
+                active_lmbs = [lmb for lmb in lmbs if lmb.channel_id is not None]
+                active_lmbs = active_lmbs if len(active_lmbs) > 0 else lmbs
             try:
                 generation_basis_id = [lmb.matches_generation_basis for lmb in lmbs].index(True)
             except:
