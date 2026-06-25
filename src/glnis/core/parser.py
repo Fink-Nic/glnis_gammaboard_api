@@ -14,8 +14,8 @@ class MetaDataParser:
         self.graph_properties_dict = graph_properties
 
     def get_layered_parameterisation_instance(
-            self, config_list: List) -> LayeredParameterisation:
-        return LayeredParameterisation(self.get_graph_properties(), config_list)
+            self, parameterisation_config: Dict) -> LayeredParameterisation:
+        return LayeredParameterisation(self.get_graph_properties(), parameterisation_config)
 
     def get_graph_properties(self) -> GraphProperties | List[GraphProperties]:
         if self.graph_properties_dict is not None:

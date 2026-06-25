@@ -4,7 +4,7 @@ import functools
 from time import perf_counter
 from numpy.typing import NDArray, DTypeLike
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Any
 from glnis.utils.helpers import chunks
 
 
@@ -16,16 +16,17 @@ class ParameterisationLayerConfig:
     passing to the evaluator.
     """
     param_type: str
-    param_kwargs: dict[str, Any] = field(default_factory=dict)
+    param_kwargs: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, config_dict: dict[str, Any]) -> ParameterisationLayerConfig:
-        param_type = config_dict.get("param_type", None)
+    def from_dict(cls, config_dict: Dict[str, Any]):
+        config = dict(config_dict)
+        param_type = config.pop("param_type", None)
         if param_type is None:
             raise ValueError("Parameterisation config must have a 'param_type' key.")
         return cls(
-            param_type=config_dict.pop("param_type"),
-            param_kwargs=config_dict or {},
+            param_type=param_type,
+            param_kwargs=config or {},
         )
 
 

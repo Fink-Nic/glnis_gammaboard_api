@@ -258,27 +258,20 @@ class LayeredParameterisation:
 
     def __init__(self, graph_properties: GraphProperties | List[GraphProperties],
                  param_configs: Dict[str, Any],):
-        from madnis_sampler import ParameterisationConfig
         layer_configs = param_configs.get("layer", [])
         if not isinstance(layer_configs, list):
             layer_configs = [layer_configs]
-        layer_configs = [ParameterisationConfig.from_dict(config) for config in layer_configs]
         if isinstance(graph_properties, list):
             graph_properties = graph_properties[0]
         param_layers: List[Parameterisation] = []
         self.condition_integrand_first = param_configs.get("condition_integrand_first", False)
         self.use_f128 = param_configs.get("use_f128", False)
-        for i_layer, config in enumerate(layer_configs):
-            kwargs = deepcopy(config.__dict__)
-            if not "parameterisation_type" in kwargs.keys():
-                raise KeyError(
-                    "Each parameterisation layer must specify its parameterisation type.")
-
+        for i_layer, config in enumerate([ParameterisationLayerConfig.from_dict(config) for config in layer_configs]):
             is_first_layer = (i_layer + 1) == len(layer_configs)
             next_param = None if i_layer == 0 else param_layers[-1]
-            kwargs.update(dict(is_first_layer=is_first_layer,
-                               next_param=next_param,
-                               graph_properties=graph_properties,))
+            config.param_kwargs.update(dict(is_first_layer=is_first_layer,
+                                            next_param=next_param,
+                                            graph_properties=graph_properties,))
 
             match config.param_type.lower():
                 case "momtrop":
@@ -328,7 +321,7 @@ class LayeredParameterisation:
         self.discrete_dims = self.param.chain_discrete_dims
         self.num_layers = len(param_layers)
 
-    def parameterise(self, discrete: NDArray | None, continuous: NDArray, wgt: NDArray, ) -> NDArray, NDArray, NDArray:
+    def parameterise(self, discrete: NDArray | None, continuous: NDArray, wgt: NDArray, ) -> Tuple[NDArray, NDArray, NDArray]:
         """
         Args:
             discrete: shape (n_samples, n_discrete_dims)
@@ -341,7 +334,6 @@ class LayeredParameterisation:
         """
         if discrete is None:
             discrete = np.zeros((continuous.shape[0], 0), dtype=np.uint64)
-        if self.condition_integrand_first:
 
         pass_disc_to_integrand = (
             discrete[..., :-len(self.discrete_dims)] if self.condition_integrand_first

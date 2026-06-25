@@ -232,8 +232,6 @@ class MadnisSampler(Sampler):
         self.continuous_dims: int = continuous_dims
         self.evaluator_metadata: dict[str, Any] = evaluator_metadata or {}
         if parameterisation is not None:
-            if isinstance(parameterisation, dict):
-                parameterisation = [parameterisation]
             try:
                 from glnis.core.parser import MetaDataParser
             except ImportError:
@@ -241,7 +239,7 @@ class MadnisSampler(Sampler):
                     "Momentum space evaluation is only supported in the 'glnis_gammaboard_api' package.")
             Parser = MetaDataParser(madnis_config=self.cfg, metadata=self.evaluator_metadata,
                                     graph_properties=graph_properties)
-            self.transform = Parser.get_layered_parameterisation_instance()
+            self.transform = Parser.get_layered_parameterisation_instance(parameterisation)
         else:
             self.transform = None
 
@@ -303,6 +301,7 @@ class MadnisSampler(Sampler):
             with open(save_path, 'rb') as f:
                 state: Dict[str, Any] = pickle.load(f)
 
+            init_args = dict(init_args)
             parameterisation = init_args.pop("parameterisation", None) if init_args else None
             graph_properties = init_args.pop("graph_properties", None) if init_args else None
 
@@ -585,13 +584,15 @@ class MadnisSampler(Sampler):
         if num_disc_input == self.num_discrete_dims:
             return torch.zeros(indices.shape, dtype=torch.float64, device=self.device)
 
+        indices = indices.numpy(force=True).astype(np.uint64)
+
         if self.transform is not None:
             if self.transform.condition_integrand_first:
                 n_dim = len(self.discrete_cardinalities)
                 prior1: Callable = self._flat_discrete_prior_prob_function
                 prior2: Callable = self.transform.discrete_prior_prob_function
             else:
-                n_dim = len(self.param.discrete_dims)
+                n_dim = len(self.transform.discrete_dims)
                 prior1: Callable = self.transform.discrete_prior_prob_function
                 prior2: Callable = self._flat_discrete_prior_prob_function
 
@@ -599,6 +600,10 @@ class MadnisSampler(Sampler):
                 return torch.from_numpy(prior1(indices, dim).astype(np.float64)).to(device=self.device)
 
             return torch.from_numpy(prior2(indices[:, n_dim:], dim - n_dim).astype(np.float64)).to(device=self.device)
+
+        return torch.from_numpy(
+            self._flat_discrete_prior_prob_function(indices, dim).astype(np.float64)).to(
+            device=self.device)
 
     def _flat_discrete_prior_prob_function(self, indices: NDArray, dim: int = 0) -> NDArray:
         """

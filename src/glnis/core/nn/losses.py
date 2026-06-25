@@ -26,6 +26,8 @@ def get_loss(loss_type: str, loss_kwargs: dict | None = None):
     if loss is None:
         return None
 
+    loss_kwargs = loss_kwargs or {}
+
     def loss_with_kwargs(*args, **kwargs):
         return loss(*args, **kwargs, **loss_kwargs)
 
