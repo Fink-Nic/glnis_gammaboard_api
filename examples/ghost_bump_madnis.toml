@@ -45,7 +45,7 @@ use_gpu = true
 cuda_id = 0
 save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
 parameterisation.condition_integrand_first = false
-parameterisation.layer = [{param_type = "identity"}]
+parameterisation.layer = [{param_type = "identity", force_dim=2}]
 graph_properties.edge_src_dst_vertices=[[0, 1], [1, 2], [2, 0]]
 graph_properties.edge_masses=[0.0, 0.0, 0.0]
 graph_properties.edge_momentum_shifts=[[-6.0, -7.0, -8.0], [0.0, 0.0, 0.0], [-9.0, -11.0, -13.0]]

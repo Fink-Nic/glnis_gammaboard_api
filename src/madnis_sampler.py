@@ -192,6 +192,7 @@ class MadnisSampler(Sampler):
         torch_gpu_rng_state: Tensor | None = None,
         madnis_blob: bytes | None = None,
         evaluator_metadata: dict[str, Any] | None = None,
+        parser: dict[str, Any] | None = None,
         parameterisation: dict[str, Any] | None = None,
         graph_properties: dict[str, Any] | None = None,
     ):
@@ -237,7 +238,7 @@ class MadnisSampler(Sampler):
             except ImportError:
                 raise ImportError(
                     "Momentum space evaluation is only supported in the 'glnis_gammaboard_api' package.")
-            Parser = MetaDataParser(madnis_config=self.cfg, metadata=self.evaluator_metadata,
+            Parser = MetaDataParser(config=parser, metadata=self.evaluator_metadata,
                                     graph_properties=graph_properties)
             self.transform = Parser.get_layered_parameterisation_instance(parameterisation)
         else:
@@ -245,6 +246,7 @@ class MadnisSampler(Sampler):
 
         if self.transform is not None:
             self.num_discrete_dims = len(self.transform.discrete_dims) + len(self.discrete_cardinalities)
+            self.continuous_dims = self.transform.continuous_dims or self.continuous_dims
         else:
             self.num_discrete_dims = len(self.discrete_cardinalities)
 
@@ -302,6 +304,7 @@ class MadnisSampler(Sampler):
                 state: Dict[str, Any] = pickle.load(f)
 
             init_args = dict(init_args)
+            parser = init_args.pop("parser", None) if init_args else None
             parameterisation = init_args.pop("parameterisation", None) if init_args else None
             graph_properties = init_args.pop("graph_properties", None) if init_args else None
 
@@ -322,6 +325,7 @@ class MadnisSampler(Sampler):
                 torch_gpu_rng_state=state.get("torch_gpu_rng_state"),
                 madnis_blob=state.get("madnis_blob"),
                 evaluator_metadata=evaluator_metadata,
+                parser=parser,
                 parameterisation=parameterisation,
                 graph_properties=graph_properties
             )

@@ -38,7 +38,7 @@ target = { kind = "vector", components = { real = 3.097e-2, imag = 0.0 } }
 
 [evaluator]
 kind = "gammaloop"
-state_folder = "states/epem_a_ddx/LO/state"
+state_folder = "/home/nfink/gammaloop/examples/cli/epem_a_ddx/LO/state"
 integrand_name = "LO"
 
 [evaluator.preprocessing]
@@ -59,7 +59,7 @@ kind = "set_accumulator"
 accumulator = "gammaloop"
 
 [[task_queue]]
-name = "havana-train"
+name = "madnis-train"
 kind = "sample"
 stop_condition = { max_samples = "$(train_samples:1000000)" }
 accumulator = "latest"
@@ -87,6 +87,11 @@ parameterisation.layer = [
     {param_type = "spherical"},
     {param_type = "mc_layer", subtype = "ose", ose_exponent = 1.0}
     ]
+graph_properties.edge_masses = [0.0, 0.0]
+graph_properties.edge_momentum_shifts = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+graph_properties.graph_signature = [[1], [1]]
+graph_properties.e_cm = 1000.0
+graph_properties.lmb_array = [[0], [1]]
 
 [task_queue.queue_tuning]
 target_batch_eval_ms = 1000.0
@@ -97,8 +102,7 @@ name = "sample"
 kind = "sample"
 measurement = { quantity = "central_value" }
 stop_condition = { max_samples = "$(sample_samples:10000000)" }
-sampler_aggregator = { config = { kind = "havana_inference", source = "latest_training_sampler_aggregator" } }
-accumulator = "latest"
+sampler_aggregator = { from_name = "madnis-train" }
 
 [task_queue.queue_tuning]
 target_batch_eval_ms = 1000.0

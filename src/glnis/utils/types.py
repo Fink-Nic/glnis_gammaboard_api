@@ -63,11 +63,11 @@ class GraphProperties:
         channel_transforms (NDArray): Array of loop momentum basis transformations for each channel.
         channel_inv_transforms (NDArray): Array of inverse loop momentum basis transformations for each channel
     """
-    edge_src_dst_vertices: List[List[int]]
     edge_masses: List[float]
     edge_momentum_shifts: List[List[float]]
-    graph_external_vertices: List[int]
     graph_signature: List[List[int]]
+    graph_external_vertices: List[int] = field(default_factory=list)
+    edge_src_dst_vertices: List[List[int]] = field(default_factory=list)
     lmb_array: NDArray = field(default_factory=list)
     edge_external_sigs: List[List[float]] = field(default_factory=list)
     external_momenta: List[List[float]] = field(default_factory=list)
@@ -92,7 +92,7 @@ class GraphProperties:
             # Calculate the inverse lmb transforms, ordered as the LMBs in graph properties
             self.channel_transforms = np.array(
                 self.graph_signature)[self.lmb_array].reshape(self.n_channels, self.n_loops, self.n_loops)
-            # Inverse transforms of each channel
+            # Inverse transform of each channel
             self.channel_inv_transforms = np.linalg.inv(self.channel_transforms)
         except:
             self.channel_transforms = np.zeros((0, self.n_loops, self.n_loops), dtype=np.float64)
