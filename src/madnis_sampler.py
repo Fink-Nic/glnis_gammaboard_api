@@ -433,6 +433,8 @@ class MadnisSampler(Sampler):
         return None
 
     def produce_latent_batch(self, nr_samples: int) -> SampleBatch:
+        raise RuntimeError(
+            f"{self.continuous_dims=}, {self.num_discrete_dims=}, {self.discrete_cardinalities=}, {self.transform=}")
         continuous = np.empty((nr_samples, self.continuous_dims), dtype=np.float64)
         discrete = np.empty((nr_samples, self.num_discrete_dims), dtype=np.int64)
         wgt = np.empty((nr_samples), dtype=np.float64)

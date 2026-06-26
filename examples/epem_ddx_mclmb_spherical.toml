@@ -40,6 +40,7 @@ target = { kind = "vector", components = { real = 3.097e-2, imag = 0.0 } }
 kind = "gammaloop"
 state_folder = "/home/nfink/gammaloop/examples/cli/epem_a_ddx/LO/state"
 integrand_name = "LO"
+momentum_space = true
 
 [evaluator.preprocessing]
 read_only = true

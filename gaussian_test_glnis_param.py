@@ -50,35 +50,11 @@ parameterisation = dict(
     )
 )
 graph_properties = dict(
-    edge_src_dst_vertices=[[0, 1],
-                           [1, 2],
-                           [2, 0]],
-    edge_masses=[0.0, 0.0, 0.0],
-    edge_momentum_shifts=[[-6.0, -7.0, -8.0],
-                          [0.0, 0.0, 0.0],
-                          [-9.0, -11.0, -13.0]],
-    graph_external_vertices=[0, 1, 2],
-    graph_signature=[[1],
-                     [1],
-                     [1]],
-    lmb_array=[[2],
-               [1],
-               [0]],
-    edge_external_sigs=[[0.0, 1.0, 0.0],
-                        [0.0, 0.0, 0.0],
-                        [-1.0, 1.0, 0.0]],
-    external_momenta=[[1.0, 3.0, 4.0, 5.0],
-                      [-1.0, -6.0, -7.0, -8.0],
-                      [2.0, 9.0, 11.0, 13.0]],
-    orientation_ids=[0, 1, 2, 3, 4, 5],
-    orientation_signatures=[[0, 0, 0, -1, 1, 1],
-                            [0, 0, 0, 1, -1, 1],
-                            [0, 0, 0, -1, -1, 1],
-                            [0, 0, 0, 1, 1, -1],
-                            [0, 0, 0, -1, 1, -1],
-                            [0, 0, 0, 1, -1, -1]],
-    generation_channel_id=1,
+    edge_masses=[0.0, 0.0],
+    edge_momentum_shifts=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+    graph_signature=[[1], [1]],
     e_cm=1.0,
+    lmb_array=[[0], [1]],
 )
 
 
@@ -108,12 +84,16 @@ if __name__ == "__main__":
     init_args = asdict(config)
     init_args.update(dict(parameterisation=parameterisation, graph_properties=graph_properties))
     sampler = MadnisSampler(discrete_cardinalities=ddim, continuous_dims=cdim, **init_args)
+    print(
+        f"sampler.continuous_dims: {sampler.continuous_dims}, sampler.discrete_cardinalities: {sampler.discrete_cardinalities}")
     snapshot = sampler.snapshot()
     save_path = Path(snapshot.get("save_path") or "")
     snapshot_path = Path("snapshot.json")
     json.dump(snapshot, snapshot_path.open("w"))
 
     for run in range(3):
+        print(
+            f"sampler.continuous_dims: {sampler.continuous_dims}, sampler.discrete_cardinalities: {sampler.discrete_cardinalities}")
         with snapshot_path.open("rb") as f:
             snapshot = json.load(f)
         print("Testing import of state...")
