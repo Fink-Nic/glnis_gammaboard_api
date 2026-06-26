@@ -21,6 +21,7 @@ dependencies = [
     "pydot>=3.0",
     "matplotlib>=3.6",
     "symbolica>=1.5.0",
+    "madspace",
     "madnis @ git+https://github.com/madgraph-ml/madnis.git@main",
     "momtrop @ git+https://github.com/Fink-Nic/momtrop.git@main",
 ]

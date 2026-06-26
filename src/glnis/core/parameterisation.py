@@ -88,7 +88,7 @@ class Parameterisation(ABC):
         if dim < self.layer_num_discrete_dims or self.next_param is None:
             return self._layer_prior_prob_function(indices)
 
-        indices = indices[:, self.layer_num_discrete_dims :]
+        indices = indices[:, self.layer_num_discrete_dims:]
         dim -= self.layer_num_discrete_dims
 
         return self.next_param.discrete_prior_prob_function(indices, dim)
@@ -176,10 +176,10 @@ class Parameterisation(ABC):
         n_disc = layer_input._active_structure[layer_input.POSITIONS["discrete"]]
 
         if n_cont > self.layer_continuous_dim_in:
-            cont_pass = layer_input.continuous[:, self.layer_continuous_dim_in :]
+            cont_pass = layer_input.continuous[:, self.layer_continuous_dim_in:]
             cont_param = np.hstack([cont_param, cont_pass])
         if n_disc > self.layer_num_discrete_dims:
-            disc_pass = layer_input.discrete[:, self.layer_num_discrete_dims :]
+            disc_pass = layer_input.discrete[:, self.layer_num_discrete_dims:]
             disc_param = np.hstack([disc_param, disc_pass])
 
         # Update the data
@@ -317,8 +317,8 @@ class LayeredParameterisation:
                     p = SParameterisation(**config.param_kwargs)
                 case "identity":
                     p = IdentityParameterisation(**config.param_kwargs)
-                case "epem_ttxh_lo":
-                    p = EpEmTTxH_LO(**config.param_kwargs)
+                case "madspace":
+                    p = MadspaceParameterisation(**config.param_kwargs)
                 case "mc_layer":
                     if next_param is None:
                         raise ValueError(
@@ -629,23 +629,41 @@ class SphericalParameterisation(Parameterisation):
         return jac, momentum.reshape(n_points, -1), None
 
 
-class EpEmTTxH_LO(Parameterisation):
-    IDENTIFIER = "epem_ttxh_lo param"
+class MadspaceParameterisation(Parameterisation):
+    IDENTIFIER = "madspace param"
 
-    def __init__(self, return_full_phase_space: bool = False, **kwargs):
+    def __init__(
+            self,
+            return_full_phase_space: bool = False,
+            diagram: Literal["epem_a_ttxh_LO", "epem_a_ddx_LO"] = "epem_a_ttxh_LO",
+            **kwargs):
         import madspace as ms
+        self.diagram = diagram
 
-        self.ms_diagram = ms.Diagram(
-            incoming_masses=[0.0, 0.0],
-            outgoing_masses=[173.0, 173.0, 125.0],
-            propagators=[ms.Propagator(*prop) for prop in [[0.0, 0.0], [173.0, 0.0]]],
-            vertices=[["i0", "i1", "p0"], ["p0", "o0", "p1"], ["p1", "o1", "o2"]],
-        )
-        self.mapping = ms.PhaseSpaceMapping(
-            ms.Topology(self.ms_diagram),
-            kwargs["graph_properties"].e_cm,
-            permutations=[[0, 1, 2, 3, 4], [0, 1, 3, 2, 4]],
-        )
+        match self.diagram:
+            case "epem_a_ttxh_LO":
+                self.ms_diagram = ms.Diagram(
+                    incoming_masses=[0.0, 0.0],
+                    outgoing_masses=[173.0, 173.0, 125.0],
+                    propagators=[ms.Propagator(*prop) for prop in [[0.0, 0.0], [173.0, 0.0]]],
+                    vertices=[["i0", "i1", "p0"], ["p0", "o0", "p1"], ["p1", "o1", "o2"]],
+                )
+                self.mapping = ms.PhaseSpaceMapping(
+                    ms.Topology(self.ms_diagram),
+                    kwargs["graph_properties"].e_cm,
+                    permutations=[[0, 1, 2, 3, 4], [0, 1, 3, 2, 4]],
+                )
+            case "epem_a_ddx_LO":
+                self.ms_diagram = ms.Diagram(
+                    incoming_masses=[0.0, 0.0],
+                    outgoing_masses=[0.0, 0.0],
+                    propagators=[ms.Propagator(*prop) for prop in [[0.0, 0.0]]],
+                    vertices=[["i0", "i1", "p0"], ["p0", "o0", "o1"]],
+                )
+                self.mapping = ms.PhaseSpaceMapping(
+                    ms.Topology(self.ms_diagram),
+                    kwargs["graph_properties"].e_cm,
+                )
         self.return_full_phase_space = return_full_phase_space
         self.return_full_phase_space = False
         super().__init__(**kwargs)
@@ -966,7 +984,7 @@ class RKaapoParameterisation(Parameterisation):
                 pol = 0
             else:
                 xs = continuous[
-                    :, _start - self.N_SPATIAL_DIMS : _end - self.N_SPATIAL_DIMS
+                    :, _start - self.N_SPATIAL_DIMS: _end - self.N_SPATIAL_DIMS
                 ]
                 x1, x2, x3 = np.hsplit(xs, [1, 2])
                 if self.angle_shift != 0.0:
