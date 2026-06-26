@@ -1,10 +1,12 @@
 # type: ignore
-import numpy as np
 import functools
-from time import perf_counter
-from numpy.typing import NDArray, DTypeLike
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Any
+from time import perf_counter
+from typing import Any, Dict, Iterable, List
+
+import numpy as np
+from numpy.typing import DTypeLike, NDArray
+
 from glnis.utils.helpers import chunks
 
 
@@ -15,6 +17,7 @@ class ParameterisationLayerConfig:
     'LayeredParameterisation' object used to transform the sampled points before
     passing to the evaluator.
     """
+
     param_type: str
     param_kwargs: Dict[str, Any] = field(default_factory=dict)
 
@@ -33,6 +36,7 @@ class ParameterisationLayerConfig:
 @dataclass
 class ParserConfig:
     override_lmb_heuristics: bool = False
+    gammaloop_directory: str = ""
 
 
 type LayerResult = NDArray | List | None
@@ -63,6 +67,7 @@ class GraphProperties:
         channel_transforms (NDArray): Array of loop momentum basis transformations for each channel.
         channel_inv_transforms (NDArray): Array of inverse loop momentum basis transformations for each channel
     """
+
     edge_masses: List[float]
     edge_momentum_shifts: List[List[float]]
     graph_signature: List[List[int]]
@@ -76,27 +81,35 @@ class GraphProperties:
     generation_channel_id: int = 0
     e_cm: float = 0.0
 
-    def __post_init__(self: 'GraphProperties'):
+    def __post_init__(self: "GraphProperties"):
         if len(self.orientation_ids) != len(self.orientation_signatures):
-            raise ValueError("Length of orientation_ids and orientation_signatures must match.")
-        TOLERANCE = 1E-10
+            raise ValueError(
+                "Length of orientation_ids and orientation_signatures must match."
+            )
+        TOLERANCE = 1e-10
         self.n_loops: int = len(self.graph_signature[0])
         self.n_edges: int = len(self.edge_masses)
         self.edge_ismassive: list[bool] = [
-            mass > TOLERANCE for mass in self.edge_masses]
+            mass > TOLERANCE for mass in self.edge_masses
+        ]
         self.lmb_array = np.array(self.lmb_array, dtype=np.uint64)
         self.n_channels = self.lmb_array.shape[0]
         self.n_orientations = len(self.orientation_ids)
 
         try:
             # Calculate the inverse lmb transforms, ordered as the LMBs in graph properties
-            self.channel_transforms = np.array(
-                self.graph_signature)[self.lmb_array].reshape(self.n_channels, self.n_loops, self.n_loops)
+            self.channel_transforms = np.array(self.graph_signature)[
+                self.lmb_array
+            ].reshape(self.n_channels, self.n_loops, self.n_loops)
             # Inverse transform of each channel
             self.channel_inv_transforms = np.linalg.inv(self.channel_transforms)
         except:
-            self.channel_transforms = np.zeros((0, self.n_loops, self.n_loops), dtype=np.float64)
-            self.channel_inv_transforms = np.zeros((0, self.n_loops, self.n_loops), dtype=np.float64)
+            self.channel_transforms = np.zeros(
+                (0, self.n_loops, self.n_loops), dtype=np.float64
+            )
+            self.channel_inv_transforms = np.zeros(
+                (0, self.n_loops, self.n_loops), dtype=np.float64
+            )
 
 
 class LayerData:
@@ -120,6 +133,7 @@ class LayerData:
             number of discrete features per sample. Accessors return this as unsigned integers
             (cast to `uint64`).
     """
+
     POSITIONS: Dict[str, int] = dict(
         jac=0,
         wgt=1,
@@ -131,15 +145,15 @@ class LayerData:
     )
 
     def __init__(
-            self: 'LayerData',
-            n_points: int = 0,
-            n_mom: int = 0,
-            n_cont: int = 0,
-            n_disc: int = 0,
-            _existing_data: NDArray | None = None,
-            _existing_structure: NDArray | None = None,
-            _existing_active_structure: NDArray | None = None,
-            dtype: DTypeLike | None = None,
+        self: "LayerData",
+        n_points: int = 0,
+        n_mom: int = 0,
+        n_cont: int = 0,
+        n_disc: int = 0,
+        _existing_data: NDArray | None = None,
+        _existing_structure: NDArray | None = None,
+        _existing_active_structure: NDArray | None = None,
+        dtype: DTypeLike | None = None,
     ):
         self._timestamp = perf_counter()
         self._t_init = perf_counter()
@@ -162,38 +176,38 @@ class LayerData:
             self.n_points = int(n_points)
             self.dtype = np.dtype(np.float64) if dtype is None else dtype
             # Set the dimensions of the data
-            self._structure[LayerData.POSITIONS['jac']] = 1
-            self._structure[LayerData.POSITIONS['wgt']] = 1
-            self._structure[LayerData.POSITIONS['f_real']] = 1
-            self._structure[LayerData.POSITIONS['f_imag']] = 1
+            self._structure[LayerData.POSITIONS["jac"]] = 1
+            self._structure[LayerData.POSITIONS["wgt"]] = 1
+            self._structure[LayerData.POSITIONS["f_real"]] = 1
+            self._structure[LayerData.POSITIONS["f_imag"]] = 1
             self._active_structure = self._structure.copy()
-            self._structure[LayerData.POSITIONS['momenta']] = n_mom
-            self._structure[LayerData.POSITIONS['continuous']] = n_cont
-            self._structure[LayerData.POSITIONS['discrete']] = n_disc
+            self._structure[LayerData.POSITIONS["momenta"]] = n_mom
+            self._structure[LayerData.POSITIONS["continuous"]] = n_cont
+            self._structure[LayerData.POSITIONS["discrete"]] = n_disc
             self._data = np.zeros(
-                (self.n_points, self._structure.sum()), dtype=self.dtype)
-            self._data[:, LayerData.POSITIONS['jac']] = 1
-            self._data[:, LayerData.POSITIONS['wgt']] = 1
+                (self.n_points, self._structure.sum()), dtype=self.dtype
+            )
+            self._data[:, LayerData.POSITIONS["jac"]] = 1
+            self._data[:, LayerData.POSITIONS["wgt"]] = 1
             self.success = np.ones(self.n_points, dtype=np.bool)
 
         self.failures: Dict[str, NDArray] = dict()
-        self._processing_times = dict(
-            processing=perf_counter() - self._timestamp)
+        self._processing_times = dict(processing=perf_counter() - self._timestamp)
         self._timestamp = perf_counter()
 
     @staticmethod
     def _timer(func):
         @functools.wraps(func)
-        def wrapper_timer(self: 'LayerData', *args, **kwargs):
+        def wrapper_timer(self: "LayerData", *args, **kwargs):
             start_time = perf_counter()
             value = func(self, *args, **kwargs)
-            self._processing_times['processing'] += perf_counter() - start_time
+            self._processing_times["processing"] += perf_counter() - start_time
             return value
 
         return wrapper_timer
 
     @_timer
-    def update(self, identifier: str = 'unspecified') -> None:
+    def update(self, identifier: str = "unspecified") -> None:
         """
         Updates state according to data in _pending_data. Will update the processing time of the
         processing step 'identifier' based on the elapsed time since last update. Will also mask
@@ -205,17 +219,15 @@ class LayerData:
 
         next_success = np.ones(self.n_points, dtype=np.bool)
         for v in self._pending_data.values():
-            next_success = np.logical_and(
-                next_success, np.isfinite(v).all(axis=1))
+            next_success = np.logical_and(next_success, np.isfinite(v).all(axis=1))
 
-        new_failures_mask = np.logical_and(
-            self.success, ~next_success)
+        new_failures_mask = np.logical_and(self.success, ~next_success)
         self.success = next_success
 
         if new_failures_mask.any():
             caused_failures = self._data[new_failures_mask]
             if identifier in self.failures:
-                self.failures[identifier+"_"] = caused_failures
+                self.failures[identifier + "_"] = caused_failures
             else:
                 self.failures[identifier] = caused_failures
 
@@ -226,7 +238,7 @@ class LayerData:
             value = self._pending_data.pop(name)
             dim = value.shape[1]
             self._active_structure[idx] = dim
-            self._data[:, offset:offset+dim] = value
+            self._data[:, offset : offset + dim] = value
 
         self._data[~self.success] = 0
 
@@ -235,9 +247,9 @@ class LayerData:
 
     def get_processing_times(self) -> Dict[str, float]:
         if len(self._pending_data) > 0:
-            self.update('processing_times_getter')
+            self.update("processing_times_getter")
         processing_times = dict(self._processing_times)
-        processing_times['total_time'] = sum(t for t in processing_times.values())
+        processing_times["total_time"] = sum(t for t in processing_times.values())
         return processing_times
 
     def wake(self) -> None:
@@ -248,13 +260,13 @@ class LayerData:
         self._timestamp = perf_counter()
 
     @_timer
-    def as_chunks(self, n_chunks: int, n_cores: int = 1) -> Iterable['LayerData']:
+    def as_chunks(self, n_chunks: int, n_cores: int = 1) -> Iterable["LayerData"]:
         """
         Yields the data in n_chunks chunks, as LayerData objects. If the data is split across multiple cores,
         but was sampled on a single core, use the n_cores argument to properly keep track of relative CPU time.
         """
         if len(self._pending_data) > 0:
-            self.update('as_chunks')
+            self.update("as_chunks")
 
         data_chunks: Iterable[NDArray] = chunks(self._data, n_chunks)
         for chunk_id, data_chunk in enumerate(data_chunks):
@@ -273,79 +285,79 @@ class LayerData:
             yield chunk
 
     @property
-    def jac(self: 'LayerData'):
-        return self._get_data('jac')
+    def jac(self: "LayerData"):
+        return self._get_data("jac")
 
     @jac.setter
-    def jac(self: 'LayerData', value: LayerResult):
-        self._set_data('jac', value)
+    def jac(self: "LayerData", value: LayerResult):
+        self._set_data("jac", value)
 
     @property
-    def wgt(self: 'LayerData'):
-        return self._get_data('wgt')
+    def wgt(self: "LayerData"):
+        return self._get_data("wgt")
 
     @wgt.setter
-    def wgt(self: 'LayerData', value: LayerResult):
-        self._set_data('wgt', value)
+    def wgt(self: "LayerData", value: LayerResult):
+        self._set_data("wgt", value)
 
     @property
-    def momenta(self: 'LayerData'):
-        return self._get_data('momenta')
+    def momenta(self: "LayerData"):
+        return self._get_data("momenta")
 
     @momenta.setter
-    def momenta(self: 'LayerData', value: LayerResult):
-        self._set_data('momenta', value)
+    def momenta(self: "LayerData", value: LayerResult):
+        self._set_data("momenta", value)
 
     @property
-    def f_real(self: 'LayerData'):
-        return self._get_data('f_real')
+    def f_real(self: "LayerData"):
+        return self._get_data("f_real")
 
     @f_real.setter
-    def f_real(self: 'LayerData', value: LayerResult):
-        self._set_data('f_real', value)
+    def f_real(self: "LayerData", value: LayerResult):
+        self._set_data("f_real", value)
 
     @property
-    def f_imag(self: 'LayerData'):
-        return self._get_data('f_imag')
+    def f_imag(self: "LayerData"):
+        return self._get_data("f_imag")
 
     @f_imag.setter
-    def f_imag(self: 'LayerData', value: LayerResult):
-        self._set_data('f_imag', value)
+    def f_imag(self: "LayerData", value: LayerResult):
+        self._set_data("f_imag", value)
 
     @property
-    def func_val(self: 'LayerData'):
+    def func_val(self: "LayerData"):
         if len(self._pending_data) > 0:
-            self.update('func_val_setter')
-        return self._get_data('f_real') + 1j*self._get_data('f_imag')
+            self.update("func_val_setter")
+        return self._get_data("f_real") + 1j * self._get_data("f_imag")
 
     @func_val.setter
-    def func_val(self: 'LayerData', value: NDArray[np.complexfloating]):
+    def func_val(self: "LayerData", value: NDArray[np.complexfloating]):
         if value is None:
-            self._set_data('f_real', None)
-            self._set_data('f_imag', None)
+            self._set_data("f_real", None)
+            self._set_data("f_imag", None)
         if np.iscomplexobj(value):
-            self._set_data('f_real', value.real)
-            self._set_data('f_imag', value.imag)
+            self._set_data("f_real", value.real)
+            self._set_data("f_imag", value.imag)
         else:
-            self._set_data('f_real', value)
+            self._set_data("f_real", value)
 
     @property
-    def continuous(self: 'LayerData'):
-        return self._get_data('continuous')
+    def continuous(self: "LayerData"):
+        return self._get_data("continuous")
 
     @continuous.setter
-    def continuous(self: 'LayerData', value: LayerResult):
-        self._set_data('continuous', value)
+    def continuous(self: "LayerData", value: LayerResult):
+        self._set_data("continuous", value)
 
     @property
-    def discrete(self: 'LayerData'):
-        return self._get_data('discrete').astype(np.uint64)
+    def discrete(self: "LayerData"):
+        return self._get_data("discrete").astype(np.uint64)
 
     @discrete.setter
-    def discrete(self: 'LayerData', value: LayerResult):
-        self._set_data('discrete', value)
+    def discrete(self: "LayerData", value: LayerResult):
+        self._set_data("discrete", value)
 
-    def _to_layer_data(self: 'LayerData', value: LayerResult) -> NDArray:
+    def _to_layer_data(self: "LayerData", value: LayerResult) -> NDArray:
         """
         Converts input to numpy NDArray of type self.dtype. Complex values must be passed
         separately as real and complex parts. Used in property setters.
@@ -365,11 +377,14 @@ class LayerData:
                 output = value.astype(self.dtype)
             case _:
                 raise ValueError(
-                    "LayerData objects accept only numpy ndarray, list or None.")
+                    "LayerData objects accept only numpy ndarray, list or None."
+                )
 
         return output.reshape(self.n_points, -1)
 
-    def _update_processing_times(self: 'LayerData', identifier: str = 'unspecified') -> None:
+    def _update_processing_times(
+        self: "LayerData", identifier: str = "unspecified"
+    ) -> None:
         processing_time = perf_counter() - self._timestamp
         if identifier in self._processing_times:
             self._processing_times[identifier] += processing_time
@@ -378,21 +393,23 @@ class LayerData:
         self._timestamp = perf_counter()
 
     @_timer
-    def _set_data(self: 'LayerData',
-                  name: str,
-                  value: LayerResult,) -> None:
+    def _set_data(
+        self: "LayerData",
+        name: str,
+        value: LayerResult,
+    ) -> None:
         # state will only be updated when update is called
         self._pending_data[name] = self._to_layer_data(value)
 
     @_timer
-    def _get_data(self: 'LayerData', name: str):
+    def _get_data(self: "LayerData", name: str):
         if name in self._pending_data.keys():
-            self.update(name+'_getter')
+            self.update(name + "_getter")
 
         idx = LayerData.POSITIONS[name]
         offset = self._structure[:idx].sum()
         dim = self._active_structure[idx]
-        return self._data[:, offset:offset+dim]
+        return self._data[:, offset : offset + dim]
 
 
 @dataclass
@@ -405,37 +422,38 @@ class SinglePhaseResult:
         rsd (float): The relative standard deviation of the monte carlo estimate.
         tvar (float): The relative time variance of the monte carlo estimate, calculated as RSD^2 * time per sample.
     """
+
     mean: float = 0
     _n: int = 0
     _total_time: float = 0
     _m2: float = 0  # Internal variable for error calculation
 
     @property
-    def std(self: 'SinglePhaseResult') -> float:
+    def std(self: "SinglePhaseResult") -> float:
         if self._n < 2:
             return 0.0  # Not enough data to calculate error
         return np.sqrt(self._m2 / (self._n - 1))
 
     @property
-    def error(self: 'SinglePhaseResult') -> float:
+    def error(self: "SinglePhaseResult") -> float:
         if self._n < 2:
             return 0.0
         return np.sqrt(self._m2 / (self._n - 1) / self._n)
 
     @property
-    def rsd(self: 'SinglePhaseResult') -> float:
+    def rsd(self: "SinglePhaseResult") -> float:
         if self.mean == 0:
             return 0.0
         return self.std / np.abs(self.mean)
 
     @property
-    def tvar(self: 'SinglePhaseResult') -> float:
+    def tvar(self: "SinglePhaseResult") -> float:
         if self._n == 0:
             return 0.0
         time_per_sample = self._total_time / self._n
         return self.rsd**2 * time_per_sample
 
-    def combine_with(self: 'SinglePhaseResult', other: 'SinglePhaseResult') -> None:
+    def combine_with(self: "SinglePhaseResult", other: "SinglePhaseResult") -> None:
         total_points = self._n + other._n
         if total_points == 0:
             return  # No data to combine
@@ -445,36 +463,52 @@ class SinglePhaseResult:
         self._n = total_points
         self._total_time += other._total_time
 
-    def combine_with_stratified(self: 'SinglePhaseResult', other: 'SinglePhaseResult') -> None:
+    def combine_with_stratified(
+        self: "SinglePhaseResult", other: "SinglePhaseResult"
+    ) -> None:
         """
-        Combines this result with another SinglePhaseResult using stratified sampling combination rules. 
+        Combines this result with another SinglePhaseResult using stratified sampling combination rules.
         Objects obtained this way should combine all stratified results at once, and be fully recalculated
         from strata each time a sample batch is added.
         """
         total_points = self._n + other._n
         if total_points == 0:
             return
-        self.mean = (self.mean * self._n + other.mean * other._n) / total_points if total_points > 0 else 0
+        self.mean = (
+            (self.mean * self._n + other.mean * other._n) / total_points
+            if total_points > 0
+            else 0
+        )
         # Achieves combined.error**2 = self.error**2 + other.error**2
         self._m2 = (
-            (self._m2 / (self._n - 1) / self._n if self._n > 1 else 0.0)
-            + (other._m2 / (other._n - 1) / other._n if other._n > 1 else 0.0)
-        ) * (total_points - 1) * total_points if total_points > 1 else 0
+            (
+                (self._m2 / (self._n - 1) / self._n if self._n > 1 else 0.0)
+                + (other._m2 / (other._n - 1) / other._n if other._n > 1 else 0.0)
+            )
+            * (total_points - 1)
+            * total_points
+            if total_points > 1
+            else 0
+        )
         self._n = total_points
         self._total_time += other._total_time
 
     @classmethod
-    def from_values(cls: 'SinglePhaseResult', values: NDArray, total_time: float = 0) -> 'SinglePhaseResult':
+    def from_values(
+        cls: "SinglePhaseResult", values: NDArray, total_time: float = 0
+    ) -> "SinglePhaseResult":
         n = values.size
         return cls(
             _n=n,
             _total_time=total_time,
             mean=np.mean(values).item() if n > 0 else 0.0,
-            _m2=np.sum((values - np.mean(values))**2).item() if n > 1 else 0.0,
+            _m2=np.sum((values - np.mean(values)) ** 2).item() if n > 1 else 0.0,
         )
 
     @classmethod
-    def cat(cls: 'SinglePhaseResult', results: List['SinglePhaseResult']) -> 'SinglePhaseResult':
+    def cat(
+        cls: "SinglePhaseResult", results: List["SinglePhaseResult"]
+    ) -> "SinglePhaseResult":
         combined = cls()
         for result in results:
             combined.combine_with(result)
@@ -484,9 +518,9 @@ class SinglePhaseResult:
 @dataclass
 class Result:
     """
-    Holds the results of the integration, including the number of points, total time taken, and the results for the real and 
-    imaginary parts of the integral, as well as their absolute values. The results for each phase are stored in `SinglePhaseResult` 
-    objects, which allow for stable updates of the mean and error as new data points are added. The Result class also provides methods 
+    Holds the results of the integration, including the number of points, total time taken, and the results for the real and
+    imaginary parts of the integral, as well as their absolute values. The results for each phase are stored in `SinglePhaseResult`
+    objects, which allow for stable updates of the mean and error as new data points are added. The Result class also provides methods
     for combining results from different batches of samples, either using standard combination rules or stratified sampling combination rules.
     Attributes:
         n_points (int): The total number of points sampled.
@@ -496,6 +530,7 @@ class Result:
         abs_real (SinglePhaseResult): The result calculated on the absolute value of the real part of the integrand.
         abs_imag (SinglePhaseResult): The result calculated on the absolute value of the imaginary part of the integrand.
     """
+
     n_points: int = 0
     total_time: float = 0
     real: SinglePhaseResult = field(default_factory=SinglePhaseResult)
@@ -503,7 +538,7 @@ class Result:
     abs_real: SinglePhaseResult = field(default_factory=SinglePhaseResult)
     abs_imag: SinglePhaseResult = field(default_factory=SinglePhaseResult)
 
-    def combine_with(self: 'Result', other: 'Result') -> None:
+    def combine_with(self: "Result", other: "Result") -> None:
         self.n_points += other.n_points
         self.total_time += other.total_time
         self.real.combine_with(other.real)
@@ -511,7 +546,7 @@ class Result:
         self.abs_real.combine_with(other.abs_real)
         self.abs_imag.combine_with(other.abs_imag)
 
-    def combine_with_stratified(self: 'Result', other: 'Result') -> None:
+    def combine_with_stratified(self: "Result", other: "Result") -> None:
         self.n_points += other.n_points
         self.total_time += other.total_time
         self.real.combine_with_stratified(other.real)
@@ -520,42 +555,46 @@ class Result:
         self.abs_imag.combine_with_stratified(other.abs_imag)
 
     @classmethod
-    def from_kwargs(cls, **kwargs) -> 'Result':
-        n = kwargs.get('n_points', 0)
-        total_time = kwargs.get('total_time', 0)
+    def from_kwargs(cls, **kwargs) -> "Result":
+        n = kwargs.get("n_points", 0)
+        total_time = kwargs.get("total_time", 0)
         return cls(
             n_points=n,
             total_time=total_time,
             real=SinglePhaseResult(
-                mean=kwargs.get('real_mean', 0),
+                mean=kwargs.get("real_mean", 0),
                 _n=n,
                 _total_time=total_time,
-                _m2=kwargs.get('real_error', 0)**2 * n*(n-1) if n > 1 else 0
+                _m2=kwargs.get("real_error", 0) ** 2 * n * (n - 1) if n > 1 else 0,
             ),
             imag=SinglePhaseResult(
-                mean=kwargs.get('imag_mean', 0),
+                mean=kwargs.get("imag_mean", 0),
                 _n=n,
                 _total_time=total_time,
-                _m2=kwargs.get('imag_error', 0)**2 * n*(n-1) if n > 1 else 0
+                _m2=kwargs.get("imag_error", 0) ** 2 * n * (n - 1) if n > 1 else 0,
             ),
             abs_real=SinglePhaseResult(
-                mean=kwargs.get('abs_real_mean', 0),
+                mean=kwargs.get("abs_real_mean", 0),
                 _n=n,
                 _total_time=total_time,
-                _m2=kwargs.get('abs_real_error', 0)**2 * n*(n-1) if n > 1 else 0
+                _m2=kwargs.get("abs_real_error", 0) ** 2 * n * (n - 1) if n > 1 else 0,
             ),
             abs_imag=SinglePhaseResult(
-                mean=kwargs.get('abs_imag_mean', 0),
+                mean=kwargs.get("abs_imag_mean", 0),
                 _n=n,
                 _total_time=total_time,
-                _m2=kwargs.get('abs_imag_error', 0)**2 * n*(n-1) if n > 1 else 0
+                _m2=kwargs.get("abs_imag_error", 0) ** 2 * n * (n - 1) if n > 1 else 0,
             ),
         )
 
     @classmethod
-    def from_values(cls, real_values: NDArray, imag_values: NDArray, total_time: float = 0) -> 'Result':
+    def from_values(
+        cls, real_values: NDArray, imag_values: NDArray, total_time: float = 0
+    ) -> "Result":
         n_points = real_values.size
-        assert n_points == imag_values.size, "Real and imaginary values must have the same number of points."
+        assert n_points == imag_values.size, (
+            "Real and imaginary values must have the same number of points."
+        )
         return cls(
             n_points=n_points,
             total_time=total_time,
@@ -566,14 +605,14 @@ class Result:
         )
 
     @classmethod
-    def cat(cls, results: List['Result']) -> 'Result':
+    def cat(cls, results: List["Result"]) -> "Result":
         combined = cls()
         for result in results:
             combined.combine_with(result)
         return combined
 
     @classmethod
-    def from_legacy(cls, legacy_result: 'Result') -> 'Result':
+    def from_legacy(cls, legacy_result: "Result") -> "Result":
         return cls.from_kwargs(
             n_points=legacy_result.n_points,
             total_time=legacy_result.total_time,
@@ -587,7 +626,7 @@ class Result:
             abs_imag_error=legacy_result.abs_imag_error,
         )
 
-    def to_legacy(self: 'Result') -> 'IntegrationResult':
+    def to_legacy(self: "Result") -> "IntegrationResult":
         return IntegrationResult(
             n_points=self.n_points,
             total_time=self.total_time,
@@ -606,16 +645,17 @@ class Result:
             real_tvar=self.real.tvar,
             imag_tvar=self.imag.tvar,
             abs_real_tvar=self.abs_real.tvar,
-            abs_imag_tvar=self.abs_imag.tvar
+            abs_imag_tvar=self.abs_imag.tvar,
         )
 
 
 @dataclass
 class IntegrationResult:
     """
-    Legacy class, only used as a container now. Should not be used, since the new `Result` class 
-    has proper implementation of running error calculation, and is more robust to updates. 
+    Legacy class, only used as a container now. Should not be used, since the new `Result` class
+    has proper implementation of running error calculation, and is more robust to updates.
     """
+
     n_points: int = 0
     real_mean: float = 0
     real_error: float = 0
@@ -635,22 +675,28 @@ class IntegrationResult:
     abs_imag_tvar: float = 0
     total_time: float = 0
 
-    def __post_init__(self: 'IntegrationResult'):
+    def __post_init__(self: "IntegrationResult"):
         """Calculates derived observables such as RSD and time per sample."""
         time_per_sample = 0
         # No harm in recalculating these
         if self.n_points > 0:
             time_per_sample = self.total_time / self.n_points
             if self.real_mean:
-                self.real_rsd = self._rsd(self.real_mean, self.real_error, self.n_points)
+                self.real_rsd = self._rsd(
+                    self.real_mean, self.real_error, self.n_points
+                )
             if self.imag_mean:
-                self.imag_rsd = self._rsd(self.imag_mean, self.imag_error, self.n_points)
+                self.imag_rsd = self._rsd(
+                    self.imag_mean, self.imag_error, self.n_points
+                )
             if self.abs_real_mean:
                 self.abs_real_rsd = self._rsd(
-                    self.abs_real_mean, self.abs_real_error, self.n_points)
+                    self.abs_real_mean, self.abs_real_error, self.n_points
+                )
             if self.abs_imag_mean:
                 self.abs_imag_rsd = self._rsd(
-                    self.abs_imag_mean, self.abs_imag_error, self.n_points)
+                    self.abs_imag_mean, self.abs_imag_error, self.n_points
+                )
 
         # Don't want to overwrite these in case total_time is not provided
         if time_per_sample > 0:
@@ -659,7 +705,7 @@ class IntegrationResult:
             self.abs_real_tvar = self.abs_real_rsd**2 * time_per_sample
             self.abs_imag_tvar = self.abs_imag_rsd**2 * time_per_sample
 
-    def combine_with(self: 'IntegrationResult', other: 'IntegrationResult') -> None:
+    def combine_with(self: "IntegrationResult", other: "IntegrationResult") -> None:
         def cc(s_c: float, o_c: float) -> float:
             return self._combine_mean(self.n_points, other.n_points, s_c, o_c)
 
@@ -679,12 +725,9 @@ class IntegrationResult:
         self.total_time += other.total_time
         self.__post_init__()  # Recalculate derived observables
 
-    def str_report(self: 'IntegrationResult') -> str:
-        return f"""Real: {
-            self.real_mean: .5f}  ± {
-            self.real_error: .5f}, Imag: {
-            self.imag_mean: .5f}  ± {
-            self.imag_error: .5f} """
+    def str_report(self: "IntegrationResult") -> str:
+        return f"""Real: {self.real_mean: .5f}  ± {self.real_error: .5f}, Imag: {
+            self.imag_mean: .5f}  ± {self.imag_error: .5f} """
 
     @staticmethod
     def _rsd(mean: float, err: float, n_points: int) -> float:
