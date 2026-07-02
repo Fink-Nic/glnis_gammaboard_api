@@ -312,6 +312,10 @@ class MadnisSampler(Sampler):
         else:
             self.madnis: Integrator = self._get_madnis_integrator()
 
+        log(
+            f"sampler: {self.continuous_dims}, {self.discrete_cardinalities}, n_disc={self.num_discrete_dims}  transform: {self.transform.continuous_dims}, {self.transform.discrete_dims}"
+        )
+
     @classmethod
     def from_snapshot(
         cls,
@@ -509,15 +513,6 @@ class MadnisSampler(Sampler):
         return None
 
     def produce_latent_batch(self, nr_samples: int) -> SampleBatch:
-        # raise RuntimeError(
-        #     f"{self.continuous_dims=}, {self.num_discrete_dims=}, {self.discrete_cardinalities=}, {self.transform=}")
-        print(f"This is a print statement.")
-        log("This is a log level default statement.")
-        log("This is a log level trace statement.", level="trace")
-        log("This is a log level debug statement.", level="debug")
-        log("This is a log level info statement.", level="info")
-        log("This is a log level warn statement.", level="warn")
-        log("This is a log level error statement.", level="error")
         continuous = np.empty((nr_samples, self.continuous_dims), dtype=np.float64)
         discrete = np.empty((nr_samples, self.num_discrete_dims), dtype=np.int64)
         wgt = np.empty((nr_samples), dtype=np.float64)
