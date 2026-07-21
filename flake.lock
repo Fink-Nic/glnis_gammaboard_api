@@ -21,11 +21,11 @@
     "gammaboard-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1779278548,
-        "narHash": "sha256-x/8YzWm6dcWwXi+yxe3zMhIbP7jQzJTkfrkOI+BGPkg=",
+        "lastModified": 1784098529,
+        "narHash": "sha256-04gY5VKeH1fuy5QVKY9aUwx4nSm6Bvj8P3aROOKz0sc=",
         "owner": "alphal00p",
         "repo": "gammaboard",
-        "rev": "f23c5496b07d9f054355bdb67bd4d831bfa9ed5d",
+        "rev": "0da0bd10bb9a228b9de08eb32b19379dbff1881f",
         "type": "github"
       },
       "original": {
@@ -52,6 +52,23 @@
         "type": "github"
       }
     },
+    "momtrop-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1770198557,
+        "narHash": "sha256-27eezPLfkh3CQQn5ghnHk7PkjZh1DEnGOK+dQTxyeeQ=",
+        "owner": "Fink-Nic",
+        "repo": "momtrop",
+        "rev": "13720948dc3ff2da379303c8052cd2f25379108a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Fink-Nic",
+        "ref": "main",
+        "repo": "momtrop",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1778274207,
@@ -73,6 +90,7 @@
         "flake-utils": "flake-utils",
         "gammaboard-src": "gammaboard-src",
         "madnis-src": "madnis-src",
+        "momtrop-src": "momtrop-src",
         "nixpkgs": "nixpkgs"
       }
     },

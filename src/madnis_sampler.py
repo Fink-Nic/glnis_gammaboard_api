@@ -1,6 +1,7 @@
 # type: ignore
 from __future__ import annotations
 
+import glnis_runtime_bootstrap  # noqa: F401
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Literal, Tuple
 
@@ -255,6 +256,7 @@ class MadnisSampler(Sampler):
             self.transform = Parser.get_layered_parameterisation_instance(
                 parameterisation
             )
+            log(self.transform.param.graph_properties)
         else:
             self.transform = None
 
@@ -312,9 +314,9 @@ class MadnisSampler(Sampler):
         else:
             self.madnis: Integrator = self._get_madnis_integrator()
 
-        log(
-            f"sampler: {self.continuous_dims}, {self.discrete_cardinalities}, n_disc={self.num_discrete_dims}  transform: {self.transform.continuous_dims}, {self.transform.discrete_dims}"
-        )
+        # log(
+        #     f"sampler: {self.continuous_dims}, {self.discrete_cardinalities}, n_disc={self.num_discrete_dims}  transform: {self.transform.continuous_dims}, {self.transform.discrete_dims}"
+        # )
 
     @classmethod
     def from_snapshot(
@@ -491,9 +493,11 @@ class MadnisSampler(Sampler):
             produced_samples=self.produced_samples,
             step=self.step,
             save_path=self.cfg.save_path,
+            last_loss=0.0,
         )
-        if self.last_loss is not None:
-            snapshot["last_loss"] = self.last_loss
+        log(snapshot)
+        # if self.last_loss is not None:
+        #     snapshot["last_loss"] = self.last_loss
         return snapshot
 
     def sample_plan(self) -> Dict[str, Any]:
@@ -538,10 +542,13 @@ class MadnisSampler(Sampler):
                 self.trained_samples += n
                 self.total_trained_samples += n
 
+        log(f"Before transform: {wgt[:2]=}, {discrete[:2]=}, {continuous[:2]=}")
+
         if self.transform is not None:
             discrete, continuous, wgt = self.transform.parameterise(
                 discrete, continuous, wgt
             )
+            log(f"After transform: {wgt[:2]=}, {discrete[:2]=}, {continuous[:2]=}")
         self.produced_batches += 1
         self.produced_samples += nr_samples
 
@@ -551,6 +558,8 @@ class MadnisSampler(Sampler):
         training_values = np.asarray(training_values)
         n_samples = training_values.shape[0]
         self.pending_weights.append(training_values)
+
+        log(f"{training_values[:10]=}")
 
         if self.trained_samples >= self.cfg.training_batch_size:
             self._train_step()
