@@ -256,7 +256,7 @@ class MadnisSampler(Sampler):
             self.transform = Parser.get_layered_parameterisation_instance(
                 parameterisation
             )
-            log(self.transform.param.graph_properties)
+            # log(self.transform.param.graph_properties)
         else:
             self.transform = None
 
@@ -495,7 +495,7 @@ class MadnisSampler(Sampler):
             save_path=self.cfg.save_path,
             last_loss=0.0,
         )
-        log(snapshot)
+        # log(snapshot)
         # if self.last_loss is not None:
         #     snapshot["last_loss"] = self.last_loss
         return snapshot
@@ -542,13 +542,12 @@ class MadnisSampler(Sampler):
                 self.trained_samples += n
                 self.total_trained_samples += n
 
-        log(f"Before transform: {wgt[:2]=}, {discrete[:2]=}, {continuous[:2]=}")
-
         if self.transform is not None:
+            # log(f"Before transform: {wgt[:2]=}, {discrete[:2]=}, {continuous[:2]=}")
             discrete, continuous, wgt = self.transform.parameterise(
                 discrete, continuous, wgt
             )
-            log(f"After transform: {wgt[:2]=}, {discrete[:2]=}, {continuous[:2]=}")
+            # log(f"After transform: {wgt[:2]=}, {discrete[:2]=}, {continuous[:2]=}")
         self.produced_batches += 1
         self.produced_samples += nr_samples
 
@@ -559,7 +558,7 @@ class MadnisSampler(Sampler):
         n_samples = training_values.shape[0]
         self.pending_weights.append(training_values)
 
-        log(f"{training_values[:10]=}")
+        # log(f"{training_values[:10]=}")
 
         if self.trained_samples >= self.cfg.training_batch_size:
             self._train_step()

@@ -1,0 +1,16 @@
+[package]
+name = "glnis_gammaboard_api"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "_rust"
+path = "src/rust/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+gammalooprs = { git = "https://github.com/alphal00p/gammaloop.git", rev = "2c77dbe988c1d9c81c88f31dd3dd62254617da9a", package = "gammalooprs" }
+gammaloop_api = { git = "https://github.com/alphal00p/gammaloop.git", rev = "2c77dbe988c1d9c81c88f31dd3dd62254617da9a", package = "gammaloop-api", default-features = false, features = ["cli", "no_pyo3"] }
+pyo3 = { version = "0.28", features = ["extension-module"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

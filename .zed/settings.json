@@ -1,0 +1,13 @@
+{
+  "lsp": {
+    "rust-analyzer": {
+      "binary": {
+        "path": "nix",
+        "arguments": ["develop", "--command", "rust-analyzer"]
+      },
+      "initialization_options": {
+        "linkedProjects": ["./Cargo.toml"]
+      }
+    }
+  }
+}

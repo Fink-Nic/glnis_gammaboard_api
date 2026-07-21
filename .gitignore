@@ -8,3 +8,5 @@ checkpoints/
 __pycache__/
 *.py[cod]
 *.egg-info*
+target/
+*cpython*.so

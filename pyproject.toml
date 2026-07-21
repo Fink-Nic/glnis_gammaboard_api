@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
 
 [project]
 name = "glnis_gammaboard_api"
@@ -8,6 +9,7 @@ requires-python = ">=3.13, <3.14"
 authors = [ { name = "Nic Fink", email = "nic.fink@students.unibe.ch" } ]
 
 dependencies = [
+    "pytest",
     "tomlkit>=0.10",
     "numpy>=2.2,<3",
     "torch>=2.6,<3",
@@ -23,9 +25,14 @@ dependencies = [
 [project.scripts]
 glnis-gammaboard-sampler = "run_sampler:main"
 
-[tool.setuptools]
-package-dir = { "" = "src" }
-py-modules = ["glnis_runtime_bootstrap", "madnis_sampler", "run_sampler", "sitecustomize"]
-
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.maturin]
+manifest-path = "Cargo.toml"
+python-source = "src"
+module-name = "glnis._rust"
+bindings = "pyo3"
+include = [
+    { path = "src/glnis_runtime_bootstrap.py", format = "wheel" },
+    { path = "src/madnis_sampler.py", format = "wheel" },
+    { path = "src/run_sampler.py", format = "wheel" },
+    { path = "src/sitecustomize.py", format = "wheel" },
+]
