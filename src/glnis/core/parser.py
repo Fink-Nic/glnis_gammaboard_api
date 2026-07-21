@@ -40,6 +40,11 @@ class MetaDataParser:
                 "Graph properties must be supplied via 'graph_properties' config key if not using GammaLoop evaluator."
             )
 
+        from glnis._rust import parse_state_simplified
+
+        integrand_data = json.loads(parse_state_simplified(
+            self.metadata.state_folder, self.metadata.process_id, self.metadata.integrand_name))
+
         import gammaloop
 
         execution_context = (

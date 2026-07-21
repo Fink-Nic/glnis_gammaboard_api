@@ -1,4 +1,17 @@
 {
+  "languages": {
+    "Rust": {
+      "format_on_save": "on",
+      "formatter": "language_server",
+      "show_edit_predictions": true
+    }
+  },
+  "inlay_hints": {
+    "enabled": true,
+    "show_type_hints": true,
+    "show_parameter_hints": true,
+    "show_other_hints": true
+  },
   "lsp": {
     "rust-analyzer": {
       "binary": {
@@ -6,7 +19,36 @@
         "arguments": ["develop", "--command", "rust-analyzer"]
       },
       "initialization_options": {
-        "linkedProjects": ["./Cargo.toml"]
+        "linkedProjects": ["./Cargo.toml"],
+        "check": {
+          "command": "clippy"
+        },
+        "completion": {
+          "autoimport": {
+            "enable": true
+          },
+          "postfix": {
+            "enable": true
+          }
+        },
+        "diagnostics": {
+          "styleLints": {
+            "enable": true
+          }
+        },
+        "inlayHints": {
+          "maxLength": null,
+          "closureReturnTypeHints": {
+            "enable": "always"
+          },
+          "lifetimeElisionHints": {
+            "enable": "skip_trivial",
+            "useParameterNames": true
+          },
+          "reborrowHints": {
+            "enable": "mutable"
+          }
+        }
       }
     }
   }

@@ -230,6 +230,7 @@ WRAPPER
             export LD_LIBRARY_PATH="${libPath}:/run/opengl-driver/lib:''${LD_LIBRARY_PATH:-}"
             export PYO3_PYTHON="${pythonEnv}/bin/python"
             export UV_PYTHON_DOWNLOADS=never
+            export SYMBOLICA_OEM_LICENSE="SYMBOLICA_OEM_GAMMALOOP"
             export OMP_NUM_THREADS=''${OMP_NUM_THREADS:-64}
           '';
         };

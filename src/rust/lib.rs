@@ -13,6 +13,13 @@ fn health_check() -> &'static str {
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(health_check, m)?)?;
     m.add_function(wrap_pyfunction!(gammaloop_state::classify_state_folder, m)?)?;
-    m.add_function(wrap_pyfunction!(gammaloop_state::parse_state_summary_json, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        gammaloop_state::parse_state_summary_json,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        gammaloop_state::parse_state_simplified,
+        m
+    )?)?;
     Ok(())
 }
