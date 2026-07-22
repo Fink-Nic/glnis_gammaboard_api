@@ -1,7 +1,7 @@
 .venv/
 result
 result-*
-madnis.sif
+*.sif
 build
 madnis_gammaboard_api.egg-info
 checkpoints/

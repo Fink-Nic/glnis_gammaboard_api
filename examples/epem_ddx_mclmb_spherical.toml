@@ -67,7 +67,7 @@ accumulator = "latest"
 
 [task_queue.sampler_aggregator.config]
 kind = "process_sampler"
-command = ["$resources/../integrations/glnis_gammaboard_api/.venv/bin/glnis-gammaboard-sampler"]
+command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
 # Alternative with Apptainer when the host supports Apptainer/SIF execution:
 # command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
 # Alternative with the Nix runtime when Nix is available:

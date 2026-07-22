@@ -1,63 +1,94 @@
 Bootstrap: docker
-From: python:3.12-bookworm
+From: nixos/nix:2.24.11
+Stage: build
+
+# Build from the local checkout, not from Git. Run `apptainer build` from this
+# directory so these relative paths resolve to the project files.
+%files
+    flake.nix /build-src/glnis_gammaboard_api/flake.nix
+    flake.lock /build-src/glnis_gammaboard_api/flake.lock
+    pyproject.toml /build-src/glnis_gammaboard_api/pyproject.toml
+    Cargo.toml /build-src/glnis_gammaboard_api/Cargo.toml
+    Cargo.lock /build-src/glnis_gammaboard_api/Cargo.lock
+    momtrop-Cargo.lock /build-src/glnis_gammaboard_api/momtrop-Cargo.lock
+    src /build-src/glnis_gammaboard_api/src
 
 %post
     set -eux
 
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        git \
-        zlib1g \
-        libgmp10 \
-        libmpfr6 \
-        libmpc3 \
-        libgfortran5
+    mkdir -p /etc/nix
+    cat > /etc/nix/nix.conf <<'EOF'
+experimental-features = nix-command flakes
+sandbox = false
+filter-syscalls = false
+accept-flake-config = true
+EOF
 
-    update-ca-certificates
+    export NIX_CONFIG='experimental-features = nix-command flakes
+sandbox = false
+filter-syscalls = false
+accept-flake-config = true'
 
-    GAMMABOARD_REPO="${GAMMABOARD_REPO:-https://github.com/alphal00p/gammaboard.git}"
-    GAMMABOARD_REF="${GAMMABOARD_REF:-main}"
-    PROJECT_DIR="/opt/gammaboard"
-    WRAPPER_DIR="${PROJECT_DIR}/integrations/madnis"
-    git clone "${GAMMABOARD_REPO}" "${PROJECT_DIR}"
-    cd "${PROJECT_DIR}"
-    git checkout "${GAMMABOARD_REF}"
+    cd /build-src/glnis_gammaboard_api
+    runtime_path="$(nix build .#runtime --no-link --print-out-paths)"
 
-    python -m pip install --root-user-action=ignore --no-cache-dir --upgrade pip setuptools wheel
-    python -m pip install --root-user-action=ignore --no-cache-dir \
-        --index-url https://download.pytorch.org/whl/cu124 \
-        torch
-    python -m pip install --root-user-action=ignore --no-cache-dir --no-build-isolation \
-        "madnis @ git+https://github.com/madgraph-ml/madnis.git@main"
-    python -m pip install --root-user-action=ignore --no-cache-dir --no-build-isolation \
-        "gammaboard-process @ git+https://github.com/alphal00p/gammaboard.git@main#subdirectory=process_api/python"
-    python -m pip install --root-user-action=ignore --no-cache-dir --no-build-isolation "${WRAPPER_DIR}"
-    python - <<'PY'
-import madnis
-import madnis_sampler
-import gammaboard_process
-import run_sampler
-print("python runtime import check ok")
-PY
+    mkdir -p /closure/nix/store /closure/opt
+    nix-store --query --requisites "${runtime_path}" > /tmp/glnis-runtime-closure
+    while IFS= read -r store_path; do
+        cp -a "${store_path}" /closure/nix/store/
+    done < /tmp/glnis-runtime-closure
 
-    apt-get clean
-    rm -rf /var/lib/apt/lists/*
+    ln -s "${runtime_path}" /closure/opt/glnis-runtime
+
+
+Bootstrap: docker
+From: debian:bookworm-slim
+Stage: final
+
+%files from build
+    /closure/nix /nix
+    /closure/opt /opt
+
+%post
+    set -eux
+
+    mkdir -p /usr/local/bin
+
+    cat > /usr/local/bin/glnis-gammaboard-sampler <<'EOF'
+#!/bin/sh
+exec /opt/glnis-runtime/bin/glnis-gammaboard-sampler "$@"
+EOF
+
+    cat > /usr/local/bin/glnis_gammaboard_sampler <<'EOF'
+#!/bin/sh
+exec /opt/glnis-runtime/bin/glnis-gammaboard-sampler "$@"
+EOF
+
+    cat > /usr/local/bin/python <<'EOF'
+#!/bin/sh
+exec /opt/glnis-runtime/bin/python "$@"
+EOF
+
+    chmod +x \
+        /usr/local/bin/glnis-gammaboard-sampler \
+        /usr/local/bin/glnis_gammaboard_sampler \
+        /usr/local/bin/python
 
 %environment
     export OMP_NUM_THREADS="${OMP_NUM_THREADS:-64}"
     export PYTHONUNBUFFERED=1
-    export PYTHONPATH="/opt/gammaboard/integrations/madnis/src:${PYTHONPATH:-}"
+    export UV_PYTHON_DOWNLOADS=never
+    export SYMBOLICA_OEM_LICENSE="${SYMBOLICA_OEM_LICENSE:-SYMBOLICA_OEM_GAMMALOOP}"
 
 %runscript
-    exec "$@"
+    exec /usr/local/bin/glnis_gammaboard_sampler "$@"
 
 %test
     python - <<'PY'
+import gammaboard_process
+import glnis
 import madnis
 import madnis_sampler
-import gammaboard_process
 import run_sampler
-print("python runtime ok")
+print("glnis gammaboard sampler runtime ok")
 PY

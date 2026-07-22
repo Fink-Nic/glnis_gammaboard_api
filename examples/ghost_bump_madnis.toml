@@ -29,9 +29,9 @@ kind = "process_sampler"
 #   uv venv --python 3.13 --seed .venv
 #   . .venv/bin/activate
 #   python -m pip install .
-command = ["$resources/../integrations/glnis_gammaboard_api/.venv/bin/glnis-gammaboard-sampler"]
+command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
 # Alternative with Apptainer when the host supports Apptainer/SIF execution:
-# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/glnis.sif", "glnis_gammaboard_sampler"]
 # Alternative with the Nix runtime when Nix is available:
 # command = ["$resources/../integrations/glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
 cwd = "$resources/.."
@@ -44,33 +44,6 @@ training_batch_size = 1000
 use_gpu = true
 cuda_id = 0
 save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
-parameterisation.condition_integrand_first = false
-parameterisation.layer = [{param_type = "identity", force_dim=2}]
-graph_properties.edge_src_dst_vertices=[[0, 1], [1, 2], [2, 0]]
-graph_properties.edge_masses=[0.0, 0.0, 0.0]
-graph_properties.edge_momentum_shifts=[[-6.0, -7.0, -8.0], [0.0, 0.0, 0.0], [-9.0, -11.0, -13.0]]
-graph_properties.graph_external_vertices=[0, 1, 2]
-graph_properties.graph_signature=[[1],
-                     [1],
-                     [1]]
-graph_properties.lmb_array=[[2],
-               [1],
-               [0]]
-graph_properties.edge_external_sigs=[[0.0, 1.0, 0.0],
-                        [0.0, 0.0, 0.0],
-                        [-1.0, 1.0, 0.0]]
-graph_properties.external_momenta=[[1.0, 3.0, 4.0, 5.0],
-                      [-1.0, -6.0, -7.0, -8.0],
-                      [2.0, 9.0, 11.0, 13.0]]
-graph_properties.orientation_ids=[0, 1, 2, 3, 4, 5]
-graph_properties.orientation_signatures=[[0, 0, 0, -1, 1, 1],
-                            [0, 0, 0, 1, -1, 1],
-                            [0, 0, 0, -1, -1, 1],
-                            [0, 0, 0, 1, 1, -1],
-                            [0, 0, 0, -1, 1, -1],
-                            [0, 0, 0, 1, -1, -1]]
-graph_properties.generation_channel_id=1
-graph_properties.e_cm=1.0
 
 [[task_queue]]
 name = "pdf-2d"
