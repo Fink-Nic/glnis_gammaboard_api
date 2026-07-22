@@ -555,12 +555,17 @@ class MadnisSampler(Sampler):
 
     def ingest_training_values(self, training_values: NDArray) -> None:
         training_values = np.asarray(training_values)
-        n_samples = training_values.shape[0]
         self.pending_weights.append(training_values)
 
         # log(f"{training_values[:10]=}")
 
-        if self.trained_samples >= self.cfg.training_batch_size:
+        f_lens = [len(w) for w in self.pending_weights]
+        x_lens = [len(s) for s in self.pending_training_samples]
+        p_lens = [len(p) for p in self.pending_training_probs]
+        if (
+            f_lens == x_lens == p_lens
+            and sum(f_lens) >= self.cfg.training_batch_size
+        ):
             self._train_step()
 
     def get_diagnostics(self) -> Dict[str, Any]:

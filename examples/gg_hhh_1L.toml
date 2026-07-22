@@ -16,28 +16,19 @@
 #       /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/gg_hhh/1L/
 # =============================================================================
 
-replacements = { run_name = "gg_hhh_madnis", train_samples = 200000, sample_samples = 10000000, samples_for_update = 50000, max_batch_size = 100000 }
+replacements = { run_name = "gg_hhh_1_L_madnis", train_samples = 200000, sample_samples = 10000000, max_batch_size = 100000 }
 
-name = '$(run_name:"ee_ddx_gammaloop")'
-target = { kind = "vector", components = { real = -4.170789689137254e-6, imag = -0.0006560891338812168 } }
+name = '$(run_name:"gg_hhh_1L_madnis")'
+target = { kind = "vector", components = { real = -5.4660399e-6, imag = -1.892036e-6 } }
 
 [evaluator]
 kind = "gammaloop"
-state_folder = "/shared/nfink/dev/gammaloop/examples/cli/gg_hhh/1L/state"
+state_folder = "../../gammaloop/examples/cli/gg_hhh/1L/state"
 integrand_name = "1L"
 momentum_space = true
 
 [evaluator.preprocessing]
 read_only = true
-commands = [
-  "set model MT=173.0",
-  "set model WT=0.0",
-  "set model ymt=173.0",
-  "set model aS=0.118",
-  "set model aEWM1=132.507",
-  "set model Gf=1.166390e-05",
-  "set model MZ=91.188",
-]
 
 [[task_queue]]
 name = "accumulator"
