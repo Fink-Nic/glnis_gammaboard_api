@@ -1,6 +1,5 @@
 # type: ignore
 import json
-from contextlib import chdir, nullcontext
 from typing import Dict, List, Set
 
 import pydot
@@ -44,90 +43,67 @@ class MetaDataParser:
 
         integrand_data = json.loads(parse_state_simplified(
             self.metadata.state_folder, self.metadata.process_id, self.metadata.integrand_name))
+        Dot = DotParser(integrand_data["dot_file"], integrand_data["model"], dot_from_string=True)
 
-        import gammaloop
+        """
+        #[derive(Debug, Serialize)]
+        struct SimplifiedStateData {
+            state_folder: String,
+            process_id: usize,
+            integrand_name: String,
+            model: String,
+            dot_file: String,
+            external_momenta: Vec<ExternalMomentumData>,
+            e_cm: f64,
+            graph_groups: Vec<SimplifiedGraphGroupData>,
+        }
 
-        execution_context = (
-            chdir(self.config.gammaloop_directory)
-            if self.config.gammaloop_directory
-            else nullcontext()
-        )
-        with execution_context:
-            gammaloop_state = gammaloop.GammaLoopAPI(
-                self.metadata.state_folder,
-                level=gammaloop.LogLevel.Off,
-                logfile_level=gammaloop.LogLevel.Off,
-                read_only_state=True,
-            )
-            outputs = dict()
-            for o in gammaloop_state.list_outputs():
-                outputs.update(o)
-            if len(outputs) == 0:
-                raise ValueError(
-                    f"No processes found in GammaLoop state at '{self.metadata.state_folder}'. Perhaps you forgot to generate it?"
-                )
+        #[derive(Debug, Serialize)]
+        struct SimplifiedGraphGroupData {
+            group_id: usize,
+            master_graph_id: usize,
+            loop_momentum_bases_edge_ids: Vec<Vec<usize>>,
+            generation_channel_id: usize,
+            orientation_ids: Vec<usize>,
+            orientation_signatures: Vec<Vec<i8>>,
+        }
+        """
 
-            integrand_name = self.metadata.integrand_name
-            if integrand_name not in outputs:
-                integrand_name = list(outputs)[0]
-            process_id = outputs[integrand_name]
-            iinfo = gammaloop_state.get_integrand_info(process_id, integrand_name)
-            model_as_str = gammaloop_state.get_model()
-            dot_as_str = gammaloop_state.get_dot_files(process_id, integrand_name)
-            Dot = DotParser(dot_as_str, model_as_str, dot_from_string=True)
-            kinematics = gammaloop_state.get_default_runtime_settings().kinematics
-            e_cm = kinematics.e_cm
-            ext_momenta = kinematics.externals.data.momenta.to_dict()
-            graph_properties_list = []
-            for group_id, graph_group in enumerate(iinfo.graph_groups):
-                master_id = [g.graph_id for g in graph_group.graphs if g.is_master][0]
-                graph_properties = Dot.get_graph_properties(master_id, ext_momenta)
-                lmbs = graph_group.loop_momentum_bases
-                if self.config.override_lmb_heuristics:
-                    active_lmbs = lmbs
-                else:
-                    active_lmbs = [lmb for lmb in lmbs if lmb.channel_id is not None]
-                    active_lmbs = active_lmbs if len(active_lmbs) > 0 else lmbs
-                try:
-                    generation_basis_id = [
-                        lmb.matches_generation_basis for lmb in lmbs
-                    ].index(True)
-                except:
-                    generation_basis_id = 0
-                generation_channel_id = active_lmbs.index(lmbs[generation_basis_id])
-                # Map edge_ids to {0, ..., n_edges-1}
-                gl_internal_edge_ids = set(
-                    e_id for lmb in lmbs for e_id in lmb.edge_ids
-                )
-                if not len(gl_internal_edge_ids) == graph_properties.n_edges:
-                    raise ValueError(
-                        """Number of internal edges inferred from the dot file does not match the number of internal edges in the GammaLoop state.
-                        This should not happen, please report this issue."""
-                    )
-                e_id_map: Dict[int, int] = dict()
-                for my_e_id, gl_e_id in enumerate(gl_internal_edge_ids):
-                    e_id_map[gl_e_id] = my_e_id
-                graph_properties.lmb_array = [
-                    [e_id_map[e_id] for e_id in lmb.edge_ids] for lmb in active_lmbs
-                ]
+        e_cm = integrand_data["e_cm"]
+        ext_momenta = integrand_data["external_momenta"]
+        graph_properties_list = []
+        for graph_group in integrand_data["graph_groups"]:
+            master_id = graph_group["master_graph_id"]
+            graph_properties = Dot.get_graph_properties(master_id, ext_momenta)
+            lmbs = graph_group["loop_momentum_bases_edge_ids"]
+            # Map edge_ids to {0, ..., n_edges-1}
+            gl_internal_edge_ids = set(e_id for lmb in lmbs for e_id in lmb)
+            e_id_map: Dict[int, int] = dict()
+            for my_e_id, gl_e_id in enumerate(gl_internal_edge_ids):
+                e_id_map[gl_e_id] = my_e_id
 
-                graph_properties.orientation_ids = [
-                    o.orientation_id for o in graph_group.orientations
-                ]
-                graph_properties.orientation_signatures = [
-                    o.signature for o in graph_group.orientations
-                ]
-                graph_properties.generation_channel_id = generation_channel_id
-                graph_properties.e_cm = e_cm
-                graph_properties.__post_init__()
+            # Technically this should indeed never be the case for bridgeless graphs, but should not be an issue
+            # even if it does happen (except for momtrop).
+            # if not len(gl_internal_edge_ids) == graph_properties.n_edges:
+            #     raise ValueError(
+            #         """Number of internal edges inferred from the dot file does not match the number of internal edges in the GammaLoop state.
+            #         This should not happen, please report this issue."""
+            #     )
+            graph_properties.lmb_array = [
+                [e_id_map[e_id] for e_id in lmb] for lmb in lmbs
+            ]
+            graph_properties.orientation_ids = graph_group["orientation_ids"]
+            graph_properties.orientation_signatures = graph_group["orientation_signatures"]
+            graph_properties.generation_channel_id = integrand_data["generation_channel_id"]
+            graph_properties.e_cm = e_cm
+            graph_properties.__post_init__()
 
-                graph_properties_list.append(graph_properties)
+            graph_properties_list.append(graph_properties)
 
-            return (
-                graph_properties_list
-                if len(graph_properties_list) > 1
-                else graph_properties_list[0]
-            )
+        if len(graph_properties_list) > 1:
+            return graph_properties_list
+
+        return graph_properties_list[0]
 
 
 class ModelParser:
@@ -308,7 +284,7 @@ class DotParser:
                 EXT_VERTICES.add(graph.get_node(edge.get("src"))[0])
                 EXT_SIGNATURES.append(-1)
             else:
-                if not "K" in (edge.get("lmb_rep") or ""):
+                if "K" not in (edge.get("lmb_rep") or ""):
                     continue
                 INT_EDGES.append(edge)
                 particle_name = edge.get("particle")[1:-1]

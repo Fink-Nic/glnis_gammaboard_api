@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 from pprint import pformat
+from glnis.core.parser import MetaDataParser
 
 import pytest
 
@@ -87,8 +88,22 @@ def main() -> None:
         args.process_id,
         args.integrand_name,
     )
+    hline = 50*"="
+    print(hline)
+    print("Rust parsed data")
+    print(hline)
     _parse_and_print(state_folder, process_id, integrand_name)
+    Parser = MetaDataParser(
+        metadata=dict(state_folder=state_folder, process_id=process_id, integrand_name=integrand_name)
+    )
+    graph_properties = Parser.get_graph_properties()
+    print(hline)
+    print("glnis parsed graph properties")
+    print(hline)
+    if isinstance(graph_properties, list):
+        graph_properties = graph_properties[0]
 
+    _print_summary(json.dumps(graph_properties))
 
 if __name__ == "__main__":
     main()

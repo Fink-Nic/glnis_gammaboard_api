@@ -303,8 +303,8 @@ class LayeredParameterisation:
             match config.param_type.lower():
                 case "momtrop":
                     p = MomtropParameterisation(**config.param_kwargs)
-                case "momtrop_edge_weights":
-                    p = MomtropEdgeWeightsParameterisation(**config.param_kwargs)
+                # case "momtrop_edge_weights":
+                #     p = MomtropEdgeWeightsParameterisation(**config.param_kwargs)
                 case "spherical":
                     p = SphericalParameterisation(**config.param_kwargs)
                 case "inv_spherical":
