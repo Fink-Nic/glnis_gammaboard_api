@@ -94,7 +94,7 @@ class MetaDataParser:
             ]
             graph_properties.orientation_ids = graph_group["orientation_ids"]
             graph_properties.orientation_signatures = graph_group["orientation_signatures"]
-            graph_properties.generation_channel_id = integrand_data["generation_channel_id"]
+            graph_properties.generation_channel_id = graph_group["generation_channel_id"]
             graph_properties.e_cm = e_cm
             graph_properties.__post_init__()
 

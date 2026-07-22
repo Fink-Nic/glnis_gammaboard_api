@@ -1,0 +1,89 @@
+# =============================================================================
+# gg -> HHH @ 1L amplitude, sqrt(s) = 1000 GeV  --  GammaLoop engine
+# =============================================================================
+#
+# -----------------------------------------------------------------------------
+# ARTIFACT -- GammaLoop state for gg -> HHH @ 1L
+# -----------------------------------------------------------------------------
+# The CLI example card ships with the gammaloop checkout. Generate the state and
+# copy it under resources/states so the relative state_folder below resolves:
+#
+#   cd /home/cedricsigrist/Workspace/repos/gammaloop
+#   ./gammaloop --clean-state ./examples/cli/gg_hhh/1L/gg_hhh.toml \
+#       run generate integrate -c "quit -o"
+#   mkdir -p /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/gg_hhh/1L
+#   cp -r ./examples/cli/gg_hhh/1L/state/ \
+#       /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/gg_hhh/1L/
+# =============================================================================
+
+replacements = { run_name = "gg_hhh_madnis", train_samples = 200000, sample_samples = 10000000, samples_for_update = 50000, max_batch_size = 100000 }
+
+name = '$(run_name:"ee_ddx_gammaloop")'
+target = { kind = "vector", components = { real = -4.170789689137254e-6, imag = -0.0006560891338812168 } }
+
+[evaluator]
+kind = "gammaloop"
+state_folder = "/shared/nfink/dev/gammaloop/examples/cli/gg_hhh/1L/state"
+integrand_name = "1L"
+momentum_space = true
+
+[evaluator.preprocessing]
+read_only = true
+commands = [
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[task_queue]]
+name = "accumulator"
+kind = "set_accumulator"
+accumulator = "gammaloop"
+
+[[task_queue]]
+name = "madnis-train"
+kind = "sample"
+stop_condition = { max_samples = "$(train_samples:1000000)" }
+accumulator = "latest"
+
+[task_queue.sampler_aggregator.config]
+kind = "process_sampler"
+command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
+# Alternative with Apptainer when the host supports Apptainer/SIF execution:
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
+# Alternative with the Nix runtime when Nix is available:
+# command = ["$resources/../integrations/glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
+cwd = "$resources/.."
+requires_training_values = true
+
+[task_queue.sampler_aggregator.config.args]
+seed = 0
+training_steps = 200
+training_batch_size = 1000
+use_gpu = true
+cuda_id = 0
+save_path = "integrations/glnis_gammaboard_api/checkpoints/gg_hhh_1L_madnis"
+parameterisation.condition_integrand_first = true
+parameterisation.layer = [
+    {param_type = "spherical"},
+    {param_type = "mc_layer", subtype = "ose", ose_exponent = 1.0}
+    ]
+
+[task_queue.queue_tuning]
+target_batch_eval_ms = 1000.0
+max_batch_size = "$(max_batch_size:10000)"
+
+[[task_queue]]
+name = "sample"
+kind = "sample"
+measurement = { quantity = "central_value" }
+stop_condition = { max_samples = "$(sample_samples:10000000)" }
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.queue_tuning]
+target_batch_eval_ms = 1000.0
+max_batch_size = "$(max_batch_size:10000)"

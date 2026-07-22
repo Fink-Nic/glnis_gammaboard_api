@@ -39,6 +39,13 @@
 
         libPath = pkgs.lib.makeLibraryPath libs;
 
+        gammaloopSource = pkgs.fetchFromGitHub {
+          owner = "alphal00p";
+          repo = "gammaloop";
+          rev = "2c77dbe988c1d9c81c88f31dd3dd62254617da9a";
+          hash = "sha256-OTNTpIcDGANvixwkLBRDJnQat5qw1L/WQIJeSx5vuTI=";
+        };
+
         madnis = python.pkgs.buildPythonPackage {
           pname = "madnis";
           version = "main";
@@ -152,23 +159,57 @@
           doCheck = false;
         };
 
+        glnis-gammaboard-api = python.pkgs.buildPythonPackage {
+          pname = "glnis-gammaboard-api";
+          version = "0.1.0";
+          src = ./.;
+          pyproject = true;
+
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            src = ./.;
+            hash = "sha256-ahnhw8vZ36kObqVM+5izu6jkoleW0G3mDRzmRWh7VRc=";
+          };
+
+          nativeBuildInputs = (with pkgs.rustPlatform; [
+            cargoSetupHook
+            maturinBuildHook
+          ]) ++ [
+            pkgs.m4
+          ];
+
+          propagatedBuildInputs = with python.pkgs; [
+            gammaboard-process
+            numpy
+            torch-bin
+            tomlkit
+            pydot
+            matplotlib
+            scipy
+            pytest
+            gvar
+            vegas
+            symbolica
+            momtrop
+            madnis
+          ];
+
+          SYMBOLICA_OEM_LICENSE = "SYMBOLICA_OEM_GAMMALOOP";
+
+          preBuild = ''
+            if [ -d /build/cargo-deps-vendor/source-git-0 ] && [ ! -e /build/cargo-deps-vendor/assets ]; then
+              cp -R ${gammaloopSource}/assets /build/cargo-deps-vendor/assets
+            fi
+          '';
+
+          dontCheckRuntimeDeps = true;
+          doCheck = false;
+        };
+
         pythonEnv = python.withPackages (ps: [
-          gammaboard-process
-          ps.numpy
-          ps.torch-bin
+          glnis-gammaboard-api
           ps.setuptools
           ps.wheel
           ps.pip
-          ps.tomlkit
-          ps.pydot
-          ps.matplotlib
-          ps.scipy
-          ps.pytest
-          gvar
-          vegas
-          symbolica
-          momtrop
-          madnis
         ]);
 
         runtime = pkgs.stdenv.mkDerivation {
@@ -178,14 +219,13 @@
           dontBuild = true;
 
           installPhase = ''
-            mkdir -p $out/src $out/bin
-            cp -r src/* $out/src/
+            mkdir -p $out/bin
 
             cat > $out/bin/python <<'WRAPPER'
 #!/bin/sh
-export PYTHONPATH="@out@/src:''${PYTHONPATH:-}"
 export LD_LIBRARY_PATH="@libPath@:/run/opengl-driver/lib:''${LD_LIBRARY_PATH:-}"
 export UV_PYTHON_DOWNLOADS=never
+export SYMBOLICA_OEM_LICENSE="''${SYMBOLICA_OEM_LICENSE:-SYMBOLICA_OEM_GAMMALOOP}"
 export OMP_NUM_THREADS=''${OMP_NUM_THREADS:-64}
 exec @python@ "$@"
 WRAPPER
@@ -196,7 +236,6 @@ exec @out@/bin/python -u -m run_sampler "$@"
 WRAPPER
 
             substituteInPlace $out/bin/python \
-              --replace-fail "@out@" "$out" \
               --replace-fail "@libPath@" "${libPath}" \
               --replace-fail "@python@" "${pythonEnv}/bin/python"
 

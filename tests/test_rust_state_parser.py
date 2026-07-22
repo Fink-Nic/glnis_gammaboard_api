@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 from pprint import pformat
 from glnis.core.parser import MetaDataParser
+from dataclasses import asdict
 
 import pytest
 
@@ -50,8 +51,11 @@ def _resolve_inputs(
     return Path(state_folder), int(process_id), integrand_name
 
 
-def _print_summary(raw_json: str) -> None:
-    data = json.loads(raw_json)
+def _print_summary(json_or_dict: str|dict) -> None:
+    if isinstance(json_or_dict, dict):
+        data = json_or_dict
+    else:
+        data = json.loads(json_or_dict)
     for key, value in data.items():
         if key in {"model", "dot_file"}:
             print(f"{key}: <{len(value)} characters>")
@@ -94,7 +98,7 @@ def main() -> None:
     print(hline)
     _parse_and_print(state_folder, process_id, integrand_name)
     Parser = MetaDataParser(
-        metadata=dict(state_folder=state_folder, process_id=process_id, integrand_name=integrand_name)
+        metadata=dict(kind="gammaloop", state_folder=state_folder, process_id=process_id, integrand_name=integrand_name)
     )
     graph_properties = Parser.get_graph_properties()
     print(hline)
@@ -103,7 +107,7 @@ def main() -> None:
     if isinstance(graph_properties, list):
         graph_properties = graph_properties[0]
 
-    _print_summary(json.dumps(graph_properties))
+    _print_summary(asdict(graph_properties))
 
 if __name__ == "__main__":
     main()

@@ -34,5 +34,4 @@ include = [
     { path = "src/glnis_runtime_bootstrap.py", format = "wheel" },
     { path = "src/madnis_sampler.py", format = "wheel" },
     { path = "src/run_sampler.py", format = "wheel" },
-    { path = "src/sitecustomize.py", format = "wheel" },
 ]

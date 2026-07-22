@@ -2,7 +2,7 @@
 
 GammaBoard often launches the sampler entry point outside `nix develop`.  In
 that environment Python wheels can miss Nix native library paths, and Triton
-hard-codes `/sbin/ldconfig -p`.  Import this module before NumPy/Torch/MadNIS.
+hard-codes `/sbin/ldconfig -p`.  Call `bootstrap()` before NumPy/Torch/MadNIS.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def _first_existing_tool(name: str) -> str | None:
     return None
 
 
-def _bootstrap_native_environment() -> None:
+def _bootstrap_native_environment(*, allow_reexec: bool) -> None:
     changed = False
 
     existing_libs = [path for path in _os.environ.get("LD_LIBRARY_PATH", "").split(":") if path]
@@ -91,9 +91,19 @@ def _bootstrap_native_environment() -> None:
         _os.environ["CXX"] = cxx
         changed = True
 
-    if not changed or _os.environ.get("GLNIS_RUNTIME_BOOTSTRAPPED") == "1":
+    if (
+        not allow_reexec
+        or not changed
+        or _os.environ.get("GLNIS_RUNTIME_BOOTSTRAPPED") == "1"
+    ):
         return
-    if not _sys.argv or _sys.argv[0] in {"-c", ""}:
+
+    # During Python startup from `python -m module`, sitecustomize can observe
+    # sys.argv[0] == "-m" before the module name is available.  Reconstructing
+    # argv from that state would re-exec as `python -m` and fail with
+    # "Argument expected for the -m option".  The `run_sampler` entry point calls
+    # bootstrap() again after normal module dispatch, where sys.argv[0] is safe.
+    if not _sys.argv or _sys.argv[0] in {"-c", "-m", ""}:
         return
 
     env = _os.environ.copy()
@@ -170,10 +180,7 @@ def _patch_triton_ldconfig_probe() -> None:
     _subprocess.check_output = _check_output
 
 
-def bootstrap() -> None:
-    _bootstrap_native_environment()
+def bootstrap(*, allow_reexec: bool = True) -> None:
+    _bootstrap_native_environment(allow_reexec=allow_reexec)
     _patch_ctypes_find_library()
     _patch_triton_ldconfig_probe()
-
-
-bootstrap()
