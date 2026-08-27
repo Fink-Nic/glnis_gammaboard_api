@@ -531,10 +531,10 @@ class MadnisSampler(Sampler):
                     device=self.device,
                     dtype=torch.float64,
                 )
-            discrete[n_eval : n_eval + n, :], continuous[n_eval : n_eval + n, :] = (
+            discrete[n_eval: n_eval + n, :], continuous[n_eval: n_eval + n, :] = (
                 self._madnis_output_to_disc_cont(x_all)
             )
-            wgt[n_eval : n_eval + n] = 1 / prob.numpy(force=True)
+            wgt[n_eval: n_eval + n] = 1 / prob.numpy(force=True)
             n_eval += n
             if self.training_samples_remaining() is not None:
                 self.pending_training_samples.append(x_all)
@@ -615,15 +615,15 @@ class MadnisSampler(Sampler):
             n = min(self.cfg.max_batch_size, n_samples - n_eval)
             with torch.no_grad():
                 if xs_continuous.shape[1] > 0:
-                    prob[n_eval : n_eval + n] = (
-                        self.madnis.flow.prob(x_all[n_eval : n_eval + n, :])
+                    prob[n_eval: n_eval + n] = (
+                        self.madnis.flow.prob(x_all[n_eval: n_eval + n, :])
                         .numpy(force=True)
                         .reshape(-1)
                     )
                 else:
-                    prob[n_eval : n_eval + n] = (
+                    prob[n_eval: n_eval + n] = (
                         self.madnis.flow.discrete_flow.prob(
-                            x_all[n_eval : n_eval + n, :]
+                            x_all[n_eval: n_eval + n, :]
                         )
                         .numpy(force=True)
                         .reshape(-1)
@@ -752,9 +752,9 @@ class MadnisSampler(Sampler):
     def _madnis_output_to_disc_cont(self, x_all: Tensor) -> Tuple[NDArray, NDArray]:
         if self.madnis.integrand.discrete_dims_position == "first":
             discrete = x_all[:, : self.num_discrete_dims].numpy(force=True)
-            continuous = x_all[:, self.num_discrete_dims :].numpy(force=True)
+            continuous = x_all[:, self.num_discrete_dims:].numpy(force=True)
         else:
-            discrete = x_all[:, -self.num_discrete_dims :].numpy(force=True)
+            discrete = x_all[:, -self.num_discrete_dims:].numpy(force=True)
             continuous = x_all[:, : -self.num_discrete_dims].numpy(force=True)
         return discrete, continuous
 

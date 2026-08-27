@@ -238,7 +238,7 @@ class LayerData:
             value = self._pending_data.pop(name)
             dim = value.shape[1]
             self._active_structure[idx] = dim
-            self._data[:, offset : offset + dim] = value
+            self._data[:, offset: offset + dim] = value
 
         self._data[~self.success] = 0
 
@@ -409,7 +409,7 @@ class LayerData:
         idx = LayerData.POSITIONS[name]
         offset = self._structure[:idx].sum()
         dim = self._active_structure[idx]
-        return self._data[:, offset : offset + dim]
+        return self._data[:, offset: offset + dim]
 
 
 @dataclass
