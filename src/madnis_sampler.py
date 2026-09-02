@@ -98,6 +98,7 @@ class MadnisConfig:
         "variance", "variance_softclip", "kl_divergence", "kl_divergence_softclip"
     ] = "kl_divergence"
     discrete_dims_position: Literal["first", "last"] = "first"
+    condition_integrand_first: bool = True
     discrete_model: Literal["transformer", "made"] = "transformer"
     flow_config: FlowConfig = field(default_factory=FlowConfig)
     transformer_config: TransformerConfig = field(default_factory=TransformerConfig)
@@ -123,6 +124,7 @@ class MadnisConfig:
             scheduler_type=config_dict.get("scheduler_type", "cosineannealing"),
             loss_type=config_dict.get("loss_type", "kl_divergence"),
             discrete_dims_position=config_dict.get("discrete_dims_position", "first"),
+            condition_integrand_first=config_dict.get("condition_integrand_first", True),
             discrete_model=config_dict.get("discrete_model", "transformer"),
             flow_config=flow_config,
             transformer_config=transformer_config,
@@ -184,6 +186,7 @@ class MadnisSampler(Sampler):
             "variance", "variance_softclip", "kl_divergence", "kl_divergence_softclip"
         ] = "kl_divergence",
         discrete_dims_position: Literal["first", "last"] = "first",
+        condition_integrand_first: bool = True,
         discrete_model: Literal["transformer", "made"] = "transformer",
         flow_config: dict[str, Any] | FlowConfig | None = None,
         transformer_config: dict[str, Any] | TransformerConfig | None = None,
@@ -202,7 +205,7 @@ class MadnisSampler(Sampler):
         madnis_blob: bytes | None = None,
         evaluator_metadata: dict[str, Any] | None = None,
         parser: dict[str, Any] | None = None,
-        parameterisation: dict[str, Any] | None = None,
+        mapping: dict[str, Any] | None = None,
         graph_properties: dict[str, Any] | None = None,
     ):
         torch.set_default_dtype(torch.float64)
@@ -220,6 +223,7 @@ class MadnisSampler(Sampler):
             scheduler_type=scheduler_type,
             loss_type=loss_type,
             discrete_dims_position=discrete_dims_position,
+            condition_integrand_first=condition_integrand_first,
             discrete_model=discrete_model,
             flow_config=(
                 flow_config
@@ -241,7 +245,7 @@ class MadnisSampler(Sampler):
         self.discrete_cardinalities: List[int] = discrete_cardinalities
         self.continuous_dims: int = continuous_dims
         self.evaluator_metadata: dict[str, Any] = evaluator_metadata or {}
-        if parameterisation is not None:
+        if mapping is not None:
             try:
                 from glnis.core.parser import MetaDataParser
             except ImportError:
@@ -253,19 +257,17 @@ class MadnisSampler(Sampler):
                 metadata=self.evaluator_metadata,
                 graph_properties=graph_properties,
             )
-            self.transform = Parser.get_layered_parameterisation_instance(
-                parameterisation
-            )
-            # log(self.transform.param.graph_properties)
+            self.mapping = Parser.get_layered_mapping_instance(mapping)
+            # log(self.mapping.param.graph_properties)
         else:
-            self.transform = None
+            self.mapping = None
 
-        if self.transform is not None:
-            self.num_discrete_dims = len(self.transform.discrete_dims) + len(
+        if self.mapping is not None:
+            self.num_discrete_dims = len(self.mapping.discrete_cardinalities) + len(
                 self.discrete_cardinalities
             )
             self.continuous_dims = (
-                self.transform.continuous_dims or self.continuous_dims
+                self.mapping.continuous_dims_in or self.continuous_dims
             )
         else:
             self.num_discrete_dims = len(self.discrete_cardinalities)
@@ -315,7 +317,7 @@ class MadnisSampler(Sampler):
             self.madnis: Integrator = self._get_madnis_integrator()
 
         # log(
-        #     f"sampler: {self.continuous_dims}, {self.discrete_cardinalities}, n_disc={self.num_discrete_dims}  transform: {self.transform.continuous_dims}, {self.transform.discrete_dims}"
+        #     f"sampler: {self.continuous_dims}, {self.discrete_cardinalities}, n_disc={self.num_discrete_dims}  mapping:     self.mapping.continuous_dims},     self.mapping.discrete_cardinalities}"
         # )
 
     @classmethod
@@ -342,8 +344,8 @@ class MadnisSampler(Sampler):
 
             init_args = dict(init_args)
             parser = init_args.pop("parser", None) if init_args else None
-            parameterisation = (
-                init_args.pop("parameterisation", None) if init_args else None
+            mapping = (
+                init_args.pop("mapping", None) if init_args else None
             )
             graph_properties = (
                 init_args.pop("graph_properties", None) if init_args else None
@@ -367,7 +369,7 @@ class MadnisSampler(Sampler):
                 madnis_blob=state.get("madnis_blob"),
                 evaluator_metadata=evaluator_metadata,
                 parser=parser,
-                parameterisation=parameterisation,
+                mapping=mapping,
                 graph_properties=graph_properties,
             )
             instance.madnis.integrand = instance._get_madnis_integrand()
@@ -542,12 +544,7 @@ class MadnisSampler(Sampler):
                 self.trained_samples += n
                 self.total_trained_samples += n
 
-        if self.transform is not None:
-            # log(f"Before transform: {wgt[:2]=}, {discrete[:2]=}, {continuous[:2]=}")
-            discrete, continuous, wgt = self.transform.parameterise(
-                discrete, continuous, wgt
-            )
-            # log(f"After transform: {wgt[:2]=}, {discrete[:2]=}, {continuous[:2]=}")
+        discrete, continuous, wgt = self._apply_mapping(discrete, continuous, wgt)
         self.produced_batches += 1
         self.produced_samples += nr_samples
 
@@ -587,14 +584,12 @@ class MadnisSampler(Sampler):
         Return a float64 array with shape (nr_samples,) or None to signal that
         the sampler does not support/doesn't provide a PDF for the given batch.
         """
-        if self.transform is not None:
-            raise NotImplementedError(
-                "PDF evaluation is not supported when using a parameterisation."
-            )
-
         n_samples = len(xs_discrete)
         if xs_continuous is None:
             xs_continuous = np.zeros((n_samples, 0), dtype=xs_discrete.dtype)
+        
+        _, continuous, prob = self._apply_mapping(xs_discrete, xs_continuous, np.ones(n_samples, dtype=np.float64), inverse=True)
+        prob = prob.flatten()
         if self.madnis.integrand.discrete_dims_position == "first":
             x_all = np.hstack([xs_discrete, xs_continuous])
         elif self.madnis.integrand.discrete_dims_position == "last":
@@ -603,7 +598,6 @@ class MadnisSampler(Sampler):
             raise ValueError(
                 f"Invalid discrete_dims_position: {self.madnis.integrand.discrete_dims_position}"
             )
-        prob = np.empty((n_samples,), dtype=np.float64)
         x_all = torch.as_tensor(
             x_all.astype(np.float64),
             device=self.device,
@@ -615,13 +609,13 @@ class MadnisSampler(Sampler):
             n = min(self.cfg.max_batch_size, n_samples - n_eval)
             with torch.no_grad():
                 if xs_continuous.shape[1] > 0:
-                    prob[n_eval: n_eval + n] = (
+                    prob[n_eval: n_eval + n] *= (
                         self.madnis.flow.prob(x_all[n_eval: n_eval + n, :])
                         .numpy(force=True)
                         .reshape(-1)
                     )
                 else:
-                    prob[n_eval: n_eval + n] = (
+                    prob[n_eval: n_eval + n] *= (
                         self.madnis.flow.discrete_flow.prob(
                             x_all[n_eval: n_eval + n, :]
                         )
@@ -708,14 +702,14 @@ class MadnisSampler(Sampler):
 
         indices = indices.numpy(force=True).astype(np.uint64)
 
-        if self.transform is not None:
-            if self.transform.condition_integrand_first:
+        if self.mapping is not None:
+            if self.cfg.condition_integrand_first:
                 n_dim = len(self.discrete_cardinalities)
                 prior1: Callable = self._flat_discrete_prior_prob_function
-                prior2: Callable = self.transform.discrete_prior_prob_function
+                prior2: Callable = self.mapping.discrete_prior_prob_function
             else:
-                n_dim = len(self.transform.discrete_dims)
-                prior1: Callable = self.transform.discrete_prior_prob_function
+                n_dim = len(self.mapping.discrete_cardinalities)
+                prior1: Callable = self.mapping.discrete_prior_prob_function
                 prior2: Callable = self._flat_discrete_prior_prob_function
 
             if dim < n_dim:
@@ -759,24 +753,35 @@ class MadnisSampler(Sampler):
         return discrete, continuous
 
     def _get_madnis_integrand(self) -> Integrand:
-        if self.transform is not None:
-            if self.transform.condition_integrand_first:
-                discrete_dims = (
-                    self.discrete_cardinalities + self.transform.discrete_dims
+        if self.mapping is not None:
+            if self.cfg.condition_integrand_first:
+                discrete_cardinalities = (
+                    self.discrete_cardinalities + self.mapping.discrete_cardinalities
                 )
             else:
-                discrete_dims = (
-                    self.transform.discrete_dims + self.discrete_cardinalities
+                discrete_cardinalities = (
+                    self.mapping.discrete_cardinalities + self.discrete_cardinalities
                 )
         else:
-            discrete_dims = self.discrete_cardinalities
+            discrete_cardinalities = self.discrete_cardinalities
         return Integrand(
             function=self._madnis_eval,
-            input_dim=self.continuous_dims + len(discrete_dims),
-            discrete_dims=discrete_dims,
+            input_dim=self.continuous_dims + len(discrete_cardinalities),
+            discrete_dims=discrete_cardinalities,
             discrete_dims_position=self.cfg.discrete_dims_position,
             discrete_prior_prob_function=self._madnis_discrete_prior_prob_function,
         )
+
+    def _apply_mapping(self, discrete: NDArray, continuous: NDArray, weights: NDArray, inverse: bool = False) -> Tuple[NDArray, NDArray]:
+        if self.mapping is not None:
+            if self.cfg.condition_integrand_first:
+                discrete_integrand, discrete = np.split(discrete, [len(self.discrete_cardinalities)], axis=1)
+            else:
+                discrete, discrete_integrand = np.split(discrete, [self.mapping.num_discrete_dims], axis=1)
+            if inverse:
+                return (discrete_integrand, *self.mapping.backward(discrete, continuous, weights))
+            return (discrete_integrand, *self.mapping.forward(discrete, continuous, weights))
+        return discrete, continuous, weights
 
     def _get_madnis_integrator(self) -> Integrator:
         return Integrator(

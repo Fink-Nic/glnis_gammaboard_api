@@ -9,6 +9,7 @@ from madnis_sampler import (
 )
 import numpy as np
 import json
+import traceback
 from numpy.typing import NDArray
 from pathlib import Path
 
@@ -44,11 +45,10 @@ config = MadnisConfig(
     )
 )
 
-parameterisation = dict(
-    layer=dict(
-        param_type="spherical"
-    )
-)
+mapping_kwargs = [dict(
+        kind="ose",
+    )]
+
 graph_properties = dict(
     edge_masses=[0.0, 0.0],
     edge_momentum_shifts=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     cdim = 3
     from_prepared = True and Path("prepared_state.pkl").exists()
     init_args = asdict(config)
-    init_args.update(dict(parameterisation=parameterisation, graph_properties=graph_properties))
+    init_args.update(dict(mapping=mapping_kwargs, graph_properties=graph_properties))
     sampler = MadnisSampler(discrete_cardinalities=ddim, continuous_dims=cdim, **init_args)
     print(
         f"sampler.continuous_dims: {sampler.continuous_dims}, sampler.discrete_cardinalities: {sampler.discrete_cardinalities}")
@@ -118,6 +118,13 @@ if __name__ == "__main__":
         res = gaussian_eval(samples.xs_discrete, samples.xs_continuous) * samples.weights
         mean, std = res.mean(), res.std()
         print(f"Result after training: {mean} +- {std / np.sqrt(1000)}, RSD={std/mean}     TARGET: 1.0")
+        print("Testing PDF evaluation...")
+        try:
+            pdf_values = sampler.pdf(np.arange(6, dtype=np.uint64).reshape(-1, 2) % 2, 0.3 * np.ones((3, sampler.continuous_dims)))
+            print("PDF evaluation successful.")
+        except Exception as e:
+            print(f"Error occurred during PDF evaluation: {e.backtrace() if hasattr(e, 'backtrace') else str(e)}")
+            traceback.print_exc()
 
     if save_path.exists():
         save_path.unlink()  # Clean up the saved state file

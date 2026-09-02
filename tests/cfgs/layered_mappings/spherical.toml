@@ -1,0 +1,23 @@
+name = "single spherical mapping"
+input_space = "HCUBE"
+seed = 1729
+n_points = 64
+
+[graph_properties]
+edge_masses = [0.0]
+edge_momentum_shifts = [[0.0, 0.0, 0.0]]
+graph_signature = [[1]]
+lmb_array = [[0]]
+generation_channel_id = 0
+e_cm = 0.0
+
+[expected]
+continuous_dims_in = 3
+continuous_dims_out = 3
+discrete_cardinalities = []
+round_trip_rtol = 1.0e-10
+round_trip_atol = 1.0e-10
+
+[[layers]]
+kind = "spherical"
+conformal_scale = 2.0

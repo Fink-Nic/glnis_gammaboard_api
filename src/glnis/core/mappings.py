@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import momtrop
 import numpy as np
@@ -220,6 +220,7 @@ class LayeredMapping:
         **uncaught_kwargs,
     ):
         self.use_f128 = use_f128
+        layer_cfgs = layer_cfgs if isinstance(layer_cfgs, list) else [layer_cfgs]
         layer_cfgs: List[MappingConfig] = [MappingConfig.from_dict(cfg) for cfg in layer_cfgs]
         self.mappings: List[Mapping] = []
         next_input_space = input_space
@@ -232,17 +233,22 @@ class LayeredMapping:
         self.continuous_dims_in = self._get_continuous_dims_in()
         self.continuous_dims_out = self._get_continuous_dims_out()
         self.discrete_cardinalities = self._get_discrete_cardinalities()
+        self.num_discrete_dims = len(self.discrete_cardinalities)
 
     def discrete_prior_prob_function(self, discrete: NDArray, dim: int = 0) -> NDArray:
-        num_ddim = discrete.shape[1]
-        _start = 0
+        if discrete.shape[1] == len(self.discrete_cardinalities):
+            return np.zeros_like(discrete, dtype=np.float64)
+
+        start = 0
         for mapping in self.mappings:
             if dim < mapping.num_discrete_dims:
                 break
-            _start += mapping.num_discrete_dims
+            start += mapping.num_discrete_dims
             dim -= mapping.num_discrete_dims
+        else:
+            raise IndexError("Discrete dimension is outside the mapping cardinalities.")
 
-        return mapping._prior_prob_function(discrete[:, _start:], dim=dim)
+        return mapping._prior_prob_function(discrete[:, start:])
 
     def forward(
         self,
@@ -287,12 +293,30 @@ class LayeredMapping:
             dtype=np.float128 if self.use_f128 else np.float64
         )
         layer_input.continuous = continuous
-        layer_input.discrete = discrete
+        if inverse:
+            split_at = np.cumsum(
+                [mapping.num_discrete_dims for mapping in self.mappings[:-1]]
+            )
+            mapping_discrete_groups = np.split(discrete, split_at, axis=1)
+            layer_input.discrete = np.hstack(
+                [*reversed(mapping_discrete_groups)]
+            )
+        else:
+            layer_input.discrete = discrete
         layer_input.update("sampled input")
 
         mappings = self.mappings if not inverse else reversed(self.mappings)
         for mapping in mappings:
-            layer_cont, pass_cont = np.hsplit(layer_input.continuous, [mapping.continuous_dims_in])
+            layer_continuous_dims = (
+                mapping.continuous_dims_out
+                if inverse
+                else mapping.continuous_dims_in
+            )
+            if layer_continuous_dims is None:
+                layer_continuous_dims = layer_input.continuous.shape[1]
+            layer_cont, pass_cont = np.hsplit(
+                layer_input.continuous, [layer_continuous_dims]
+            )
             layer_disc, pass_disc = np.hsplit(layer_input.discrete, [mapping.num_discrete_dims])
             if not inverse:
                 jac, cont = mapping.forward(layer_cont, layer_disc)
@@ -304,7 +328,7 @@ class LayeredMapping:
             layer_input.update(mapping.IDENTIFIER)
 
         output_jac = np.zeros((layer_input.n_points,), dtype=layer_input.dtype)
-        output_jac[layer_input.success, :] = layer_input.jac.flatten()
+        output_jac[layer_input.success] = layer_input.jac.flatten()
         output_cont = np.zeros((layer_input.n_points, layer_input.continuous.shape[1]), dtype=layer_input.dtype)
         output_cont[layer_input.success, :] = layer_input.continuous
 
@@ -524,9 +548,6 @@ class SphericalMapping(Mapping):
     ) -> MappingOutput:
         momentum = np.zeros_like(continuous)
         n_points = continuous.shape[0]
-        if discrete.size == 0:
-            discrete = np.empty((continuous.shape[0], 1), dtype=np.uint64)
-            discrete.fill(self.gp.generation_channel_id)
 
         jac = np.ones((n_points, 1), dtype=continuous.dtype)
         jac *= (4 * np.pi * self.conformal_scale**3) ** self.n_loops
@@ -550,7 +571,10 @@ class SphericalMapping(Mapping):
             )
             momentum[:, _start:_end] = ks
             jac *= x**2 / (1 - x) ** 4
-
+        
+        if discrete.size == 0:
+            discrete = np.empty((momentum.shape[0], 1), dtype=np.uint64)
+            discrete.fill(self.gp.generation_channel_id)
         momentum = self._to_generation_lmb(momentum, discrete)
 
         return jac, momentum.reshape(n_points, -1)
@@ -995,10 +1019,13 @@ class MCLayer(Mapping, ABC):
     IDENTIFIER = "multichanneling"
 
     def __init__(self, mapping_kwargs: Dict[str, Any] | None = None, **kwargs):
-        super().__init__(**kwargs)
+        self.gp = kwargs["graph_properties"]
         mapping_cfg = MappingConfig.from_dict(mapping_kwargs or {"kind": "spherical"})
         self.mapping = Mapping.from_kind(mapping_cfg.kind, self.gp, **mapping_cfg.kwargs)
-        self.IDENTIFIER = f"multichanneling: {self.IDENTIFIER} using {self.param.IDENTIFIER}"
+        super().__init__(**kwargs)
+        self.IDENTIFIER = (
+            f"multichanneling: {self.IDENTIFIER} using {self.mapping.IDENTIFIER}"
+        )
 
         self.lmbs = self.gp.lmb_array
         self.n_channels = self.gp.n_channels
@@ -1018,7 +1045,7 @@ class MCLayer(Mapping, ABC):
         return jac, momentum
 
     def _map_from_momentum(self, momentum: NDArray, discrete: NDArray) -> MappingOutput:
-        jac, continuous = self.mapping.backward(momentum, discrete)
+        jac, continuous = self.mapping.backward(momentum, discrete.copy())
         jac /= self._mc_weight(momentum, discrete).reshape(-1, 1)
         return jac, continuous
 
@@ -1033,7 +1060,12 @@ class MCLayer(Mapping, ABC):
         return self.mapping._get_continuous_dims(input_space)
 
     @classmethod
-    def from_kwargs(cls, subtype: str = "ose", graph_properties: GraphProperties, **kwargs):
+    def from_kwargs(
+        cls,
+        graph_properties: GraphProperties,
+        subtype: str = "ose",
+        **kwargs,
+    ):
         return cls.from_kind(kind=subtype, graph_properties=graph_properties, **kwargs)
 
 

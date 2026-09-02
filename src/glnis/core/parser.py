@@ -5,7 +5,7 @@ from typing import Dict, List, Set
 import pydot
 from symbolica import E, Expression, S
 
-from glnis.core.parameterisation import LayeredParameterisation
+from glnis.core.mappings import LayeredMapping
 from glnis.utils.types import GraphProperties, ParserConfig
 
 
@@ -20,11 +20,9 @@ class MetaDataParser:
         self.metadata = metadata if metadata is not None else {}
         self.graph_properties_dict = graph_properties
 
-    def get_layered_parameterisation_instance(
-        self, parameterisation_config: Dict
-    ) -> LayeredParameterisation:
-        return LayeredParameterisation(
-            self.get_graph_properties(), parameterisation_config
+    def get_layered_mapping_instance(self, mapping_config: List[Dict]) -> LayeredMapping:
+        return LayeredMapping(
+            self.get_graph_properties(), mapping_config
         )
 
     def get_graph_properties(self) -> GraphProperties | List[GraphProperties]:

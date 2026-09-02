@@ -1,0 +1,32 @@
+name = "stacked multichannel spherical mappings"
+input_space = "HCUBE"
+seed = 2718
+n_points = 96
+
+[graph_properties]
+edge_masses = [0.0, 0.25]
+edge_momentum_shifts = [
+    [0.0, 0.0, 0.0],
+    [0.15, -0.10, 0.05],
+]
+graph_signature = [[1], [-1]]
+lmb_array = [[0], [1]]
+generation_channel_id = 0
+e_cm = 0.0
+
+[expected]
+continuous_dims_in = 3
+continuous_dims_out = 3
+discrete_cardinalities = [2, 2]
+round_trip_rtol = 1.0e-9
+round_trip_atol = 1.0e-9
+
+[[layers]]
+kind = "ose"
+ose_exponent = 1.0
+mapping_kwargs = { kind = "spherical", conformal_scale = 1.25 }
+
+[[layers]]
+kind = "ose"
+ose_exponent = 0.75
+mapping_kwargs = { kind = "spherical", conformal_scale = 0.80 }
