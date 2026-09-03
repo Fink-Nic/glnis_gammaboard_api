@@ -64,9 +64,9 @@ def _print_summary(json_or_dict: str|dict) -> None:
 
 
 def _parse_and_print(state_folder: Path, process_id: int, integrand_name: str) -> None:
-    from glnis import _rust
+    from glnis._rust import parse_state_simplified
 
-    _print_summary(_rust.parse_state_simplified(state_folder, process_id, integrand_name))
+    _print_summary(parse_state_simplified(state_folder, process_id, integrand_name))
 
 
 def test_rust_state_parser():

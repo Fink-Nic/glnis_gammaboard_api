@@ -42,8 +42,8 @@
         gammaloopSource = pkgs.fetchFromGitHub {
           owner = "alphal00p";
           repo = "gammaloop";
-          rev = "2c77dbe988c1d9c81c88f31dd3dd62254617da9a";
-          hash = "sha256-OTNTpIcDGANvixwkLBRDJnQat5qw1L/WQIJeSx5vuTI=";
+          rev = "395610143576507503fd2c785db3ba62340f4277";
+          hash = "sha256-l4tnI34aznrvGNXNJHnRLAzSXE0/4cPdXS9NE89DMuU=";
         };
 
         madnis = python.pkgs.buildPythonPackage {
@@ -122,7 +122,7 @@
 
         symbolica = python.pkgs.buildPythonPackage rec {
           pname = "symbolica";
-          version = "1.5.0";
+          version = "2.1.0";
           format = "wheel";
 
           src = pkgs.fetchPypi {
@@ -131,7 +131,7 @@
             python = "cp37";
             abi = "abi3";
             platform = "manylinux_2_17_x86_64.manylinux2014_x86_64";
-            hash = "sha256-s5iUgqsQPFdAyLhVy8avHBJmEsrHEdi1tc21Hq8dw/A=";
+            hash = "sha256-LU9LdlTEHYDAfa3Y6SXoykC+euUWt0QvPomdvcGIgMo=";
           };
 
           doCheck = false;
@@ -265,7 +265,6 @@ WRAPPER
           ] ++ libs;
 
           shellHook = ''
-            export PYTHONPATH="$PWD/src:''${PYTHONPATH:-}"
             export LD_LIBRARY_PATH="${libPath}:/run/opengl-driver/lib:''${LD_LIBRARY_PATH:-}"
             export PYO3_PYTHON="${pythonEnv}/bin/python"
             export UV_PYTHON_DOWNLOADS=never

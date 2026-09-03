@@ -38,21 +38,13 @@ target = { kind = "vector", components = { real = 3.097e-2, imag = 0.0 } }
 
 [evaluator]
 kind = "gammaloop"
-state_folder = "/home/nfink/gammaloop/examples/cli/epem_a_ddx/LO/state"
+state_folder = "$resources/../../gammaloop/examples/cli/epem_a_ddx/LO/state"
 integrand_name = "LO"
 momentum_space = true
 
 [evaluator.preprocessing]
 read_only = true
-commands = [
-  "set model MT=173.0",
-  "set model WT=0.0",
-  "set model ymt=173.0",
-  "set model aS=0.118",
-  "set model aEWM1=132.507",
-  "set model Gf=1.166390e-05",
-  "set model MZ=91.188",
-]
+commands = []
 
 [[task_queue]]
 name = "accumulator"
@@ -67,11 +59,11 @@ accumulator = "latest"
 
 [task_queue.sampler_aggregator.config]
 kind = "process_sampler"
-command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
+# command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
 # Alternative with Apptainer when the host supports Apptainer/SIF execution:
 # command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
 # Alternative with the Nix runtime when Nix is available:
-# command = ["$resources/../integrations/glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
+command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
 cwd = "$resources/.."
 requires_training_values = true
 
@@ -81,18 +73,11 @@ training_steps = 200
 training_batch_size = 1000
 use_gpu = true
 cuda_id = 0
-save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
+save_path = "integrations/glnis_gammaboard_api/checkpoints/epem_a_ddx_LO"
 parser.override_lmb_heuristics = true
-parameterisation.condition_integrand_first = true
-parameterisation.layer = [
-    {param_type = "spherical"},
-    {param_type = "mc_layer", subtype = "ose", ose_exponent = 1.0}
-    ]
-graph_properties.edge_masses = [0.0, 0.0]
-graph_properties.edge_momentum_shifts = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
-graph_properties.graph_signature = [[1], [1]]
-graph_properties.e_cm = 1000.0
-graph_properties.lmb_array = [[0], [1]]
+mapping.layer_cfgs = [
+  { kind = "ose" },
+]
 
 [task_queue.queue_tuning]
 target_batch_eval_ms = 1000.0

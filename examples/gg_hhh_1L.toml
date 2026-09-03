@@ -43,11 +43,11 @@ accumulator = "latest"
 
 [task_queue.sampler_aggregator.config]
 kind = "process_sampler"
-command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
+# command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
 # Alternative with Apptainer when the host supports Apptainer/SIF execution:
 # command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
 # Alternative with the Nix runtime when Nix is available:
-# command = ["$resources/../integrations/glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
+command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
 cwd = "$resources/.."
 requires_training_values = true
 
@@ -58,11 +58,9 @@ training_batch_size = 1000
 use_gpu = true
 cuda_id = 0
 save_path = "integrations/glnis_gammaboard_api/checkpoints/gg_hhh_1L_madnis"
-parameterisation.condition_integrand_first = true
-parameterisation.layer = [
-    {param_type = "spherical"},
-    {param_type = "mc_layer", subtype = "ose", ose_exponent = 1.0}
-    ]
+mapping.layer_cfgs = [
+    { kind = "spherical" },
+]
 
 [task_queue.queue_tuning]
 target_batch_eval_ms = 1000.0
@@ -78,3 +76,23 @@ sampler_aggregator = { from_name = "madnis-train" }
 [task_queue.queue_tuning]
 target_batch_eval_ms = 1000.0
 max_batch_size = "$(max_batch_size:10000)"
+
+[[task_queue]]
+name = "pdf-2d"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+offset = [0.0, 0.0, 0.0]
+u_vector = [138.52981118,  29.28692941, -79.89016993]
+v_vector = [-155.33220018, -348.01603965,  177.37736157]
+
+[task_queue.geometry.u_linspace]
+start = -0.2
+stop = 1.2
+count = 128
+
+[task_queue.geometry.v_linspace]
+start = -0.2
+stop = 1.2
+count = 128

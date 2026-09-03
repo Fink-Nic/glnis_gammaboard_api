@@ -1,6 +1,6 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./glnis_runcards/epem_a_ttxh/NLO/GL18/state"
+folder = "./gammaboard_states/epem_a_ttxh/NLO/GL10/state"
 
 [[command_blocks]]
 name = "generate_diagrams"
@@ -33,7 +33,7 @@ commands = [
       --symmetrize-left-right-states true
       -p epem_a_ttxh -i NLO
       --global-prefactor-num "1𝑖"
-      --select-graphs GL18
+      --select-graphs GL10
       --only-diagrams""",
   "save dot",
 ]
@@ -202,7 +202,7 @@ commands = [
   """,
   """
   integrate -p epem_a_tth -i NLO --n-cores 10
-                 --target epem_a_tth@NLO=0.0,1.3472e-04
+                 --target epem_a_tth@NLO=0.0,4.7475e-05
 				 --renderer ratatui
 				 --batch-size 1000
 				 --show-phase both

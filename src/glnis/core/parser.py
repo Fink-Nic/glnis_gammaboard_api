@@ -20,9 +20,9 @@ class MetaDataParser:
         self.metadata = metadata if metadata is not None else {}
         self.graph_properties_dict = graph_properties
 
-    def get_layered_mapping_instance(self, mapping_config: List[Dict]) -> LayeredMapping:
+    def get_layered_mapping_instance(self, mapping_config: Dict) -> LayeredMapping:
         return LayeredMapping(
-            self.get_graph_properties(), mapping_config
+            self.get_graph_properties(), **mapping_config
         )
 
     def get_graph_properties(self) -> GraphProperties | List[GraphProperties]:

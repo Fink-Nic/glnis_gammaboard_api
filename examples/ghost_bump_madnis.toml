@@ -24,16 +24,11 @@ max_samples = 200000
 
 [task_queue.sampler_aggregator.config]
 kind = "process_sampler"
-# Direct venv deployment. From the GammaBoard workspace:
-#   cd integrations/madnis
-#   uv venv --python 3.13 --seed .venv
-#   . .venv/bin/activate
-#   python -m pip install .
-command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
+# command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
 # Alternative with Apptainer when the host supports Apptainer/SIF execution:
-# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/glnis.sif", "glnis_gammaboard_sampler"]
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
 # Alternative with the Nix runtime when Nix is available:
-# command = ["$resources/../integrations/glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
+command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
 cwd = "$resources/.."
 requires_training_values = true
 
