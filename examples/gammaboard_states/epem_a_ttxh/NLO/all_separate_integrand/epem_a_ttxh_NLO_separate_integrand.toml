@@ -1,6 +1,6 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./gammaboard_states/epem_a_ttxh/NLO/GL08/state"
+folder = "./gammaboard_states/epem_a_ttxh/NLO/all_separate_integrand/state"
 
 [[command_blocks]]
 name = "generate_diagrams"
@@ -19,31 +19,99 @@ name = "generate_diagrams"
 # GL26 -> F.4 ->  -1.47653e-04
 # GL30 -> F.7 ->  -1.18480e-04
 # Total: -1.3205e-04
-# --select-graphs GL00 GL02 GL06 GL08 GL10 GL12 GL18 GL20 GL22 GL26 GL30
-# --select-graphs GL08
-# --select-graphs GL26
-# --loop-momentum-bases GL26=2,4,11
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
-
   "remove processes",
   """generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD=1]
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_ttxh -i NLO
-      --global-prefactor-num "1𝑖"
-      --select-graphs GL08
       --only-diagrams""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL00
+      --with-graph-names GL00""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL02
+      --with-graph-names GL02""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL06
+      --with-graph-names GL06""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL08
+      --with-graph-names GL08""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL10
+      --with-graph-names GL10""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL12
+      --with-graph-names GL12""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL18
+      --with-graph-names GL18""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL20
+      --with-graph-names GL20""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL22
+      --with-graph-names GL22""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL26
+      --with-graph-names GL26""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL30
+      --with-graph-names GL30""",
+  "remove processes -p epem_a_ttxh -i NLO",
   "save dot",
 ]
 
 [[command_blocks]]
 name = "generate_integrands"
 commands = [
-    "generate existing -p epem_a_ttxh -i NLO",
-    # "duplicate integrand -p epem_a_ttxh -i NLO --output_process_name epem_a_tth --output_integrand_name NLO_semi_inclusive",
+    "generate existing",
+    # "duplicate integrand -p epem_a_ttxh -i NLO --output_process_name epem_a_ttxh --output_integrand_name NLO_semi_inclusive",
     "save state -o"
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  "run set_model_parameters",
+  "run set_differential_quantities",
+  "run set_differential_observables",
+# "run set_differential_selectors",
+  """
+  set process -p epem_a_ttxh -i NLO_$(graph_name:GL00) kv
+    integrator.n_increase=100000
+    integrator.n_start=100000
+    integrator.n_max=10000000000
+    integrator.seed=1337
+    integrator.integrated_phase="real"
+  """,
+  """
+  integrate -p epem_a_ttxh -i NLO_$(graph_name:GL00) --n-cores 10
+         --target epem_a_ttxh@NLO_$(graph_name:GL00)=$(integration_target:+3.1908e-05),0.0
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+         --restart
+  """
 ]
 
 
@@ -83,29 +151,25 @@ integral_unit = "picobarn"
 mu_r = 91.188
 m_uv = 91.188
 
-#[default_runtime_settings.general.orientation_pat]
-#pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
-
-[default_runtime_settings.integrator.observables_output]
-format = ["hwu","json"]
-
 [cli_settings.global.generation.evaluator]
-do_algebra = true
-iterative_orientation_optimization = true
+do_algebra = false
+iterative_orientation_optimization = false
 store_atom = true
 compile = false
 summed = false
 summed_function_map = true
-horner_iterations = 5
-cpe_iterations = 10
+# horner_iterations = 5
+# cpe_iterations = 10
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 # The option below specifies the generation of threshold for the kinematics supplied
 check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-7
 skip_thresholds_that_are_cuts = true
 
 [default_runtime_settings.subtraction]
+esurface_existence_threshold = 1.0e-7
 disable_threshold_subtraction = false
 
 [cli_settings.global.generation.compile]
@@ -115,10 +179,21 @@ fast_math = true
 unsafe_math = true
 custom = []
 
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channel_weight = "ose"
+# For importance-sampling over channels, use the quantity below
+lmb_channels = "monte_carlo"
+
+[default_runtime_settings.integrator.observables_output]
+format = ["hwu","json"]
+
 [cli_settings.global.generation.uv]
 softct=false
 inner_products=true
-generate_integrated=false
+generate_integrated=true
 subtract_uv=true
 
 [cli_settings.global.n_cores]
@@ -153,83 +228,9 @@ required_precision_for_im = 1e-5
 escalate_for_large_weight_threshold = -1.0
 
 [[command_blocks]]
-name = "integrate"
-commands = [
-  "run set_model_parameters",
-  "run set_differential_quantities",
-  "run set_differential_observables",
-# "run set_differential_selectors",
-
-  """
-  set process -p epem_a_tth string '
-    [sampling]
-    graphs = "monte_carlo"
-    orientations = "summed"
-    lmb_multichanneling = true
-    # For importance-sampling over channels, use the quantity below
-    lmb_channels = "monte_carlo"
-    '
-  """,
-
-  """
-  set process -p epem_a_tth string '
-    [[stability.rotation_axis]]
-    type = "x"
-    [[stability.rotation_axis]]
-    type = "y"
-
-    [[stability.levels]]
-    precision = "Double"
-    required_precision_for_re = 1.0e-5
-    required_precision_for_im = 1.0e-5
-    escalate_for_large_weight_threshold = 0.99
-
-    [[stability.levels]]
-    precision = "Arb"
-    required_precision_for_re = 1.0e-5
-    required_precision_for_im = 1.0e-5
-    escalate_for_large_weight_threshold = -1.0
-  '
-  """,
-
-  """
-  set process -p epem_a_tth -i NLO kv
-    integrator.n_increase=0
-    integrator.n_start=10000
-    integrator.n_max=10000000000
-    integrator.seed=1337
-    general.m_uv=91.188
-  """,
-  """
-  integrate -p epem_a_tth -i NLO --n-cores 10
-                 --target epem_a_tth@NLO=0.0,-3.2336e-06
-				 --renderer ratatui
-				 --batch-size 1000
-				 --show-phase both
-				 --show-max-weight-info
-				 --show-top-discrete-grid
-				 --show-discrete-contributions-sum
-				 --write-results-for-each-iteration
-                 --restart
-    """
-]
-
-[[command_blocks]]
-name = "set_model_parameters"
-commands = [
-  "set model MT=173.0",
-  "set model WT=0.0",
-  "set model ymt=173.0",
-  "set model aS=0.118",
-  "set model aEWM1=132.507",
-  "set model Gf=1.166390e-05",
-  "set model MZ=91.188",
-]
-
-[[command_blocks]]
 name = "set_differential_quantities"
 commands = [
-  """set process -p epem_a_tth -i NLO string '
+  """set process -p epem_a_ttxh -i NLO string '
 
 [quantities.integral]
 type = "integral"
@@ -362,7 +363,7 @@ pdgs = [25,]
 quantity = "CosTheta"
 '""",
 
-# """set process -p epem_a_tth -i NLO_semi_inclusive string '
+# """set process -p epem_a_ttxh -i NLO_semi_inclusive string '
 # 
 # [quantities.higgs_cos_theta]
 # type = "particle"
@@ -382,7 +383,7 @@ quantity = "CosTheta"
 # [[command_blocks]]
 # name = "set_differential_selectors"
 # commands = [
-#   """set process -p epem_a_tth -i NLO_semi_inclusive string '
+#   """set process -p epem_a_ttxh -i NLO_semi_inclusive string '
 # 
 # [selectors.higgs_energy_cut]
 # quantity = "higgs_energy"
@@ -404,13 +405,13 @@ quantity = "CosTheta"
 [[command_blocks]]
 name = "set_differential_observables"
 commands = [
-  """set process -p epem_a_tth -i NLO string '
+  """set process -p epem_a_ttxh -i NLO string '
 
 [observables.integral]
 title = "xs"
 type_description = "AL,NLO"
 quantity = "integral"
-phase = "real"
+phase = "imag"
 kind = "discrete"
 domain = { type = "single_bin" }
 labels = { type = "custom", labels = ["total integral"] }

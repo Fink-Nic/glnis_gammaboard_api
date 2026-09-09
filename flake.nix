@@ -39,11 +39,19 @@
 
         libPath = pkgs.lib.makeLibraryPath libs;
 
+        projectSource = pkgs.lib.cleanSourceWith {
+          src = ./.;
+          filter = path: type: let
+            baseName = builtins.baseNameOf path;
+          in !builtins.elem baseName [ ".git" "result" "target" ".venv" "dist" ]
+            && !(pkgs.lib.hasPrefix "result-" baseName);
+        };
+
         gammaloopSource = pkgs.fetchFromGitHub {
           owner = "alphal00p";
           repo = "gammaloop";
-          rev = "395610143576507503fd2c785db3ba62340f4277";
-          hash = "sha256-l4tnI34aznrvGNXNJHnRLAzSXE0/4cPdXS9NE89DMuU=";
+          rev = "ac99d32d194254f0c8931873d0a32ebd7d27f82f";
+          hash = "sha256-zjzolJj//s97PAznfxTMRXMhOuDVm2NHs7qM8KTGEIM=";
         };
 
         madnis = python.pkgs.buildPythonPackage {
@@ -122,7 +130,7 @@
 
         symbolica = python.pkgs.buildPythonPackage rec {
           pname = "symbolica";
-          version = "2.1.0";
+          version = "2.2.0";
           format = "wheel";
 
           src = pkgs.fetchPypi {
@@ -131,7 +139,7 @@
             python = "cp37";
             abi = "abi3";
             platform = "manylinux_2_17_x86_64.manylinux2014_x86_64";
-            hash = "sha256-LU9LdlTEHYDAfa3Y6SXoykC+euUWt0QvPomdvcGIgMo=";
+            hash = "sha256-h5/uDCkqfmg48Y6OmQ083AApzdU1FbBEO9u/8TvCzRI=";
           };
 
           doCheck = false;
@@ -162,12 +170,12 @@
         glnis-gammaboard-api = python.pkgs.buildPythonPackage {
           pname = "glnis-gammaboard-api";
           version = "0.1.0";
-          src = ./.;
+          src = projectSource;
           pyproject = true;
 
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            src = ./.;
-            hash = "sha256-ahnhw8vZ36kObqVM+5izu6jkoleW0G3mDRzmRWh7VRc=";
+            src = projectSource;
+            hash = "sha256-spnpIaDVYWC5KPHtfcTS/uGnLBD1i+P1B7cIS8rseFg=";
           };
 
           nativeBuildInputs = (with pkgs.rustPlatform; [
@@ -214,7 +222,7 @@
 
         runtime = pkgs.stdenv.mkDerivation {
           name = "glnis-gammaboard-api-runtime";
-          src = ./.;
+          src = projectSource;
 
           dontBuild = true;
 
@@ -252,7 +260,7 @@ WRAPPER
 
         devShells.default = pkgs.mkShell {
           packages = [
-            pythonEnv
+            runtime
             pkgs.uv
             pkgs.git
             pkgs.cargo
@@ -266,9 +274,9 @@ WRAPPER
 
           shellHook = ''
             export LD_LIBRARY_PATH="${libPath}:/run/opengl-driver/lib:''${LD_LIBRARY_PATH:-}"
-            export PYO3_PYTHON="${pythonEnv}/bin/python"
+            export PYO3_PYTHON="${runtime}/bin/python"
             export UV_PYTHON_DOWNLOADS=never
-            export SYMBOLICA_OEM_LICENSE="SYMBOLICA_OEM_GAMMALOOP"
+            export SYMBOLICA_OEM_LICENSE="''${SYMBOLICA_OEM_LICENSE:-SYMBOLICA_OEM_GAMMALOOP}"
             export OMP_NUM_THREADS=''${OMP_NUM_THREADS:-64}
           '';
         };

@@ -90,10 +90,10 @@ m_uv = 91.188
 format = ["hwu","json"]
 
 [cli_settings.global.generation.evaluator]
-do_algebra = true
-iterative_orientation_optimization = true
+do_algebra = false
+iterative_orientation_optimization = false
 store_atom = true
-compile = true
+compile = false
 summed = false
 summed_function_map = true
 horner_iterations = 5

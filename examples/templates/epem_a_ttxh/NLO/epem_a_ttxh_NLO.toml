@@ -1,46 +1,17 @@
 # =============================================================================
-# e+ e- -> d d~  at LO, sqrt(s) = 1000 GeV  --  GammaLoop engine
-# =============================================================================
-#
-# Total LO cross section of e+ e- -> d d~ (gamma + Z s-channel, full SM) at a
-# fixed centre-of-mass energy of 1000 GeV, via Local Unitarity (optical-theorem
-# cut of the photon/Z self-energy with the d d~ pair in the loop).
-#
-# This is the GammaLoop half of a two-engine comparison; the MadGraph7/MadSpace
-# half lives in ee_ddx_madgraph.toml. Both use identical SM inputs
-# (aEWM1=132.507, Gf=1.16639e-5, MZ=91.188, ...) and the same fixed
-# sqrt(s)=1000 GeV (beams 500+500 GeV, no PDF), so the cross sections are
-# directly comparable in picobarns. The reference value is 3.097e-2 pb.
-#
-# Run with:
-#   gammaboard run add resources/templates/runs/ee_ddx_gammaloop.toml
-#
-# -----------------------------------------------------------------------------
-# ARTIFACT -- GammaLoop state for e+ e- -> d d~ @ LO
-# -----------------------------------------------------------------------------
-# The CLI example card ships with the gammaloop checkout. Generate the state and
-# copy it under resources/states so the relative state_folder below resolves:
-#
-#   cd /home/cedricsigrist/Workspace/repos/gammaloop
-#   ./gammaloop --clean-state ./examples/cli/epem_a_ddx/LO/epem_a_ddx.toml \
-#       run generate integrate -c "quit -o"
-#   mkdir -p /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/epem_a_ddx/LO
-#   cp -r ./examples/cli/epem_a_ddx/LO/state \
-#       /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/epem_a_ddx/LO/state
-#
-# (The card already sets e_cm = 1000.0 and integral_unit = "picobarn".)
+# e+ e- -> a -> ttxH ~  at NLO, sqrt(s) = 1000 GeV  --  GammaLoop engine
 # =============================================================================
 
-replacements = { run_name = "ee_ddx_gammaloop", train_samples = 1000000, sample_samples = 10000000, havana_bins = 128, samples_for_update = 50000, max_batch_size = 10000 }
+replacements = { run_name = "epem_a_ttxh", train_samples = 1000000, sample_samples = 10000000, havana_bins = 128, samples_for_update = 50000, max_batch_size = 10000 }
 
 name = '$(run_name:"ee_ddx_gammaloop")'
-target = { kind = "vector", components = { real = 3.097e-2, imag = 0.0 } }
+target = { kind = "vector", components = { real = 0.0, imag = -1.47653e-04 } }
 
 [evaluator]
 kind = "gammaloop"
-state_folder = "$resources/../../gammaloop/gammaboard_states/cli/epem_a_ttxh/NLO/GL30/state"
+state_folder = "../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/GL26/state/"
 integrand_name = "NLO"
-momentum_space = true
+momentum_space = false
 
 [evaluator.preprocessing]
 read_only = true
@@ -74,11 +45,11 @@ training_batch_size = 1000
 use_gpu = true
 cuda_id = 0
 save_path = "integrations/glnis_gammaboard_api/checkpoints/epem_a_ttxh/NLO/GL30"
-parser.override_lmb_heuristics = true
-mapping.use_f128 = true
-mapping.layer_cfgs = [
-    {kind = "ose"},
-]
+# parser.override_lmb_heuristics = true
+# mapping.use_f128 = true
+# mapping.layer_cfgs = [
+#     {kind = "ose"},
+# ]
 
 [task_queue.queue_tuning]
 target_batch_eval_ms = 1000.0

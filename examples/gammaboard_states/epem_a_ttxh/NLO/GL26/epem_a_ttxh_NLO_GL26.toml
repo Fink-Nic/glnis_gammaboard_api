@@ -32,7 +32,7 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_ttxh -i NLO
-      --global-prefactor-num "1𝑖"
+      --global-prefactor-num "-1"
       --select-graphs GL26
       --only-diagrams""",
   "save dot",
@@ -42,7 +42,7 @@ commands = [
 name = "generate_integrands"
 commands = [
     "generate existing -p epem_a_ttxh -i NLO",
-    # "duplicate integrand -p epem_a_ttxh -i NLO --output_process_name epem_a_tth --output_integrand_name NLO_semi_inclusive",
+    # "duplicate integrand -p epem_a_ttxh -i NLO --output_process_name epem_a_ttxh --output_integrand_name NLO_semi_inclusive",
     "save state -o"
 ]
 
@@ -90,10 +90,10 @@ m_uv = 91.188
 format = ["hwu","json"]
 
 [cli_settings.global.generation.evaluator]
-do_algebra = true
-iterative_orientation_optimization = true
+do_algebra = false
+iterative_orientation_optimization = false
 store_atom = true
-compile = true
+compile = false
 summed = false
 summed_function_map = true
 horner_iterations = 5
@@ -161,7 +161,7 @@ commands = [
 # "run set_differential_selectors",
 
   """
-  set process -p epem_a_tth string '
+  set process -p epem_a_ttxh string '
     [sampling]
     graphs = "monte_carlo"
     orientations = "summed"
@@ -172,7 +172,7 @@ commands = [
   """,
 
   """
-  set process -p epem_a_tth string '
+  set process -p epem_a_ttxh string '
     [[stability.rotation_axis]]
     type = "x"
     [[stability.rotation_axis]]
@@ -193,16 +193,17 @@ commands = [
   """,
 
   """
-  set process -p epem_a_tth -i NLO kv
+  set process -p epem_a_ttxh -i NLO kv
     integrator.n_increase=0
     integrator.n_start=10000
     integrator.n_max=10000000000
     integrator.seed=1337
     general.m_uv=91.188
+    integrator.integrated_phase="imag"
   """,
   """
-  integrate -p epem_a_tth -i NLO --n-cores 10
-                 --target epem_a_tth@NLO=0.0,-1.47653e-04
+  integrate -p epem_a_ttxh -i NLO --n-cores 10
+                 --target epem_a_ttxh@NLO=0.0,-1.47653e-04
 				 --renderer ratatui
 				 --batch-size 1000
 				 --show-phase both
@@ -229,7 +230,7 @@ commands = [
 [[command_blocks]]
 name = "set_differential_quantities"
 commands = [
-  """set process -p epem_a_tth -i NLO string '
+  """set process -p epem_a_ttxh -i NLO string '
 
 [quantities.integral]
 type = "integral"
@@ -362,7 +363,7 @@ pdgs = [25,]
 quantity = "CosTheta"
 '""",
 
-# """set process -p epem_a_tth -i NLO_semi_inclusive string '
+# """set process -p epem_a_ttxh -i NLO_semi_inclusive string '
 # 
 # [quantities.higgs_cos_theta]
 # type = "particle"
@@ -382,7 +383,7 @@ quantity = "CosTheta"
 # [[command_blocks]]
 # name = "set_differential_selectors"
 # commands = [
-#   """set process -p epem_a_tth -i NLO_semi_inclusive string '
+#   """set process -p epem_a_ttxh -i NLO_semi_inclusive string '
 # 
 # [selectors.higgs_energy_cut]
 # quantity = "higgs_energy"
@@ -404,13 +405,13 @@ quantity = "CosTheta"
 [[command_blocks]]
 name = "set_differential_observables"
 commands = [
-  """set process -p epem_a_tth -i NLO string '
+  """set process -p epem_a_ttxh -i NLO string '
 
 [observables.integral]
 title = "xs"
 type_description = "AL,NLO"
 quantity = "integral"
-phase = "real"
+phase = "imag"
 kind = "discrete"
 domain = { type = "single_bin" }
 labels = { type = "custom", labels = ["total integral"] }

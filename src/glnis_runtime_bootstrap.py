@@ -1,8 +1,8 @@
-"""Bootstrap native-library and Triton compatibility for direct venv launches.
+"""Bootstrap native-library and Triton compatibility for sampler launches.
 
-GammaBoard often launches the sampler entry point outside `nix develop`.  In
-that environment Python wheels can miss Nix native library paths, and Triton
-hard-codes `/sbin/ldconfig -p`.  Call `bootstrap()` before NumPy/Torch/MadNIS.
+The Nix runtime wrapper supplies the native library path, but Triton still probes
+``/sbin/ldconfig -p`` directly. Direct virtual environments also need the Nix
+library/compiler discovery below, so keep this shim before NumPy/Torch/MadNIS.
 """
 
 from __future__ import annotations
