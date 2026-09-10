@@ -1,0 +1,67 @@
+replacements = { run_name = "epem_a_ttxh_NLO_GL26", train_samples = 20000000, sample_samples = 1000000000, max_batch_size = 20000 }
+
+name = '$(run_name:"gg_hhh_1L_madnis")'
+target = { kind = "vector", components = { real = -1.47653e-04, imag = 0.0 } }
+
+[evaluator]
+kind = "gammaloop"
+state_folder = "../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/all_separate_integrand/state"
+integrand_name = "NLO_GL26"
+momentum_space = false
+
+[evaluator.preprocessing]
+read_only = true
+
+[[task_queue]]
+name = "accumulator"
+kind = "set_accumulator"
+accumulator = "gammaloop"
+
+[[task_queue]]
+name = "madnis-train"
+kind = "sample"
+stop_condition = { max_samples = "$(train_samples:1000000)" }
+accumulator = "latest"
+
+[task_queue.sampler_aggregator.config]
+kind = "process_sampler"
+# command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
+# Alternative with Apptainer when the host supports Apptainer/SIF execution:
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
+# Alternative with the Nix runtime when Nix is available:
+command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
+cwd = "$resources/.."
+requires_training_values = true
+
+[task_queue.sampler_aggregator.config.args]
+seed = 0
+training_steps = 2000
+training_batch_size = 10000
+learning_rate = 5e-4
+use_gpu = true
+cuda_id = 0
+save_path = "integrations/glnis_gammaboard_api/checkpoints/epem_a_ttxh_NLO_GL26"
+max_batch_size = "$(max_batch_size:10000)"
+
+[task_queue.sampler_aggregator.config.args.flow_config]
+layers = 4
+units = 1500
+bins = 12
+min_bin_width = 1e-4
+min_bin_height = 1e-4
+min_bin_derivative = 1e-4
+
+[task_queue.queue_tuning]
+target_batch_eval_ms = 10000.0
+max_batch_size = "$(max_batch_size:10000)"
+
+[[task_queue]]
+name = "sample"
+kind = "sample"
+measurement = { quantity = "central_value" }
+stop_condition = { max_samples = "$(sample_samples:10000000)" }
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.queue_tuning]
+target_batch_eval_ms = 10000.0
+max_batch_size = "$(max_batch_size:10000)"

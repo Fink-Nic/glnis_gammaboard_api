@@ -50,8 +50,8 @@
         gammaloopSource = pkgs.fetchFromGitHub {
           owner = "alphal00p";
           repo = "gammaloop";
-          rev = "ac99d32d194254f0c8931873d0a32ebd7d27f82f";
-          hash = "sha256-zjzolJj//s97PAznfxTMRXMhOuDVm2NHs7qM8KTGEIM=";
+          rev = "6c3b1ff79c34a5e34e424ddd51dd218105b48f53";
+          hash = "sha256-xNpGUHYKbvrCVz+XZ2M+2+dOy9Ez5xCimuzoHRV96aE=";
         };
 
         madnis = python.pkgs.buildPythonPackage {
@@ -175,7 +175,7 @@
 
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
             src = projectSource;
-            hash = "sha256-spnpIaDVYWC5KPHtfcTS/uGnLBD1i+P1B7cIS8rseFg=";
+            hash = "sha256-n5TeBUMPqcXqtTWBI7QZXA8cvUGXWDV8dDXb6ZZZleQ=";
           };
 
           nativeBuildInputs = (with pkgs.rustPlatform; [
@@ -203,9 +203,20 @@
 
           SYMBOLICA_OEM_LICENSE = "SYMBOLICA_OEM_GAMMALOOP";
 
+          # GammaLoop embeds repository assets with paths that assume its full
+          # workspace checkout. Cargo vendor flattens Git packages, so restore
+          # only the asset layout required by RustEmbed/include_dir at build time.
           preBuild = ''
-            if [ -d /build/cargo-deps-vendor/source-git-0 ] && [ ! -e /build/cargo-deps-vendor/assets ]; then
-              cp -R ${gammaloopSource}/assets /build/cargo-deps-vendor/assets
+            api_dir="$(find /build/cargo-deps-vendor -type d -name 'gammaloop-api-*' -print -quit)"
+            if [ -n "$api_dir" ]; then
+              vendor_root="$(dirname "$api_dir")"
+              rm -rf "$vendor_root/assets" "$vendor_root/kurvst" "$vendor_root/linnest" "$(dirname "$vendor_root")/assets"
+              cp -R ${gammaloopSource}/assets "$vendor_root/assets"
+              cp -R ${gammaloopSource}/assets "$(dirname "$vendor_root")/assets"
+              mkdir -p "$vendor_root/kurvst"
+              cp -R ${gammaloopSource}/crates/kurvst/typst "$vendor_root/kurvst/typst"
+              mkdir -p "$vendor_root/linnest"
+              cp -R ${gammaloopSource}/crates/linnest/typst "$vendor_root/linnest/typst"
             fi
           '';
 

@@ -15,10 +15,8 @@ pyo3 = { version = "0.28", features = ["extension-module"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-[patch."https://github.com/alphal00p/gammaloop.git"]
-gammaloop-workspace-hack = { path = "vendor/gammaloop-workspace-hack" }
 
 [patch.crates-io]
-graphica = { path = "vendor/symbolica/lib/graphica" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-symbolica = { path = "vendor/symbolica" }
+graphica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+numerica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
