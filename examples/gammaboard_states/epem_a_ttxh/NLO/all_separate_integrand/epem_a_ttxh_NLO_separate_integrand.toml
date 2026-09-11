@@ -96,6 +96,7 @@ commands = [
     integrator.n_max=10000000000
     integrator.seed=1337
     integrator.integrated_phase="real"
+    integrator.continuous_dim_learning_rate=0.4
   """,
   """
   integrate -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" --n-cores 10
@@ -109,6 +110,46 @@ commands = [
 				 --write-results-for-each-iteration
          --restart
   """
+]
+
+[[command_blocks]]
+name = "integrate_all"
+commands = [
+  "run set_model_parameters",
+  """
+  integrate 
+         -p epem_a_ttxh -i NLO_GL00
+         -p epem_a_ttxh -i NLO_GL02
+         -p epem_a_ttxh -i NLO_GL06
+         -p epem_a_ttxh -i NLO_GL08
+         -p epem_a_ttxh -i NLO_GL10
+         -p epem_a_ttxh -i NLO_GL12
+         -p epem_a_ttxh -i NLO_GL18
+         -p epem_a_ttxh -i NLO_GL20
+         -p epem_a_ttxh -i NLO_GL22
+         -p epem_a_ttxh -i NLO_GL26
+         -p epem_a_ttxh -i NLO_GL30
+         --target epem_a_ttxh@NLO_GL00=+3.1908e-05,0.0
+         --target epem_a_ttxh@NLO_GL02=-2.504e-06,0.0
+         --target epem_a_ttxh@NLO_GL06=-2.4706e-04,0.0
+         --target epem_a_ttxh@NLO_GL08=-3.2336e-06,0.0
+         --target epem_a_ttxh@NLO_GL10=+4.7475e-05,0.0
+         --target epem_a_ttxh@NLO_GL12=+5.5828e-05,0.0
+         --target epem_a_ttxh@NLO_GL18=+1.3472e-04,0.0
+         --target epem_a_ttxh@NLO_GL20=+2.0875e-04,0.0
+         --target epem_a_ttxh@NLO_GL22=-9.1283e-05,0.0
+         --target epem_a_ttxh@NLO_GL26=-1.47653e-04,0.0
+         --target epem_a_ttxh@NLO_GL30=-1.18480e-04,0.0
+         --n-cores 30
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --write-results-for-each-iteration
+                 --uncorrelated
+         --restart
+  """,
 ]
 
 
@@ -147,6 +188,14 @@ store_additional_weights_in_event = false
 integral_unit = "picobarn"
 m_uv = 173.0
 mu_r = 91.188
+
+[default_runtime_settings.integrator]
+n_increase=100000
+n_start=100000
+n_max=10000000000
+seed=1337
+integrated_phase="real"
+continuous_dim_learning_rate=0.4
 
 [cli_settings.global.generation.evaluator]
 do_algebra = false
@@ -364,7 +413,7 @@ quantity = "CosTheta"
 [[command_blocks]]
 name = "set_differential_observables"
 commands = [
-  """set process -p epem_a_ttxh -i NLO string '
+  """set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" string '
 
 [observables.integral]
 title = "xs"

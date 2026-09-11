@@ -110,46 +110,6 @@ class Mapping(ABC):
         disc_dim = self.discrete_cardinalities[num_disc_input]
         return np.ones((len(discrete), disc_dim), dtype=np.float64) / disc_dim
 
-    def _to_generation_lmb(
-        self, momenta: NDArray, channel: NDArray, inverse: bool = False
-    ) -> NDArray:
-        """
-        Transforms the loop momenta to the edge momentum basis of the graph, using the
-        channel ID to determine the correct transformation.
-
-        Args:
-            momenta: shape (n_samples, n_loops*3)
-            channel: shape (n_samples, 1)
-        Returns:
-            shape (n_samples, n_loops*3)
-        """
-        edges = self.gp.lmb_array[channel]
-        shifts = np.array(self.gp.edge_momentum_shifts)
-        sample_shifts = shifts[edges].reshape(-1, 3 * self.gp.n_loops)
-        if not inverse:
-            momenta -= sample_shifts
-
-        if inverse:
-            backward = self.gp.channel_inv_transforms[
-                self.gp.generation_channel_id
-            ]
-            transform = backward @ self.gp.channel_transforms
-        else:
-            forward = self.gp.channel_transforms[
-                self.gp.generation_channel_id
-            ]
-            transform = forward @ self.gp.channel_inv_transforms
-        sample_transform = transform[channel.ravel()]
-        result = sample_transform @ momenta.reshape(
-            -1, self.gp.n_loops, 3
-        )
-        result = result.reshape(-1, self.gp.n_loops * 3)
-
-        if inverse:
-            result += sample_shifts
-
-        return result
-
     def _get_discrete_cardinalities(self) -> List[int]:
         """
         Returns:
@@ -574,8 +534,8 @@ class SphericalMapping(Mapping):
         
         if discrete.size == 0:
             discrete = np.empty((momentum.shape[0], 1), dtype=np.uint64)
-            discrete.fill(self.gp.generation_channel_id)
-        momentum = self._to_generation_lmb(momentum, discrete)
+            discrete.fill(0)
+        momentum = self.gp.to_generation_lmb_rep(momentum, discrete)
 
         return jac, momentum.reshape(n_points, -1)
 
@@ -583,8 +543,8 @@ class SphericalMapping(Mapping):
         # Use the inverse spherical parameterisation logic to map momentum -> unit hypercube
         if discrete.size == 0:
             discrete = np.empty((momentum.shape[0], 1), dtype=np.uint64)
-            discrete.fill(self.gp.generation_channel_id)
-        continuous = self._to_generation_lmb(momentum, discrete, inverse=True)
+            discrete.fill(0)
+        continuous = self.gp.from_generation_lmb_rep(momentum, discrete)
         xs = np.zeros_like(continuous)
 
         jac = np.ones((len(continuous), 1), dtype=continuous.dtype)
@@ -618,8 +578,8 @@ class SphericalMapping(Mapping):
         # Standalone inverse jacobian for multichanneling scheme
         if discrete.size == 0:
             discrete = np.empty((momentum.shape[0], 1), dtype=np.uint64)
-            discrete.fill(self.gp.generation_channel_id)
-        momentum = self._to_generation_lmb(momentum, discrete, inverse=True)
+            discrete.fill(0)
+        momentum = self.gp.from_generation_lmb_rep(momentum, discrete)
 
         jac = np.ones((len(momentum), 1), dtype=momentum.dtype)
         jac /= (4 * np.pi * self.conformal_scale**3) ** self.n_loops
@@ -777,7 +737,7 @@ class KaapoParameterisation(Mapping):
         jac *= (4 * np.pi / a / b**a) ** n_loops
 
         for i_loop in range(n_loops):
-            basis_edge = self.gp.lmb_array[discrete, i_loop]
+            basis_edge = self.gp.lmb_edges[discrete, i_loop]
             m_e = np.array(self.gp.edge_masses)[basis_edge]
             mu = np.array(self.mu)[basis_edge]
             p_F = np.clip(mu**2 - m_e**2, a_min=0.0, a_max=None) ** 0.5
@@ -811,7 +771,7 @@ class KaapoParameterisation(Mapping):
             jac *= h_c**2 * np.abs(peak_F) ** (1 / a - 1)
             jac *= (np.sign(peak_F) * np.abs(peak_F) + p_F**a + b**a) ** 2
 
-        momentum = self._to_generation_lmb(momentum, discrete)
+        momentum = self.gp.to_generation_lmb_rep(momentum, discrete)
 
         return jac, momentum.reshape(n_points, -1)
 
@@ -872,7 +832,7 @@ class RKaapoParameterisation(Mapping):
         jac *= (4 * np.pi / a / b**a) ** n_loops
 
         for i_loop in range(n_loops):
-            basis_edge = self.gp.lmb_array[discrete, i_loop]
+            basis_edge = self.gp.lmb_edges[discrete, i_loop]
             m_e = np.array(self.gp.edge_masses)[basis_edge]
             mu = np.array(self.mu)[basis_edge]
             p_F = np.clip(mu**2 - m_e**2, a_min=0.0, a_max=None) ** 0.5
@@ -922,7 +882,7 @@ class RKaapoParameterisation(Mapping):
             jac *= h_c**2 * np.abs(peak_F) ** (1 / a - 1)
             jac *= (np.sign(peak_F) * np.abs(peak_F) + p_F**a + b**a) ** 2
 
-        momentum = self._to_generation_lmb(momentum, discrete)
+        momentum = self.gp.to_generation_lmb_rep(momentum, discrete)
 
         return jac, momentum.reshape(n_points, -1)
 
@@ -1027,18 +987,6 @@ class MCLayer(Mapping, ABC):
             f"multichanneling: {self.IDENTIFIER} using {self.mapping.IDENTIFIER}"
         )
 
-        self.lmbs = self.gp.lmb_array
-        self.n_channels = self.gp.n_channels
-        self.n_loops = self.gp.n_loops
-
-        self.shifts = np.array(self.gp.edge_momentum_shifts)
-        self.channel_shifts = self.shifts[self.lmbs]
-        self.channel_masses = np.array(self.gp.edge_masses)[self.lmbs]
-        backward = self.gp.channel_inv_transforms[
-            self.gp.generation_channel_id
-        ]
-        self.transforms = backward @ self.gp.channel_transforms
-
     def _map_from_hcube(self, continuous: NDArray, discrete: NDArray) -> MappingOutput:
         jac, momentum = self.mapping.forward(continuous, discrete)
         jac *= self._mc_weight(momentum, discrete).reshape(-1, 1)
@@ -1080,15 +1028,10 @@ class OSEMCLayer(MCLayer):
         # Need to calculate the e-surface term for all lmbs
         mc_weight = np.prod(  # Multiply for each loop
             np.sum(  # Dot product
-                (
-                    self.transforms[discrete.ravel()]
-                    @ momentum.reshape(-1, self.n_loops, 3)
-                    + self.channel_shifts[discrete.ravel()]
-                )
-                ** 2,
+                    self.gp.from_generation_lmb_rep(momentum, discrete).reshape(-1, self.gp.n_loops, 3)** 2,
                 axis=2,
             )
-            + self.channel_masses[discrete.ravel()] ** 2,
+            + self.gp.channel_masses[discrete.ravel()] ** 2,
             axis=1,
         )
         mc_weight = np.power(
@@ -1098,13 +1041,13 @@ class OSEMCLayer(MCLayer):
             out=np.zeros_like(mc_weight),
         )
         norm_factor = np.zeros_like(mc_weight)
-        for ch in range(self.n_channels):
-            transform = self.transforms[ch]
-            shift = self.channel_shifts[ch]
-            mass = self.channel_masses[ch]
+        for ch in range(self.gp.n_channels):
+            transform = self.gp.channel_transforms[ch] @ self.gp.generation_channel_inv_transform
+            shift = self.gp.channel_momentum_shifts[ch]
+            mass = self.gp.channel_masses[ch]
             weight = np.prod(  # Multiply for each loop
                 np.sum(  # Dot product
-                    (transform @ momentum.reshape(-1, self.n_loops, 3) + shift) ** 2, axis=2,
+                    (transform @ momentum.reshape(-1, self.gp.n_loops, 3) + shift) ** 2, axis=2,
                 )
                 + mass**2,
                 axis=1,
@@ -1136,25 +1079,20 @@ class FermiMCLayer(MCLayer):
         self.fermi_exponent = fermi_exponent
         self.set_bosonic_edge_to_one = set_bosonic_edge_to_one
         if hasattr(self.mapping, "mu"):
-            self.channel_mu = np.array(self.mapping.mu)[self.lmbs]
+            self.channel_mu = np.array(self.mapping.mu)[self.gp.lmb_edges]
         else:
-            self.channel_mu = np.zeros((self.n_channels, self.n_loops))
+            self.channel_mu = np.zeros((self.gp.n_channels, self.gp.n_loops))
 
     def _mc_weight(self, momentum: NDArray, discrete: NDArray) -> NDArray:
-        momentum = momentum.reshape(-1, self.n_loops, 3)
+        momentum = momentum.reshape(-1, self.gp.n_loops, 3)
         self.param: KaapoParameterisation
         # Need to calculate the fermi surface term for all lmbs
         e_surface_terms = np.sqrt(
             np.sum(
-                (
-                    self.transforms[discrete.ravel()]
-                    @ momentum.reshape(-1, self.n_loops, 3)
-                    + self.channel_shifts[discrete.ravel()]
-                )
-                ** 2,
+                self.gp.from_generation_lmb_rep(momentum, discrete).reshape(-1, self.gp.n_loops, 3) ** 2,
                 axis=2,
             )
-            + self.channel_masses[discrete.ravel()] ** 2
+            + self.gp.channel_masses[discrete.ravel()] ** 2
         )
         fermi_weights = np.abs(e_surface_terms - self.channel_mu[discrete.ravel()])
         if self.set_bosonic_edge_to_one:
@@ -1176,14 +1114,14 @@ class FermiMCLayer(MCLayer):
         )
 
         norm_factor = np.zeros_like(mc_weight)
-        for ch in range(self.n_channels):
-            transform = self.transforms[ch]
-            shift = self.channel_shifts[ch]
-            mass = self.channel_masses[ch]
-            mu = self.channel_mu[ch]
+        for ch in range(self.gp.n_channels):
+            transform = self.gp.channel_transforms[ch] @ self.gp.generation_channel_inv_transform
+            shift = self.gp.channel_momentum_shifts[ch]
+            mass = self.gp.channel_masses[ch]
+            mu = self.gp.channel_mu[ch]
             e_surface_terms = np.sqrt(
                 np.sum(
-                    (transform @ momentum.reshape(-1, self.n_loops, 3) + shift) ** 2,
+                    (transform @ momentum.reshape(-1, self.gp.n_loops, 3) + shift) ** 2,
                     axis=2,
                 )
                 + mass**2
@@ -1236,10 +1174,10 @@ class JacMCLayer(MCLayer):
             out=np.zeros_like(jacobian),
         )
         norm_factor = np.zeros_like(mc_weight)
-        for ch in range(self.n_channels):
-            transform = self.transforms[ch]
-            shift = self.channel_shifts[ch]
-            mass = self.channel_masses[ch]
+        for ch in range(self.gp.n_channels):
+            transform = self.gp.channel_transforms[ch] @ self.gp.generation_channel_inv_transform
+            shift = self.gp.channel_momentum_shifts[ch]
+            mass = self.gp.channel_masses[ch]
             weight = np.power(
                 self._jac_from_momentum(
                     momentum, np.full_like(discrete, ch)

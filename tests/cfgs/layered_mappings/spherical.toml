@@ -7,8 +7,8 @@ n_points = 64
 edge_masses = [0.0]
 edge_momentum_shifts = [[0.0, 0.0, 0.0]]
 graph_signature = [[1]]
-lmb_array = [[0]]
-generation_channel_id = 0
+lmb_edges = [[0]]
+generation_lmb_edges = [0]
 e_cm = 0.0
 
 [expected]

@@ -228,7 +228,7 @@ def test_forward_and_backward_transforms(
         backward_output = None
 
     if supports_forward and supports_backward:
-        backward_continuous, backward_weights = backward_output
+        backward_continuous, backward_weights = backward_output # type: ignore[assignment]
         np.testing.assert_allclose(
             backward_continuous,
             forward_input,

@@ -43,7 +43,7 @@ struct SimplifiedGraphGroupData {
     group_id: usize,
     master_graph_id: usize,
     loop_momentum_bases_edge_ids: Vec<Vec<usize>>,
-    generation_channel_id: usize,
+    generation_lmb_edge_ids: Vec<usize>,
     orientation_ids: Vec<usize>,
     orientation_signatures: Vec<Vec<i8>>,
 }
@@ -217,8 +217,7 @@ pub fn parse_state_summary_json(state_folder: PathBuf) -> PyResult<String> {
 ///
 /// The graph-group fields mirror the metadata extracted by Python's
 /// `MetaDataParser`: LMBs are restricted to active multi-channel bases when
-/// present, otherwise all LMBs are returned, and `generation_channel_id` is the
-/// index of the generation basis within that active LMB list.
+/// present, otherwise all LMBs are returned.
 #[pyfunction]
 pub fn parse_state_simplified(
     state_folder: PathBuf,
@@ -275,26 +274,17 @@ pub fn parse_state_simplified(
             if active_lmb_indices.is_empty() {
                 active_lmb_indices = (0..graph_group.loop_momentum_bases.len()).collect();
             }
-
-            let generation_basis_id = graph_group
+            let generation_lmb_edge_ids = graph_group
                 .loop_momentum_bases
                 .iter()
-                .position(|lmb| lmb.matches_generation_basis)
-                .unwrap_or(0);
-            let generation_channel_id = if graph_group.loop_momentum_bases.is_empty() {
-                0
-            } else {
-                active_lmb_indices
-                    .iter()
-                    .position(|basis_index| *basis_index == generation_basis_id)
-                    .ok_or_else(|| {
-                        PyValueError::new_err(format!(
-                            "generation basis {} in graph group {} is not part of the active LMB list",
-                            generation_basis_id, graph_group.group_id
-                        ))
-                    })?
-            };
-
+                .find(|lmb| lmb.matches_generation_basis)
+                .map(|lmb| lmb.edge_ids.clone())
+                .ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "graph group {} does not specify a generation loop momentum basis",
+                        graph_group.group_id
+                    ))
+                })?;
             let loop_momentum_bases_edge_ids = active_lmb_indices
                 .iter()
                 .map(|basis_index| graph_group.loop_momentum_bases[*basis_index].edge_ids.clone())
@@ -314,7 +304,7 @@ pub fn parse_state_simplified(
                 group_id: graph_group.group_id,
                 master_graph_id,
                 loop_momentum_bases_edge_ids,
-                generation_channel_id,
+                generation_lmb_edge_ids,
                 orientation_ids,
                 orientation_signatures,
             })

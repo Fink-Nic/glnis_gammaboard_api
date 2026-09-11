@@ -54,7 +54,7 @@ graph_properties = dict(
     edge_momentum_shifts=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
     graph_signature=[[1], [1]],
     e_cm=1.0,
-    lmb_array=[[0], [1]],
+    lmb_edges=[[0], [1]],
 )
 
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
             pdf_values = sampler.pdf(np.arange(6, dtype=np.uint64).reshape(-1, 2) % 2, 0.3 * np.ones((3, sampler.continuous_dims)))
             print("PDF evaluation successful.")
         except Exception as e:
-            print(f"Error occurred during PDF evaluation: {e.backtrace() if hasattr(e, 'backtrace') else str(e)}")
+            print(f"Error occurred during PDF evaluation: {e.backtrace() if hasattr(e, 'backtrace') else str(e)}") # pyright: ignore[reportAttributeAccessIssue]
             traceback.print_exc()
 
     if save_path.exists():

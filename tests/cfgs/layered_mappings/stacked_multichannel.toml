@@ -10,8 +10,8 @@ edge_momentum_shifts = [
     [0.15, -0.10, 0.05],
 ]
 graph_signature = [[1], [-1]]
-lmb_array = [[0], [1]]
-generation_channel_id = 0
+lmb_edges = [[0], [1]]
+generation_lmb_edges = [0]
 e_cm = 0.0
 
 [expected]

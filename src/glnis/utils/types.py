@@ -47,38 +47,33 @@ class GraphProperties:
     """
     Holds all essential properties of a Feynman graph, including edge information, graph signature, and orientation details.
     Attributes:
-        edge_src_dst_vertices (List[List[int]]): List of source and destination vertices for each edge.
-        edge_masses (List[float]): List of masses for each edge.
-        edge_momentum_shifts (List[List[float]]): List of momentum shifts for each edge.
+        edge_masses (NDArray): Masses of the edges in the graph.
+        edge_momentum_shifts (NDArray): Momentum shifts associated with each edge.
+        graph_signature (NDArray): Signature of the graph, representing its structure.
+        generation_lmb_edges (NDArray): Edges associated with the generation loop momentum basis of the graph.
+        lmb_edges (NDArray): Edges associated with the loop momentum basis.
         graph_external_vertices (List[int]): List of external vertices in the graph.
-        graph_signature (List[List[int]]): Signature of the graph, representing its structure.
-        lmb_array (NDArray): Array representing loop momentum basis transformations.
-        edge_external_sigs (List[List[float]]): External signatures associated with edges.
-        external_momenta (List[List[float]]): External momenta for the graph.
+        edge_src_dst_vertices (List[List[int]]): Source and destination vertices for each edge.
+        edge_external_sigs (List[List[float]]): External signatures for each edge.
+        external_momenta (List[List[float]]): External momenta associated with the graph.
         orientation_ids (List[int]): Identifiers for different orientations of the graph.
         orientation_signatures (List[List[int]]): Signatures corresponding to each orientation.
-        generation_channel_id (int): Identifier for the generation channel of the graph.
         e_cm (float): Center-of-mass energy for the graph.
-        n_loops (int): Number of loops in the graph, derived from the graph signature.
-        n_edges (int): Number of edges in the graph, derived from the edge masses.
-        edge_ismassive (List[bool]): List indicating whether each edge is massive
-        n_channels (int): Number of channels, derived from the shape of the lmb_array.
-        n_orientations (int): Number of orientations, derived from the length of orientation_ids
-        channel_transforms (NDArray): Array of loop momentum basis transformations for each channel.
-        channel_inv_transforms (NDArray): Array of inverse loop momentum basis transformations for each channel
+        channel_transforms (NDArray): Forward matrix transforms for each channel, mapping to the channel basis.
+        channel_inv_transforms (NDArray): Inverse matrix transforms for each channel, mapping from the channel basis.
     """
 
-    edge_masses: List[float]
-    edge_momentum_shifts: List[List[float]]
-    graph_signature: List[List[int]]
+    edge_masses: NDArray
+    edge_momentum_shifts: NDArray
+    graph_signature: NDArray = field(default_factory=list)
+    generation_lmb_edges: NDArray = field(default_factory=list)
+    lmb_edges: NDArray = field(default_factory=list)
     graph_external_vertices: List[int] = field(default_factory=list)
     edge_src_dst_vertices: List[List[int]] = field(default_factory=list)
-    lmb_array: NDArray = field(default_factory=list)
     edge_external_sigs: List[List[float]] = field(default_factory=list)
     external_momenta: List[List[float]] = field(default_factory=list)
     orientation_ids: List[int] = field(default_factory=list)
     orientation_signatures: List[List[int]] = field(default_factory=list)
-    generation_channel_id: int = 0
     e_cm: float = 0.0
 
     def __post_init__(self: "GraphProperties"):
@@ -87,29 +82,90 @@ class GraphProperties:
                 "Length of orientation_ids and orientation_signatures must match."
             )
         TOLERANCE = 1e-10
+        self.edge_masses = np.array(self.edge_masses, dtype=np.float64)
+        self.edge_momentum_shifts = np.array(self.edge_momentum_shifts, dtype=np.float64)
+        self.graph_signature = np.array(self.graph_signature, dtype=np.int64)
+        self.generation_lmb_edges = np.array(self.generation_lmb_edges, dtype=np.uint64)
+        self.lmb_edges = np.array(self.lmb_edges, dtype=np.uint64)
         self.n_loops: int = len(self.graph_signature[0])
         self.n_edges: int = len(self.edge_masses)
         self.edge_ismassive: list[bool] = [
             mass > TOLERANCE for mass in self.edge_masses
         ]
-        self.lmb_array = np.array(self.lmb_array, dtype=np.uint64)
-        self.n_channels = self.lmb_array.shape[0]
+        self.n_channels = self.lmb_edges.shape[0]
         self.n_orientations = len(self.orientation_ids)
 
+        self.channel_masses = self.edge_masses[self.lmb_edges].reshape(self.n_channels, self.n_loops)
+        self.channel_momentum_shifts = self.edge_momentum_shifts[self.lmb_edges].reshape(self.n_channels, 3*self.n_loops)
         try:
             # Calculate the inverse lmb transforms, ordered as the LMBs in graph properties
-            self.channel_transforms = np.array(self.graph_signature)[
-                self.lmb_array
+            self.channel_transforms = self.graph_signature[
+                self.lmb_edges
             ].reshape(self.n_channels, self.n_loops, self.n_loops)
             # Inverse transform of each channel
             self.channel_inv_transforms = np.linalg.inv(self.channel_transforms)
+            self.generation_transform = self.graph_signature[
+                self.generation_lmb_edges
+            ].reshape(self.n_loops, self.n_loops)
+            self.generation_inv_transform = np.linalg.inv(self.generation_transform)
         except:
+            # Allows for instantiation before parsing is fully complete
             self.channel_transforms = np.zeros(
                 (0, self.n_loops, self.n_loops), dtype=np.float64
             )
             self.channel_inv_transforms = np.zeros(
                 (0, self.n_loops, self.n_loops), dtype=np.float64
             )
+            self.generation_transform = np.zeros(
+                (self.n_loops, self.n_loops), dtype=np.float64
+            )
+            self.generation_inv_transform = np.zeros(
+                (self.n_loops, self.n_loops), dtype=np.float64
+            )
+
+    def to_generation_lmb_rep(
+        self, momenta: NDArray, channel: NDArray
+    ) -> NDArray:
+        """
+        Transforms the loop momenta from the channel loop momentum basis to the edge generation basis of the graph.
+
+        Args:
+            momenta: shape (n_samples, n_loops*3)
+            channel: shape (n_samples, 1)
+        Returns:
+            shape (n_samples, n_loops*3)
+        """
+        edges = self.lmb_edges[channel]
+        momenta -= self.channel_momentum_shifts[channel.ravel()]
+
+        transform = self.generation_transform @ self.channel_inv_transforms
+        sample_transform = transform[channel.ravel()]
+        result = sample_transform @ momenta.reshape(-1, self.n_loops, 3)
+        result = result.reshape(-1, self.n_loops * 3)
+
+        return result
+
+    def from_generation_lmb_rep(
+        self, momenta: NDArray, channel: NDArray
+    ) -> NDArray:
+        """
+        Transforms the loop momenta from the edge generation basis of the graph to the channel loop momentum basis.
+
+        Args:
+            momenta: shape (n_samples, n_loops*3)
+            channel: shape (n_samples, 1)
+        Returns:
+            shape (n_samples, n_loops*3)
+        """
+        edges = self.lmb_edges[channel]
+
+        transform = self.channel_transforms @ self.generation_inv_transform
+        sample_transform = transform[channel.ravel()]
+        result = sample_transform @ momenta.reshape(-1, self.n_loops, 3)
+        result = result.reshape(-1, self.n_loops * 3)
+        result += self.channel_momentum_shifts[channel.ravel()]
+
+        return result
 
 
 class LayerData:

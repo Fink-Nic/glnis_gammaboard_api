@@ -61,39 +61,29 @@ class MetaDataParser:
             group_id: usize,
             master_graph_id: usize,
             loop_momentum_bases_edge_ids: Vec<Vec<usize>>,
-            generation_channel_id: usize,
+            generation_lmb_edge_ids: Vec<usize>,
             orientation_ids: Vec<usize>,
             orientation_signatures: Vec<Vec<i8>>,
         }
         """
 
-        e_cm = integrand_data["e_cm"]
-        ext_momenta = integrand_data["external_momenta"]
         graph_properties_list = []
         for graph_group in integrand_data["graph_groups"]:
-            master_id = graph_group["master_graph_id"]
-            graph_properties = Dot.get_graph_properties(master_id, ext_momenta)
+            graph_properties = Dot.get_graph_properties(graph_group["master_graph_id"], integrand_data["external_momenta"])
             lmbs = graph_group["loop_momentum_bases_edge_ids"]
             # Map edge_ids to {0, ..., n_edges-1}
             gl_internal_edge_ids = set(e_id for lmb in lmbs for e_id in lmb)
             e_id_map: Dict[int, int] = dict()
             for my_e_id, gl_e_id in enumerate(gl_internal_edge_ids):
                 e_id_map[gl_e_id] = my_e_id
-
-            # Technically this should indeed never be the case for bridgeless graphs, but should not be an issue
-            # even if it does happen (except for momtrop).
-            # if not len(gl_internal_edge_ids) == graph_properties.n_edges:
-            #     raise ValueError(
-            #         """Number of internal edges inferred from the dot file does not match the number of internal edges in the GammaLoop state.
-            #         This should not happen, please report this issue."""
-            #     )
-            graph_properties.lmb_array = [
+            
+            graph_properties.lmb_edges = [
                 [e_id_map[e_id] for e_id in lmb] for lmb in lmbs
             ]
             graph_properties.orientation_ids = graph_group["orientation_ids"]
             graph_properties.orientation_signatures = graph_group["orientation_signatures"]
-            graph_properties.generation_channel_id = graph_group["generation_channel_id"]
-            graph_properties.e_cm = e_cm
+            graph_properties.generation_lmb_edges = [e_id_map[e_id] for e_id in graph_group["generation_lmb_edge_ids"]]
+            graph_properties.e_cm = integrand_data["e_cm"]
             graph_properties.__post_init__()
 
             graph_properties_list.append(graph_properties)

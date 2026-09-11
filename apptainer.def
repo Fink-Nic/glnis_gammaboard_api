@@ -10,7 +10,6 @@ Stage: build
     pyproject.toml /build-src/glnis_gammaboard_api/pyproject.toml
     Cargo.toml /build-src/glnis_gammaboard_api/Cargo.toml
     Cargo.lock /build-src/glnis_gammaboard_api/Cargo.lock
-    momtrop-Cargo.lock /build-src/glnis_gammaboard_api/momtrop-Cargo.lock
     src /build-src/glnis_gammaboard_api/src
 
 %post

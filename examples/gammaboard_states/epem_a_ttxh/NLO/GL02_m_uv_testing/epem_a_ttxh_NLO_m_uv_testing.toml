@@ -1,6 +1,6 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./gammaboard_states/epem_a_ttxh/NLO/all_single_integrand/state"
+folder = "./gammaboard_states/epem_a_ttxh/NLO/GL02_m_uv_testing/state"
 
 [[command_blocks]]
 name = "generate_diagrams"
@@ -27,14 +27,41 @@ commands = [
       --symmetrize-left-right-states true
       -p epem_a_ttxh -i NLO
       --only-diagrams""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL02_1
+      --with-graph-names GL02""",
+  "remove processes -p epem_a_ttxh -i NLO",
   "save dot",
 ]
 
 [[command_blocks]]
 name = "generate_integrands"
 commands = [
-    "generate existing -p epem_a_ttxh -i NLO",
+    "generate existing",
+    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_2",
+    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_5",
+    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_10",
+    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_20",
+    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_50",
+    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_91_188",
+    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_173",
+    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_500",
+    "run set_integrand_mu_v",
     "save state -o"
+]
+
+[[command_blocks]]
+name = "set_integrand_mu_v"
+commands = [
+    "set process -p epem_a_ttxh -i NLO_GL02_1 kv general.m_uv=1.0",
+    "set process -p epem_a_ttxh -i NLO_GL02_2 kv general.m_uv=2.0",
+    "set process -p epem_a_ttxh -i NLO_GL02_5 kv general.m_uv=5.0",
+    "set process -p epem_a_ttxh -i NLO_GL02_10 kv general.m_uv=10.0",
+    "set process -p epem_a_ttxh -i NLO_GL02_20 kv general.m_uv=20.0",
+    "set process -p epem_a_ttxh -i NLO_GL02_50 kv general.m_uv=50.0",
+    "set process -p epem_a_ttxh -i NLO_GL02_91_188 kv general.m_uv=91.188",
+    "set process -p epem_a_ttxh -i NLO_GL02_173 kv general.m_uv=173",
+    "set process -p epem_a_ttxh -i NLO_GL02_500 kv general.m_uv=500.0",
 ]
 
 [[command_blocks]]
@@ -50,24 +77,14 @@ commands = [
 ]
 
 [[command_blocks]]
-name = "integrate"
+name = "integrate_single"
 commands = [
   "run set_model_parameters",
   "run set_differential_quantities",
   "run set_differential_observables",
   """
-  set process -p epem_a_ttxh -i NLO kv
-    integrator.n_increase=100000
-    integrator.n_start=100000
-    integrator.n_max=10000000000
-    integrator.seed=1337
-    integrator.integrated_phase="real"
-    integrator.continuous_dim_learning_rate=0.4
-    integrator.max_prob_ratio=10
-  """,
-  """
-  integrate -p epem_a_ttxh -i NLO --n-cores 10
-         --target epem_a_ttxh@NLO=-1.3205e-04,0.0
+  integrate -p epem_a_ttxh -i NLO_GL02_"$(m_uv:1)" --n-cores 10
+         --target epem_a_ttxh@NLO_GL02_"$(m_uv:1)"=-2.504e-06,0.0
 				 --renderer ratatui
 				 --batch-size 10000
 				 --show-phase both
@@ -77,6 +94,34 @@ commands = [
 				 --write-results-for-each-iteration
          --restart
   """
+]
+
+[[command_blocks]]
+name = "integrate_all"
+commands = [
+  "run set_model_parameters",
+  """
+  integrate 
+         -p epem_a_ttxh -i NLO_GL02_1
+         -p epem_a_ttxh -i NLO_GL02_2
+         -p epem_a_ttxh -i NLO_GL02_5
+         -p epem_a_ttxh -i NLO_GL02_10
+         -p epem_a_ttxh -i NLO_GL02_20
+         -p epem_a_ttxh -i NLO_GL02_50
+         -p epem_a_ttxh -i NLO_GL02_91_188
+         -p epem_a_ttxh -i NLO_GL02_173
+         -p epem_a_ttxh -i NLO_GL02_500
+         --target=-2.504e-06,0.0
+         --uncorrelated
+         --n-cores 30
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --write-results-for-each-iteration
+         --restart
+  """,
 ]
 
 
@@ -113,8 +158,15 @@ debug_cache = false
 generate_events = false
 store_additional_weights_in_event = false
 integral_unit = "picobarn"
-m_uv = 173.0
 mu_r = 91.188
+
+[default_runtime_settings.integrator]
+n_increase=100000
+n_start=100000
+n_max=100000000
+seed=1337
+integrated_phase="real"
+continuous_dim_learning_rate=0.4
 
 [cli_settings.global.generation.evaluator]
 do_algebra = false
@@ -195,7 +247,7 @@ escalate_for_large_weight_threshold = -1.0
 [[command_blocks]]
 name = "set_differential_quantities"
 commands = [
-  """set process -p epem_a_ttxh -i NLO string '
+  """set process -p epem_a_ttxh -i NLO_GL02_"$(m_uv:1)" string '
 
 [quantities.integral]
 type = "integral"
@@ -332,7 +384,7 @@ quantity = "CosTheta"
 [[command_blocks]]
 name = "set_differential_observables"
 commands = [
-  """set process -p epem_a_ttxh -i NLO string '
+  """set process -p epem_a_ttxh -i NLO_GL02_"$(m_uv:1)" string '
 
 [observables.integral]
 title = "xs"
