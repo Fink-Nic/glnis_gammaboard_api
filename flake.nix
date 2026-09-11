@@ -13,13 +13,9 @@
       url = "github:alphal00p/gammaboard/main";
       flake = false;
     };
-    momtrop-src = {
-      url = "github:Fink-Nic/momtrop/main";
-      flake = false;
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, madnis-src, gammaboard-src, momtrop-src, ... }:
+  outputs = { self, nixpkgs, flake-utils, madnis-src, gammaboard-src, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -145,28 +141,6 @@
           doCheck = false;
         };
 
-        momtrop = python.pkgs.buildPythonPackage {
-          pname = "momtrop";
-          version = "main";
-          src = momtrop-src;
-          pyproject = true;
-
-          cargoDeps = pkgs.rustPlatform.importCargoLock {
-            lockFile = ./momtrop-Cargo.lock;
-          };
-
-          nativeBuildInputs = with pkgs.rustPlatform; [
-            cargoSetupHook
-            maturinBuildHook
-          ];
-
-          postPatch = ''
-            cp ${./momtrop-Cargo.lock} Cargo.lock
-          '';
-
-          doCheck = false;
-        };
-
         glnis-gammaboard-api = python.pkgs.buildPythonPackage {
           pname = "glnis-gammaboard-api";
           version = "0.1.0";
@@ -197,7 +171,6 @@
             gvar
             vegas
             symbolica
-            momtrop
             madnis
           ];
 
@@ -287,7 +260,6 @@ WRAPPER
             export LD_LIBRARY_PATH="${libPath}:/run/opengl-driver/lib:''${LD_LIBRARY_PATH:-}"
             export PYO3_PYTHON="${runtime}/bin/python"
             export UV_PYTHON_DOWNLOADS=never
-            export SYMBOLICA_OEM_LICENSE="''${SYMBOLICA_OEM_LICENSE:-SYMBOLICA_OEM_GAMMALOOP}"
             export OMP_NUM_THREADS=''${OMP_NUM_THREADS:-64}
           '';
         };

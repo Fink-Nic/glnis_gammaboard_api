@@ -18,7 +18,6 @@ name = "generate_diagrams"
 # GL22 -> F.11 -> -9.1283e-05
 # GL26 -> F.4 ->  -1.47653e-04
 # GL30 -> F.7 ->  -1.18480e-04
-# Total: -1.3205e-04
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
@@ -69,7 +68,6 @@ commands = [
 name = "generate_integrands"
 commands = [
     "generate existing",
-    # "duplicate integrand -p epem_a_ttxh -i NLO --output_process_name epem_a_ttxh --output_integrand_name NLO_semi_inclusive",
     "save state -o"
 ]
 
@@ -91,9 +89,8 @@ commands = [
   "run set_model_parameters",
   "run set_differential_quantities",
   "run set_differential_observables",
-# "run set_differential_selectors",
   """
-  set process -p epem_a_ttxh -i NLO_$(graph_name:GL00) kv
+  set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" kv
     integrator.n_increase=100000
     integrator.n_start=100000
     integrator.n_max=10000000000
@@ -101,8 +98,8 @@ commands = [
     integrator.integrated_phase="real"
   """,
   """
-  integrate -p epem_a_ttxh -i NLO_$(graph_name:GL00) --n-cores 10
-         --target epem_a_ttxh@NLO_$(graph_name:GL00)=$(integration_target:+3.1908e-05),0.0
+  integrate -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" --n-cores 10
+         --target epem_a_ttxh@"$(integrand_name:NLO_GL00)"="$(integration_target:+3.1908e-05)",0.0
 				 --renderer ratatui
 				 --batch-size 10000
 				 --show-phase both
@@ -148,8 +145,8 @@ debug_cache = false
 generate_events = false
 store_additional_weights_in_event = false
 integral_unit = "picobarn"
-mu_r = 173.0
 m_uv = 173.0
+mu_r = 91.188
 
 [cli_settings.global.generation.evaluator]
 do_algebra = false
@@ -161,6 +158,13 @@ summed_function_map = true
 horner_iterations = 5
 cpe_iterations = 10
 
+[cli_settings.global.generation.compile]
+compilation_mode = "symjit"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 # The option below specifies the generation of threshold for the kinematics supplied
@@ -171,13 +175,6 @@ skip_thresholds_that_are_cuts = true
 [default_runtime_settings.subtraction]
 esurface_existence_threshold = 1.0e-7
 disable_threshold_subtraction = false
-
-[cli_settings.global.generation.compile]
-compilation_mode = "symjit"
-optimization_level = "O3"
-fast_math = true
-unsafe_math = true
-custom = []
 
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
@@ -230,7 +227,7 @@ escalate_for_large_weight_threshold = -1.0
 [[command_blocks]]
 name = "set_differential_quantities"
 commands = [
-  """set process -p epem_a_ttxh -i NLO string '
+  """set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" string '
 
 [quantities.integral]
 type = "integral"
@@ -362,45 +359,7 @@ computation = "scalar"
 pdgs = [25,]
 quantity = "CosTheta"
 '""",
-
-# """set process -p epem_a_ttxh -i NLO_semi_inclusive string '
-# 
-# [quantities.higgs_cos_theta]
-# type = "particle"
-# computation = "scalar"
-# pdgs = [25,]
-# quantity = "CosTheta"
-# 
-# [quantities.higgs_energy]
-# type = "particle"
-# computation = "scalar"
-# pdgs = [25,]
-# quantity = "E"
-# 
-# '"""
 ]
-
-# [[command_blocks]]
-# name = "set_differential_selectors"
-# commands = [
-#   """set process -p epem_a_ttxh -i NLO_semi_inclusive string '
-# 
-# [selectors.higgs_energy_cut]
-# quantity = "higgs_energy"
-# selector = "value_range"
-# entry_selection = "leading_only"
-# min = 250.0
-# max = 500.0
-# 
-# [selectors.higgs_cos_theta_cut]
-# quantity = "higgs_cos_theta"
-# selector = "value_range"
-# entry_selection = "leading_only"
-# min = -0.6
-# max = 0.6
-# 
-# '"""
-# ]
 
 [[command_blocks]]
 name = "set_differential_observables"

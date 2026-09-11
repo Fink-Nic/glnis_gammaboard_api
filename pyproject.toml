@@ -10,7 +10,6 @@ authors = [ { name = "Nic Fink", email = "nic.fink@students.unibe.ch" } ]
 
 dependencies = [
     "pytest",
-    "tomlkit>=0.10",
     "numpy>=2.2,<3",
     "torch>=2.6,<3",
     "vegas>=6.2",
@@ -19,7 +18,6 @@ dependencies = [
     "symbolica>=1.5.0",
     "gammaboard-process @ git+https://github.com/alphal00p/gammaboard.git@main#subdirectory=process_api/python",
     "madnis @ git+https://github.com/madgraph-ml/madnis.git@main",
-    "momtrop @ git+https://github.com/Fink-Nic/momtrop.git@main",
 ]
 
 [project.scripts]

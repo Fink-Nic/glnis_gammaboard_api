@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple
 from enum import Enum
 from dataclasses import dataclass, field
 
-import momtrop
+# import momtrop
 import numpy as np
 from numpy.typing import NDArray
 
@@ -355,180 +355,180 @@ class LayeredMapping:
         return ddim
 
 
-class MomtropMapping(Mapping):
-    """
-    Wrapper for the momtrop sampler (arxiv.org/abs/2504.09613) rust implementation.
-    """
+# class MomtropMapping(Mapping):
+#     """
+#     Wrapper for the momtrop sampler (arxiv.org/abs/2504.09613) rust implementation.
+#     """
 
-    IDENTIFIER = "momtrop"
+#     IDENTIFIER = "momtrop"
 
-    def __init__(
-        self,
-        edge_weight: float | List[float] | None = None,
-        sample_discrete: bool = True,
-        mask_redundant: bool = True,
-        **kwargs: Dict[str, Any],
-    ):
-        """
-        Args:
-            overwrite_edge_weight (float | List[float] | bool): Sets the propagator weights of the Feynman measure to sample from
-            sample_discrete (bool): Enable to expose the edge indices as a discrete input
-            mask_redundant (bool): If sample_discrete is enabled, will not expose the last (n_edges-1) continuous inputs
-        """
-        self.edge_weight = edge_weight
-        self.sample_discrete = sample_discrete
-        self.mask_redundant = mask_redundant and sample_discrete
-        self.gp: GraphProperties = kwargs["graph_properties"]
-        match self.edge_weight:
-            case int() | float():
-                self.edge_weight = self.gp.n_edges * [
-                    float(self.edge_weight)
-                ]
-            case [_, *_]:
-                if not len(self.edge_weight) == self.gp.n_edges:
-                    raise ValueError(
-                        "If provided as a sequence, the number of momtrop edge weights must match the number of propagators."
-                    )
-            case _:
-                default_weight = (
-                    (3 * self.gp.n_loops + 3 / 2)
-                    / self.gp.n_edges
-                    / 2
-                )
-                edge_weight = self.gp.n_edges * [default_weight]
+#     def __init__(
+#         self,
+#         edge_weight: float | List[float] | None = None,
+#         sample_discrete: bool = True,
+#         mask_redundant: bool = True,
+#         **kwargs: Dict[str, Any],
+#     ):
+#         """
+#         Args:
+#             overwrite_edge_weight (float | List[float] | bool): Sets the propagator weights of the Feynman measure to sample from
+#             sample_discrete (bool): Enable to expose the edge indices as a discrete input
+#             mask_redundant (bool): If sample_discrete is enabled, will not expose the last (n_edges-1) continuous inputs
+#         """
+#         self.edge_weight = edge_weight
+#         self.sample_discrete = sample_discrete
+#         self.mask_redundant = mask_redundant and sample_discrete
+#         self.gp: GraphProperties = kwargs["graph_properties"]
+#         match self.edge_weight:
+#             case int() | float():
+#                 self.edge_weight = self.gp.n_edges * [
+#                     float(self.edge_weight)
+#                 ]
+#             case [_, *_]:
+#                 if not len(self.edge_weight) == self.gp.n_edges:
+#                     raise ValueError(
+#                         "If provided as a sequence, the number of momtrop edge weights must match the number of propagators."
+#                     )
+#             case _:
+#                 default_weight = (
+#                     (3 * self.gp.n_loops + 3 / 2)
+#                     / self.gp.n_edges
+#                     / 2
+#                 )
+#                 edge_weight = self.gp.n_edges * [default_weight]
 
-        mt_edges = [
-            momtrop.Edge(tuple(src_dst), ismassive, weight)
-            for src_dst, ismassive, weight in zip(
-                self.gp.edge_src_dst_vertices,
-                self.gp.edge_ismassive,
-                self.edge_weight,
-            )
-        ]
-        assym_graph = momtrop.Graph(
-            mt_edges, self.gp.graph_external_vertices
-        )
-        momentum_shifts = [
-            momtrop.Vector(*shift)
-            for shift in self.gp.edge_momentum_shifts
-        ]
-        self.momtrop_edge_data = momtrop.EdgeData(
-            self.gp.edge_masses, momentum_shifts
-        )
-        self.momtrop_sampler = momtrop.Sampler(
-            assym_graph, self.gp.graph_signature
-        )
-        self.momtrop_sampler_settings = momtrop.Settings(False, False)
-        super().__init__(**kwargs)
+#         mt_edges = [
+#             momtrop.Edge(tuple(src_dst), ismassive, weight)
+#             for src_dst, ismassive, weight in zip(
+#                 self.gp.edge_src_dst_vertices,
+#                 self.gp.edge_ismassive,
+#                 self.edge_weight,
+#             )
+#         ]
+#         assym_graph = momtrop.Graph(
+#             mt_edges, self.gp.graph_external_vertices
+#         )
+#         momentum_shifts = [
+#             momtrop.Vector(*shift)
+#             for shift in self.gp.edge_momentum_shifts
+#         ]
+#         self.momtrop_edge_data = momtrop.EdgeData(
+#             self.gp.edge_masses, momentum_shifts
+#         )
+#         self.momtrop_sampler = momtrop.Sampler(
+#             assym_graph, self.gp.graph_signature
+#         )
+#         self.momtrop_sampler_settings = momtrop.Settings(False, False)
+#         super().__init__(**kwargs)
 
-    def _map_from_hcube(
-        self,
-        continuous: NDArray,
-        discrete: NDArray,
-    ) -> MappingOutput:
-        if self.mask_redundant:
-            continuous = np.hstack(
-                [
-                    continuous,
-                    np.zeros(
-                        (continuous.shape[0], self.gp.n_edges - 1),
-                        dtype=continuous.dtype,
-                    ),
-                ]
-            )
-        if discrete.size == 0:
-            samples = self.momtrop_sampler.sample_batch(
-                continuous,
-                self.momtrop_edge_data,
-                self.momtrop_sampler_settings,
-                None,
-            )
-        else:
-            samples = self.momtrop_sampler.sample_batch(
-                continuous,
-                self.momtrop_edge_data,
-                self.momtrop_sampler_settings,
-                self._get_graph_from_edges_removed(discrete),
-            )
+#     def _map_from_hcube(
+#         self,
+#         continuous: NDArray,
+#         discrete: NDArray,
+#     ) -> MappingOutput:
+#         if self.mask_redundant:
+#             continuous = np.hstack(
+#                 [
+#                     continuous,
+#                     np.zeros(
+#                         (continuous.shape[0], self.gp.n_edges - 1),
+#                         dtype=continuous.dtype,
+#                     ),
+#                 ]
+#             )
+#         if discrete.size == 0:
+#             samples = self.momtrop_sampler.sample_batch(
+#                 continuous,
+#                 self.momtrop_edge_data,
+#                 self.momtrop_sampler_settings,
+#                 None,
+#             )
+#         else:
+#             samples = self.momtrop_sampler.sample_batch(
+#                 continuous,
+#                 self.momtrop_edge_data,
+#                 self.momtrop_sampler_settings,
+#                 self._get_graph_from_edges_removed(discrete),
+#             )
 
-        jac = np.array(samples.jacobians, dtype=continuous.dtype).reshape(-1, 1)
-        momentum = np.array(samples.loop_momenta, dtype=continuous.dtype).reshape(
-            len(continuous), -1
-        )
+#         jac = np.array(samples.jacobians, dtype=continuous.dtype).reshape(-1, 1)
+#         momentum = np.array(samples.loop_momenta, dtype=continuous.dtype).reshape(
+#             len(continuous), -1
+#         )
 
-        return jac, momentum
+#         return jac, momentum
 
-    def _get_graph_from_edges_removed(
-        self, edges_removed: NDArray | None = None
-    ) -> List[List[int]]:
-        """
-        Args:
-            edges_removed: List of the edge indices that have already been removed from the graph
-        Returns:
-            List of shape (n_edges,) that appends the as-yet unforced edges to edges_removed
-        """
-        n_edges = self.gp.n_edges
-        n_points, k = edges_removed.shape
-        full_graph = np.arange(n_edges)
-        if edges_removed is None:
-            return [full_graph.tolist()]
-        if k > n_edges:
-            raise ValueError(f"Too many edges removed: {k} > {n_edges}")
+#     def _get_graph_from_edges_removed(
+#         self, edges_removed: NDArray | None = None
+#     ) -> List[List[int]]:
+#         """
+#         Args:
+#             edges_removed: List of the edge indices that have already been removed from the graph
+#         Returns:
+#             List of shape (n_edges,) that appends the as-yet unforced edges to edges_removed
+#         """
+#         n_edges = self.gp.n_edges
+#         n_points, k = edges_removed.shape
+#         full_graph = np.arange(n_edges)
+#         if edges_removed is None:
+#             return [full_graph.tolist()]
+#         if k > n_edges:
+#             raise ValueError(f"Too many edges removed: {k} > {n_edges}")
 
-        edges_removed = edges_removed.astype(np.uint64)
+#         edges_removed = edges_removed.astype(np.uint64)
 
-        if k == 0:
-            return np.tile(full_graph, (n_points, 1))
+#         if k == 0:
+#             return np.tile(full_graph, (n_points, 1))
 
-        result = np.empty((n_points, n_edges), dtype=np.uint64)
-        result[:, :k] = edges_removed
-        # Check if edges_removed contains duplicates, replace with arange, prior will be zero anyways
-        duplicate_mask = np.any(
-            np.diff(np.sort(edges_removed, axis=1), axis=1).reshape(n_points, -1) == 0,
-            axis=1,
-        )
-        if np.any(duplicate_mask):
-            edges_removed[duplicate_mask] = np.arange(k)
+#         result = np.empty((n_points, n_edges), dtype=np.uint64)
+#         result[:, :k] = edges_removed
+#         # Check if edges_removed contains duplicates, replace with arange, prior will be zero anyways
+#         duplicate_mask = np.any(
+#             np.diff(np.sort(edges_removed, axis=1), axis=1).reshape(n_points, -1) == 0,
+#             axis=1,
+#         )
+#         if np.any(duplicate_mask):
+#             edges_removed[duplicate_mask] = np.arange(k)
 
-        # If only one edge is left, we can directly return the result without masking (which is more expensive)
-        if k == n_edges - 1:
-            valid_sum = n_edges * (n_edges - 1) / 2
-            result[:, -1] = valid_sum - np.sum(edges_removed, axis=1)
-            return result
+#         # If only one edge is left, we can directly return the result without masking (which is more expensive)
+#         if k == n_edges - 1:
+#             valid_sum = n_edges * (n_edges - 1) / 2
+#             result[:, -1] = valid_sum - np.sum(edges_removed, axis=1)
+#             return result
 
-        # mask[i, j] == True ⇔ edge j is still available for sample i
-        mask = np.ones((n_points, n_edges), dtype=bool)
-        mask[np.arange(n_points).reshape(-1, 1), edges_removed] = False
+#         # mask[i, j] == True ⇔ edge j is still available for sample i
+#         mask = np.ones((n_points, n_edges), dtype=bool)
+#         mask[np.arange(n_points).reshape(-1, 1), edges_removed] = False
 
-        # shape: (n, n_edges - k)
-        remaining = np.nonzero(mask)[1].reshape(n_points, -1)
-        result[:, k:] = remaining
+#         # shape: (n, n_edges - k)
+#         remaining = np.nonzero(mask)[1].reshape(n_points, -1)
+#         result[:, k:] = remaining
 
-        return result
+#         return result
 
-    def _prior_prob_function(self, indices: NDArray) -> NDArray:
-        return np.array(self.momtrop_sampler.predict_discrete_probs(indices.tolist()))
+#     def _prior_prob_function(self, indices: NDArray) -> NDArray:
+#         return np.array(self.momtrop_sampler.predict_discrete_probs(indices.tolist()))
 
-    def _get_continuous_dims(self, input_space: Space) -> int:
-        match input_space:
-            case Space.HCUBE:
-                if self.mask_redundant:
-                    return (
-                        self.momtrop_sampler.get_dimension() - self.gp.n_edges + 1
-                    )
-                return self.momtrop_sampler.get_dimension()
-            case Space.MOMENTUM:
-                return self.N_SPATIAL_DIMS * self.gp.n_loops
-            case _:
-                raise ValueError(f"Unknown input space: {input_space}")
+#     def _get_continuous_dims(self, input_space: Space) -> int:
+#         match input_space:
+#             case Space.HCUBE:
+#                 if self.mask_redundant:
+#                     return (
+#                         self.momtrop_sampler.get_dimension() - self.gp.n_edges + 1
+#                     )
+#                 return self.momtrop_sampler.get_dimension()
+#             case Space.MOMENTUM:
+#                 return self.N_SPATIAL_DIMS * self.gp.n_loops
+#             case _:
+#                 raise ValueError(f"Unknown input space: {input_space}")
 
-    def _get_discrete_cardinalities(self) -> List[int]:
-        if not self.sample_discrete:
-            return []
-        n_edges = self.gp.n_edges
-        if self.mask_redundant:
-            return (n_edges - 1) * [n_edges]
-        return n_edges * [n_edges]
+#     def _get_discrete_cardinalities(self) -> List[int]:
+#         if not self.sample_discrete:
+#             return []
+#         n_edges = self.gp.n_edges
+#         if self.mask_redundant:
+#             return (n_edges - 1) * [n_edges]
+#         return n_edges * [n_edges]
 
 
 class SphericalMapping(Mapping):

@@ -52,23 +52,6 @@
         "type": "github"
       }
     },
-    "momtrop-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1770198557,
-        "narHash": "sha256-27eezPLfkh3CQQn5ghnHk7PkjZh1DEnGOK+dQTxyeeQ=",
-        "owner": "Fink-Nic",
-        "repo": "momtrop",
-        "rev": "13720948dc3ff2da379303c8052cd2f25379108a",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Fink-Nic",
-        "ref": "main",
-        "repo": "momtrop",
-        "type": "github"
-      }
-    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1778274207,
@@ -90,7 +73,6 @@
         "flake-utils": "flake-utils",
         "gammaboard-src": "gammaboard-src",
         "madnis-src": "madnis-src",
-        "momtrop-src": "momtrop-src",
         "nixpkgs": "nixpkgs"
       }
     },
