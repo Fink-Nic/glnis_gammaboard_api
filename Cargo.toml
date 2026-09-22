@@ -9,8 +9,8 @@ path = "src/rust/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-gammalooprs = { git = "https://github.com/alphal00p/gammaloop.git", branch = "ir_safe_threshold_subtraction", package = "gammalooprs" }
-gammaloop_api = { git = "https://github.com/alphal00p/gammaloop.git", branch = "ir_safe_threshold_subtraction", package = "gammaloop-api", default-features = false, features = ["cli", "no_pyo3"] }
+gammalooprs = { git = "https://github.com/alphal00p/gammaloop.git", rev = "49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01", package = "gammalooprs" }
+gammaloop_api = { git = "https://github.com/alphal00p/gammaloop.git", rev = "49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01", package = "gammaloop-api", default-features = false, features = ["cli", "no_pyo3"] }
 pyo3 = { version = "0.28", features = ["extension-module"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -18,9 +18,7 @@ accumulator = "scalar"
 [[task_queue]]
 name = "madnis-train"
 kind = "sample"
-
-[task_queue.stop_condition]
-max_samples = 200000
+stop_condition = { max_samples = 200000 }
 
 [task_queue.sampler_aggregator.config]
 kind = "process_sampler"

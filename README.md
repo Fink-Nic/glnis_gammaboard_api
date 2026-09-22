@@ -1,33 +1,23 @@
 # glNIS GammaBoard API
 
 MadNIS sampler implementation for GammaBoard using the
-`gammaboard_process.run_sampler(...)` Python wrapper. Includes support for parameterisation schemes.
+`gammaboard_process.run_sampler(...)` Python wrapper. Includes support for additional coordinate mappings schemes that allow the direct sampling of momentum space.
 
 ## Runtime Options
 
-### Direct venv
+### Nix
 
-For local demos or machines where Apptainer is not available, install the
-sampler directly into a virtual environment under this integration directory:
+Build the project environment:
 
 ```bash
-uv venv --python 3.13 --seed .venv
-. .venv/bin/activate
-python -m pip install .
+nix build .#runtime
 ```
 
 Use this GammaBoard process command:
 
 ```toml
-command = ["$resources/../integrations/glnis_gammaboard_api/.venv/bin/glnis-gammaboard-sampler"]
+command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
 cwd = "$resources/.."
-```
-
-With `cwd = "$resources/.."`, sampler `save_path` values should be relative to
-the GammaBoard workspace, for example:
-
-```toml
-save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
 ```
 
 ### Apptainer
@@ -51,17 +41,35 @@ command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind"
 cwd = "$resources/.."
 ```
 
-Nix is still supported where available:
+### Direct venv 
+
+Install in editable mode for convenient python development without rebuilding the project:
 
 ```bash
-nix build .#runtime
+uv venv --python 3.13 --seed .venv
+uv pip install -e .
+source .venv/bin/activate
 ```
+
+Use this GammaBoard process command:
+
+```toml
+command = ["$resources/../integrations/glnis_gammaboard_api/.venv/bin/glnis-gammaboard-sampler"]
+cwd = "$resources/.."
+```
+
+With `cwd = "$resources/.."`, sampler `save_path` values should be relative to
+the GammaBoard workspace, for example:
+
+```toml
+save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
+```
+
 
 ## Use With GammaBoard
 
 `examples/ghost_bump_madnis.toml` is a ready-to-copy run template. It uses the
-direct venv command by default and keeps Apptainer and Nix alternatives
-commented next to it.
+nix build command by default.
 
 The sampler command uses `$resources/..` because GammaBoard expands
 `$resources` to the default resource directory. Sampler `args` are passed

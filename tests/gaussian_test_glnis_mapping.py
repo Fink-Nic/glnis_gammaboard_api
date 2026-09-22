@@ -45,9 +45,7 @@ config = MadnisConfig(
     )
 )
 
-mapping_kwargs = [dict(
-        kind="ose",
-    )]
+mapping_kwargs = { "layer_cfgs": [ { "kind": "ose" } ] }
 
 graph_properties = dict(
     edge_masses=[0.0, 0.0],
@@ -55,6 +53,7 @@ graph_properties = dict(
     graph_signature=[[1], [1]],
     e_cm=1.0,
     lmb_edges=[[0], [1]],
+    generation_lmb_edges=[0],
 )
 
 

@@ -194,6 +194,7 @@ class LayeredMapping:
         self.continuous_dims_out = self._get_continuous_dims_out()
         self.discrete_cardinalities = self._get_discrete_cardinalities()
         self.num_discrete_dims = len(self.discrete_cardinalities)
+        self.graph_properties = graph_properties
 
     def discrete_prior_prob_function(self, discrete: NDArray, dim: int = 0) -> NDArray:
         if discrete.shape[1] == len(self.discrete_cardinalities):
@@ -1042,7 +1043,7 @@ class OSEMCLayer(MCLayer):
         )
         norm_factor = np.zeros_like(mc_weight)
         for ch in range(self.gp.n_channels):
-            transform = self.gp.channel_transforms[ch] @ self.gp.generation_channel_inv_transform
+            transform = self.gp.channel_transforms[ch] @ self.gp.generation_inv_transform
             shift = self.gp.channel_momentum_shifts[ch]
             mass = self.gp.channel_masses[ch]
             weight = np.prod(  # Multiply for each loop
@@ -1115,7 +1116,7 @@ class FermiMCLayer(MCLayer):
 
         norm_factor = np.zeros_like(mc_weight)
         for ch in range(self.gp.n_channels):
-            transform = self.gp.channel_transforms[ch] @ self.gp.generation_channel_inv_transform
+            transform = self.gp.channel_transforms[ch] @ self.gp.generation_inv_transform
             shift = self.gp.channel_momentum_shifts[ch]
             mass = self.gp.channel_masses[ch]
             mu = self.gp.channel_mu[ch]
@@ -1175,9 +1176,6 @@ class JacMCLayer(MCLayer):
         )
         norm_factor = np.zeros_like(mc_weight)
         for ch in range(self.gp.n_channels):
-            transform = self.gp.channel_transforms[ch] @ self.gp.generation_channel_inv_transform
-            shift = self.gp.channel_momentum_shifts[ch]
-            mass = self.gp.channel_masses[ch]
             weight = np.power(
                 self._jac_from_momentum(
                     momentum, np.full_like(discrete, ch)

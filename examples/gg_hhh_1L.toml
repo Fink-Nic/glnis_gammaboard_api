@@ -1,25 +1,11 @@
 # =============================================================================
 # gg -> HHH @ 1L amplitude, sqrt(s) = 1000 GeV  --  GammaLoop engine
 # =============================================================================
-#
-# -----------------------------------------------------------------------------
-# ARTIFACT -- GammaLoop state for gg -> HHH @ 1L
-# -----------------------------------------------------------------------------
-# The CLI example card ships with the gammaloop checkout. Generate the state and
-# copy it under resources/states so the relative state_folder below resolves:
-#
-#   cd /home/cedricsigrist/Workspace/repos/gammaloop
-#   ./gammaloop --clean-state ./examples/cli/gg_hhh/1L/gg_hhh.toml \
-#       run generate integrate -c "quit -o"
-#   mkdir -p /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/gg_hhh/1L
-#   cp -r ./examples/cli/gg_hhh/1L/state/ \
-#       /home/cedricsigrist/Workspace/repos/gammaboard/resources/states/gg_hhh/1L/
-# =============================================================================
 
-replacements = { run_name = "gg_hhh_1_L_madnis", train_samples = 200000, sample_samples = 10000000, max_batch_size = 100000 }
+replacements = { run_name = "gg_hhh_1_L_madnis", train_samples = 200000, sample_samples = 10000000, max_batch_size = 100000, training_steps = 200, training_batch_size = 1000 }
 
 name = '$(run_name:"gg_hhh_1L_madnis")'
-target = { kind = "vector", components = { real = -5.4660399e-6, imag = -1.892036e-6 } }
+target = { kind = "vector", components = { real = 5.4660399e-6, imag = 1.892036e-6 } }
 
 [evaluator]
 kind = "gammaloop"
@@ -45,7 +31,7 @@ accumulator = "latest"
 kind = "process_sampler"
 # command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
 # Alternative with Apptainer when the host supports Apptainer/SIF execution:
-# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../../glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
 # Alternative with the Nix runtime when Nix is available:
 command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
 cwd = "$resources/.."
@@ -53,8 +39,8 @@ requires_training_values = true
 
 [task_queue.sampler_aggregator.config.args]
 seed = 0
-training_steps = 200
-training_batch_size = 1000
+training_steps = "$(training_steps:200)"
+training_batch_size = "$(training_batch_size:1000)"
 use_gpu = true
 cuda_id = 0
 save_path = "integrations/glnis_gammaboard_api/checkpoints/gg_hhh_1L_madnis"
@@ -74,7 +60,7 @@ stop_condition = { max_samples = "$(sample_samples:10000000)" }
 sampler_aggregator = { from_name = "madnis-train" }
 
 [task_queue.queue_tuning]
-target_batch_eval_ms = 1000.0
+target_batch_eval_ms = 200.0
 max_batch_size = "$(max_batch_size:10000)"
 
 [[task_queue]]
@@ -83,6 +69,7 @@ kind = "pdf_adaptation_image"
 sampler_aggregator = { from_name = "madnis-train" }
 
 [task_queue.geometry]
+discrete = [0, 0]
 offset = [0.0, 0.0, 0.0]
 u_vector = [138.52981118,  29.28692941, -79.89016993]
 v_vector = [-155.33220018, -348.01603965,  177.37736157]

@@ -123,6 +123,22 @@ class GraphProperties:
                 (self.n_loops, self.n_loops), dtype=np.float64
             )
 
+    def as_init_dict(self: "GraphProperties") -> Dict[str, Any]:
+        return dict(
+            edge_masses=self.edge_masses.tolist(),
+            edge_momentum_shifts=self.edge_momentum_shifts.tolist(),
+            graph_signature=self.graph_signature.tolist(),
+            generation_lmb_edges=self.generation_lmb_edges.tolist(),
+            lmb_edges=self.lmb_edges.tolist(),
+            graph_external_vertices=self.graph_external_vertices,
+            edge_src_dst_vertices=self.edge_src_dst_vertices,
+            edge_external_sigs=self.edge_external_sigs,
+            external_momenta=self.external_momenta,
+            orientation_ids=self.orientation_ids,
+            orientation_signatures=self.orientation_signatures,
+            e_cm=self.e_cm,
+        )
+
     def to_generation_lmb_rep(
         self, momenta: NDArray, channel: NDArray
     ) -> NDArray:

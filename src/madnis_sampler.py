@@ -258,7 +258,6 @@ class MadnisSampler(Sampler):
                 graph_properties=graph_properties,
             )
             self.mapping = Parser.get_layered_mapping_instance(mapping)
-            # log(self.mapping.param.graph_properties)
         else:
             self.mapping = None
 
@@ -281,6 +280,25 @@ class MadnisSampler(Sampler):
         self.discrete_cardinalities = [
             int(cardinality) for cardinality in self.discrete_cardinalities
         ]
+        if self.mapping is not None:
+            if self.cfg.condition_integrand_first:
+                all_discrete_cardinalities = (
+                    self.discrete_cardinalities + self.mapping.discrete_cardinalities
+                )
+            else:
+                all_discrete_cardinalities = (
+                    self.mapping.discrete_cardinalities + self.discrete_cardinalities
+                )
+        else:
+            all_discrete_cardinalities = self.discrete_cardinalities
+        self._all_discrete_cardinalities = [int(c) for c in all_discrete_cardinalities]
+        self._sampled_discrete_indices = np.flatnonzero(
+            np.asarray(self._all_discrete_cardinalities) > 1
+        )
+        self._sampled_discrete_cardinalities = [
+            self._all_discrete_cardinalities[i] for i in self._sampled_discrete_indices
+        ]
+        self.num_discrete_dims = len(self._all_discrete_cardinalities)
         if self.continuous_dims <= 0:
             raise ValueError("continuous_dims must be > 0")
 
@@ -347,9 +365,9 @@ class MadnisSampler(Sampler):
             mapping = (
                 init_args.pop("mapping", None) if init_args else None
             )
-            graph_properties = (
-                init_args.pop("graph_properties", None) if init_args else None
-            )
+            graph_properties = snapshot.get("graph_properties")
+            if graph_properties is None:
+                graph_properties = init_args.get("graph_properties") if init_args else None
 
             instance = cls(
                 discrete_cardinalities=discrete_cardinalities,
@@ -495,9 +513,9 @@ class MadnisSampler(Sampler):
             produced_samples=self.produced_samples,
             step=self.step,
             save_path=self.cfg.save_path,
-            last_loss=0.0,
+            last_loss=0.0 if self.last_loss is None else self.last_loss,
+            graph_properties=self.mapping.graph_properties.as_init_dict() if self.mapping is not None else None,
         )
-        # log(snapshot)
         # if self.last_loss is not None:
         #     snapshot["last_loss"] = self.last_loss
         return snapshot
@@ -554,8 +572,6 @@ class MadnisSampler(Sampler):
         training_values = np.asarray(training_values)
         self.pending_weights.append(training_values)
 
-        # log(f"{training_values[:10]=}")
-
         f_lens = [len(w) for w in self.pending_weights]
         x_lens = [len(s) for s in self.pending_training_samples]
         p_lens = [len(p) for p in self.pending_training_probs]
@@ -589,11 +605,12 @@ class MadnisSampler(Sampler):
             xs_continuous = np.zeros((n_samples, 0), dtype=xs_discrete.dtype)
         
         _, continuous, prob = self._apply_mapping(xs_discrete, xs_continuous, np.ones(n_samples, dtype=np.float64), inverse=True)
+        sampled_discrete = xs_discrete[:, self._sampled_discrete_indices]
         prob = prob.flatten()
         if self.madnis.integrand.discrete_dims_position == "first":
-            x_all = np.hstack([xs_discrete, xs_continuous])
+            x_all = np.hstack([sampled_discrete, xs_continuous])
         elif self.madnis.integrand.discrete_dims_position == "last":
-            x_all = np.hstack([xs_continuous, xs_discrete])
+            x_all = np.hstack([xs_continuous, sampled_discrete])
         else:
             raise ValueError(
                 f"Invalid discrete_dims_position: {self.madnis.integrand.discrete_dims_position}"
@@ -697,33 +714,35 @@ class MadnisSampler(Sampler):
         Implements a default flat prior.
         """
         num_disc_input = indices.shape[1]
-        if num_disc_input == self.num_discrete_dims:
+        if num_disc_input == len(self._sampled_discrete_cardinalities):
             return torch.zeros(indices.shape, dtype=torch.float64, device=self.device)
 
-        indices = indices.numpy(force=True).astype(np.uint64)
-
+        full_dim = int(self._sampled_discrete_indices[num_disc_input])
         if self.mapping is not None:
-            if self.cfg.condition_integrand_first:
-                n_dim = len(self.discrete_cardinalities)
-                prior1: Callable = self._flat_discrete_prior_prob_function
-                prior2: Callable = self.mapping.discrete_prior_prob_function
-            else:
-                n_dim = len(self.mapping.discrete_cardinalities)
-                prior1: Callable = self.mapping.discrete_prior_prob_function
-                prior2: Callable = self._flat_discrete_prior_prob_function
-
-            if dim < n_dim:
-                return torch.from_numpy(prior1(indices, dim).astype(np.float64)).to(
-                    device=self.device
+            mapping_start = (
+                len(self.discrete_cardinalities)
+                if self.cfg.condition_integrand_first else 0
+            )
+            mapping_end = mapping_start + len(self.mapping.discrete_cardinalities)
+            if mapping_start <= full_dim < mapping_end:
+                # Mapping priors still use the original dimension numbering and
+                # expect a prefix with constant dimensions restored as zeros.
+                full_indices = np.zeros((len(indices), full_dim), dtype=np.uint64)
+                full_indices[:, self._sampled_discrete_indices[:num_disc_input]] = (
+                    indices.numpy(force=True)
                 )
+                prior = self.mapping.discrete_prior_prob_function(
+                    full_indices[:, mapping_start:], full_dim - mapping_start
+                )
+                return torch.from_numpy(prior.astype(np.float64)).to(device=self.device)
 
-            return torch.from_numpy(
-                prior2(indices[:, n_dim:], dim - n_dim).astype(np.float64)
-            ).to(device=self.device)
-
-        return torch.from_numpy(
-            self._flat_discrete_prior_prob_function(indices, dim).astype(np.float64)
-        ).to(device=self.device)
+        disc_dim = self._sampled_discrete_cardinalities[num_disc_input]
+        return torch.full(
+            (len(indices), disc_dim),
+            1.0 / disc_dim,
+            dtype=torch.float64,
+            device=self.device,
+        )
 
     def _flat_discrete_prior_prob_function(
         self, indices: NDArray, dim: int = 0
@@ -744,26 +763,29 @@ class MadnisSampler(Sampler):
         )
 
     def _madnis_output_to_disc_cont(self, x_all: Tensor) -> Tuple[NDArray, NDArray]:
+        n_discrete = len(self._sampled_discrete_cardinalities)
         if self.madnis.integrand.discrete_dims_position == "first":
-            discrete = x_all[:, : self.num_discrete_dims].numpy(force=True)
-            continuous = x_all[:, self.num_discrete_dims:].numpy(force=True)
+            sampled_discrete = x_all[:, :n_discrete].numpy(force=True)
+            continuous = x_all[:, n_discrete:].numpy(force=True)
         else:
-            discrete = x_all[:, -self.num_discrete_dims:].numpy(force=True)
-            continuous = x_all[:, : -self.num_discrete_dims].numpy(force=True)
+            sampled_discrete = (
+                x_all[:, -n_discrete:].numpy(force=True)
+                if n_discrete
+                else np.zeros((len(x_all), 0), dtype=np.float64)
+            )
+            continuous = (
+                x_all[:, :-n_discrete].numpy(force=True)
+                if n_discrete
+                else x_all.numpy(force=True)
+            )
+        discrete = np.zeros(
+            (len(x_all), self.num_discrete_dims), dtype=sampled_discrete.dtype
+        )
+        discrete[:, self._sampled_discrete_indices] = sampled_discrete
         return discrete, continuous
 
     def _get_madnis_integrand(self) -> Integrand:
-        if self.mapping is not None:
-            if self.cfg.condition_integrand_first:
-                discrete_cardinalities = (
-                    self.discrete_cardinalities + self.mapping.discrete_cardinalities
-                )
-            else:
-                discrete_cardinalities = (
-                    self.mapping.discrete_cardinalities + self.discrete_cardinalities
-                )
-        else:
-            discrete_cardinalities = self.discrete_cardinalities
+        discrete_cardinalities = self._sampled_discrete_cardinalities
         return Integrand(
             function=self._madnis_eval,
             input_dim=self.continuous_dims + len(discrete_cardinalities),

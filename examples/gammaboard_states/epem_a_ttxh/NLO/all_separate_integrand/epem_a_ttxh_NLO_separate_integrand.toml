@@ -18,6 +18,7 @@ name = "generate_diagrams"
 # GL22 -> F.11 -> -9.1283e-05
 # GL26 -> F.4 ->  -1.47653e-04
 # GL30 -> F.7 ->  -1.18480e-04
+# total -> MG5aMC -> -1.3205e-4
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
@@ -68,6 +69,10 @@ commands = [
 name = "generate_integrands"
 commands = [
     "generate existing",
+    "run set_model_parameters",
+    "run set_differential_quantities",
+    "run set_differential_observables",
+    "set process -p epem_a_ttxh -i NLO_GL30 kv general.m_uv=10.0",
     "save state -o"
 ]
 
@@ -87,8 +92,6 @@ commands = [
 name = "integrate"
 commands = [
   "run set_model_parameters",
-  "run set_differential_quantities",
-  "run set_differential_observables",
   """
   set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" kv
     integrator.n_increase=100000
@@ -186,7 +189,7 @@ debug_cache = false
 generate_events = false
 store_additional_weights_in_event = false
 integral_unit = "picobarn"
-m_uv = 173.0
+m_uv = 91.188
 mu_r = 91.188
 
 [default_runtime_settings.integrator]
@@ -275,6 +278,38 @@ escalate_for_large_weight_threshold = -1.0
 
 [[command_blocks]]
 name = "set_differential_quantities"
+commands = [
+    "run -D integrand_name=NLO_GL00 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL02 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL06 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL08 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL10 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL12 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL18 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL20 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL22 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL26 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL30 set_differential_quantities_single",
+]
+
+[[command_blocks]]
+name = "set_differential_observables"
+commands = [
+    "run -D integrand_name=NLO_GL00 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL02 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL06 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL08 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL10 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL12 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL18 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL20 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL22 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL26 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL30 set_differential_observables_single",
+]
+
+[[command_blocks]]
+name = "set_differential_quantities_single"
 commands = [
   """set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" string '
 
@@ -411,7 +446,7 @@ quantity = "CosTheta"
 ]
 
 [[command_blocks]]
-name = "set_differential_observables"
+name = "set_differential_observables_single"
 commands = [
   """set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" string '
 

@@ -46,8 +46,8 @@
         gammaloopSource = pkgs.fetchFromGitHub {
           owner = "alphal00p";
           repo = "gammaloop";
-          rev = "6c3b1ff79c34a5e34e424ddd51dd218105b48f53";
-          hash = "sha256-xNpGUHYKbvrCVz+XZ2M+2+dOy9Ez5xCimuzoHRV96aE=";
+          rev = "49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01";
+          hash = "sha256-hCIbeBQlN3dY7lUgOKjigPWrnfomH/YKVZwss4SOzSg=";
         };
 
         madnis = python.pkgs.buildPythonPackage {
@@ -149,7 +149,7 @@
 
           cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
             src = projectSource;
-            hash = "sha256-n5TeBUMPqcXqtTWBI7QZXA8cvUGXWDV8dDXb6ZZZleQ=";
+            hash = "sha256-abLGfgpofxDF4OK0xKDFGqDfLQknu938hKL0hDTeHg8=";
           };
 
           nativeBuildInputs = (with pkgs.rustPlatform; [

@@ -253,9 +253,9 @@ dependencies = [
 
 [[package]]
 name = "base62"
-version = "2.2.4"
+version = "2.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd637ac531c60eb7fbc4684dc061c2d7d90d73d758181aa02eeff0464b9eee4b"
+checksum = "a3a647dce9631f152a99ec16cfc09267ae55fe280d5dc288964027d458076323"
 
 [[package]]
 name = "base64"
@@ -318,9 +318,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.13.1"
+version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
+checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 dependencies = [
  "serde_core",
 ]
@@ -484,9 +484,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.4.5"
+version = "1.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "005ec2760ca554fae18df7a11195552ec576cd665632a881bc011d5bb2fd4d80"
+checksum = "a3eb0f42d6c360dc3f8a821f6bf2fdea7f72bfd36b3076eb0e6d1e9e0752fff4"
 dependencies = [
  "find-msvc-tools",
  "shlex 2.0.1",
@@ -547,9 +547,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.6"
+version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "473c7e07f409a8d772161724aa8db6a765a2532a70f9667eeb7b49d3d02fbdca"
+checksum = "aa8876b300ab35ba921adea3dfd70157a46249b33f95c9084ae5709785478946"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -557,9 +557,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.6.6"
+version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b48fea5a88e9ae728a2dcbedbfc0e730f7d60da42e1cb049a83c9fb8b789889"
+checksum = "ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d"
 dependencies = [
  "anstream",
  "anstyle",
@@ -572,9 +572,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.6.9"
+version = "4.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3be2ad0423bdbbb0e25bc89add796f3559706d4a95e1bc98e4d9662a957b6a19"
+checksum = "78ab9a1a7094014a0d0813f8e7c5a0058ad8fe6cf7475b9151364259f5a35d0f"
 dependencies = [
  "clap",
 ]
@@ -591,9 +591,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.6.4"
+version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d012d2b9d65aca7f18f4d9878a045bc17899bba951561ba5ec3c2ba1eed9a061"
+checksum = "f9c751b79415d4e559e3d1fcf128e09e720eb673a06d26cf6f392d37d75b66e0"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -603,9 +603,9 @@ dependencies = [
 
 [[package]]
 name = "clap_lex"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
+checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "clarabel"
@@ -695,9 +695,9 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.16.4"
+version = "0.16.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fe5f465a4f6fee88fad41b85d990f84c835335e85b5d9e6e63e0d06d28cba7c"
+checksum = "e96a4956774c13c126a8b5af4daa79384f4d826534c95a02d76afb39e2ab64e3"
 dependencies = [
  "encode_unicode",
  "libc",
@@ -864,7 +864,7 @@ version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "829d955a0bb380ef178a640b91779e3987da38c9aea133b20614cfed8cdea9c6"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "crossterm_winapi",
  "mio",
  "parking_lot",
@@ -881,7 +881,7 @@ version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "crossterm_winapi",
  "derive_more 2.1.1",
  "document-features",
@@ -1208,7 +1208,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e0e367e4e7da84520dedcac1901e4da967309406d1e51017ae1abfb97adbd38"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "block2",
  "libc",
  "objc2",
@@ -1480,7 +1480,7 @@ dependencies = [
 [[package]]
 name = "gammaloop-api"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "ahash",
  "bincode",
@@ -1537,7 +1537,7 @@ dependencies = [
 [[package]]
 name = "gammaloop-tracing-filter"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "chrono",
  "clap",
@@ -1558,7 +1558,7 @@ dependencies = [
 [[package]]
 name = "gammaloop-tracing-filter-macros"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1567,14 +1567,14 @@ dependencies = [
 [[package]]
 name = "gammaloop-workspace-hack"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "ahash",
  "aho-corasick",
  "anstream",
  "arrayvec",
  "bincode",
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "bitvec",
  "chrono",
  "clap",
@@ -1635,7 +1635,7 @@ dependencies = [
 [[package]]
 name = "gammalooprs"
 version = "0.3.4"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "ahash",
  "base62",
@@ -1899,7 +1899,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.3.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "base64",
  "bincode",
@@ -1998,7 +1998,7 @@ dependencies = [
  "serde",
  "similar",
  "tempfile",
- "toml_edit 0.25.13+spec-1.1.0",
+ "toml_edit 0.25.15+spec-1.1.0",
  "toml_writer",
 ]
 
@@ -2103,9 +2103,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jiff"
-version = "0.2.35"
+version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "668b7183bd07af9a4885f5c35b0cc5c83c4607a913c16b7e17291832910d2dcc"
+checksum = "0ab1baf72f08796de0260609515130699b890ac25f30e610ad894bc5856cafdb"
 dependencies = [
  "defmt",
  "jiff-core",
@@ -2118,18 +2118,19 @@ dependencies = [
 
 [[package]]
 name = "jiff-core"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7feca88439efe53da3754500c1851dedf3cb36c524dd5cf8225cc0794de95d09"
+checksum = "5e52fe76043ccecc9005d2305ebaadf7d7fc0cc89ca6baa10a94d6bc68c7128c"
 dependencies = [
  "defmt",
+ "log",
 ]
 
 [[package]]
 name = "jiff-static"
-version = "0.2.35"
+version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a69dcb3a21cfb32ce1cd056169337ca284af0766dd766e7878819b251a49204"
+checksum = "378268a1116ad67ae6228701118ac9f491d78fda38a40a1f1a9e1348de6f7212"
 dependencies = [
  "jiff-core",
  "proc-macro2",
@@ -2212,9 +2213,9 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libredox"
-version = "0.1.23"
+version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d8f1ea3f21fd3405dcaf6c9b5c1630af9afc422d9073ea39c5f6d6c772e08ed"
+checksum = "6480ccc157a1389bb2e4891b24751b0f798ba640d22386f23143fbcc89da195a"
 dependencies = [
  "libc",
 ]
@@ -2225,13 +2226,13 @@ version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e752191d037c44ad111a8caa762921926658402f01cc1253f7bef2020ece4f5e"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
 ]
 
 [[package]]
 name = "linnet"
 version = "0.17.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "ahash",
  "bincode",
@@ -2503,7 +2504,7 @@ version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "cfg-if",
  "cfg_aliases",
  "libc",
@@ -2516,7 +2517,7 @@ version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "cfg-if",
  "cfg_aliases",
  "libc",
@@ -2673,7 +2674,7 @@ dependencies = [
  "serde",
  "simba 0.9.1",
  "smallvec",
- "wide 1.7.0",
+ "wide 1.7.1",
  "xprec",
 ]
 
@@ -3282,7 +3283,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cbb175c433c8e28a809d1f5773a2ae96e68c0ce40db865cbab1020bf33ae479c"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "compact_str",
  "critical-section",
  "hashbrown 0.17.1",
@@ -3348,7 +3349,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66e3d19bcc9130ca376277d93b60767ff121ace3be06f5f95f81dd68956407d1"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "hashbrown 0.17.1",
  "indoc",
  "instability",
@@ -3394,7 +3395,7 @@ version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
 ]
 
 [[package]]
@@ -3507,7 +3508,7 @@ version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81116b9531d61eabc41aeb228e4b6b2435bcca3233b98cf3b3077d4e6e9debb3"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "once_cell",
  "serde",
  "serde_derive",
@@ -3602,7 +3603,7 @@ version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
@@ -3615,7 +3616,7 @@ version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
@@ -3961,9 +3962,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.16.0"
+version = "1.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9be42f50aa861c555654aa3a37f52f4b1074bacf4e48fe0ef7fa584e80f1f0f"
+checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
 dependencies = [
  "serde",
 ]
@@ -3989,7 +3990,7 @@ checksum = "02ef091d4e8b981dbaa4cc17789d00b53d5d2c001ae689f14e6093f30c529036"
 [[package]]
 name = "spenso"
 version = "0.6.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -4032,7 +4033,7 @@ dependencies = [
 [[package]]
 name = "spenso-hep-lib"
 version = "0.1.7"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "ahash",
  "gammaloop-workspace-hack",
@@ -4046,7 +4047,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.3.2"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4190,13 +4191,13 @@ dependencies = [
  "tinyjson",
  "tracing",
  "tracing-subscriber",
- "wide 1.7.0",
+ "wide 1.7.1",
 ]
 
 [[package]]
 name = "symbolica-utils"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "bincode",
  "bincode-trait-derive",
@@ -4207,9 +4208,9 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.24.1"
+version = "2.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c1ead707a367a48f864f40b8c42a4882c0a9f0a2f183611e86a6e8cfe353da9"
+checksum = "97114f6aba423d7a6a1336992ce0e5140e56a5176cce1a72ab252b5560ede2fe"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4226,9 +4227,9 @@ dependencies = [
  "serde",
  "serde_json",
  "spec_math",
- "toml 1.1.5+spec-1.1.0",
+ "toml 1.1.6+spec-1.1.0",
  "wasmtime-jit-icache-coherence",
- "wide 1.7.0",
+ "wide 1.7.1",
  "windows-sys 0.61.2",
 ]
 
@@ -4342,7 +4343,7 @@ version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9048a889effe34a5cddee0af7f53285198b16dca3be510858d38dfdb3e62a04e"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "parking_lot",
  "rustix 1.1.4",
  "signal-hook",
@@ -4388,7 +4389,7 @@ checksum = "4676b37242ccbd1aabf56edb093a4827dc49086c0ffd764a5705899e0f35f8f7"
 dependencies = [
  "anyhow",
  "base64",
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "fancy-regex",
  "filedescriptor",
  "finl_unicode",
@@ -4484,7 +4485,7 @@ dependencies = [
 [[package]]
 name = "three-dimensional-reps"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "bincode",
  "bincode-trait-derive",
@@ -4595,9 +4596,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.1.5+spec-1.1.0"
+version = "1.1.6+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12c0ba9680044b4ce98d391a62094047eada0d64860b80166c39f4a6b5640785"
+checksum = "920602543f0911ab71da12c50d59701da54c196d1a2bf5cb4b75667f137a406a"
 dependencies = [
  "indexmap",
  "serde_core",
@@ -4651,9 +4652,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.25.13+spec-1.1.0"
+version = "0.25.15+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6975367e4d2ef766d86af01ffad14b622fecc8d4357a998fbc4deb6e9bacaf9b"
+checksum = "1340ea94a5856333492c9064b02c778b191dd2c853778d9609debdcdfea3a614"
 dependencies = [
  "indexmap",
  "serde_core",
@@ -4893,9 +4894,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.26.0"
+version = "1.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5772d71c9be8a8a6ac2117d949c5b224c1b72241bb611d9a3012edcf8af7812"
+checksum = "2ef6dac1e96601b4fb3acccccff2139741fcb757cb9a36089bf5be91cfb285ce"
 dependencies = [
  "atomic",
  "getrandom 0.4.3",
@@ -4906,7 +4907,7 @@ dependencies = [
 [[package]]
 name = "vakint"
 version = "0.1.2"
-source = "git+https://github.com/alphal00p/gammaloop.git?branch=ir_safe_threshold_subtraction#6c3b1ff79c34a5e34e424ddd51dd218105b48f53"
+source = "git+https://github.com/alphal00p/gammaloop.git?rev=49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01#49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01"
 dependencies = [
  "ahash",
  "arrayvec",
@@ -5201,9 +5202,9 @@ dependencies = [
 
 [[package]]
 name = "wide"
-version = "1.7.0"
+version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cf05ca94c9fba0c51316899caa1d1e74a064fc310a5efa7375e614343d415be"
+checksum = "d920ac99c3c8edce110cb8d07dbb324d6d026011dce85b1e9355b70f0adacc4f"
 dependencies = [
  "bytemuck",
  "safe_arch 1.2.0",
@@ -5483,7 +5484,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ff6bf9dc61882c07a7b9f9b86a410b1c38a21abd25d715523547d164408797"
 dependencies = [
  "anyhow",
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "colored 2.2.0",
 ]
 
