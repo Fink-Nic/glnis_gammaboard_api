@@ -1,6 +1,6 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./gammaboard_states/epem_a_ttxh/NLO/GL02_m_uv_testing/state"
+folder = "./gammaboard_states/epem_a_ttxh/NLO/all_separate_integrand_no_heur/state"
 
 [[command_blocks]]
 name = "generate_diagrams"
@@ -18,6 +18,7 @@ name = "generate_diagrams"
 # GL22 -> F.11 -> -9.1283e-05
 # GL26 -> F.4 ->  -1.47653e-04
 # GL30 -> F.7 ->  -1.18480e-04
+# total -> MG5aMC -> -1.3205e-4
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
@@ -28,8 +29,38 @@ commands = [
       -p epem_a_ttxh -i NLO
       --only-diagrams""",
   """select -p epem_a_ttxh -i NLO 
-      --output_process epem_a_ttxh --output_integrand NLO_GL02_1
+      --output_process epem_a_ttxh --output_integrand NLO_GL00
+      --with-graph-names GL00""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL02
       --with-graph-names GL02""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL06
+      --with-graph-names GL06""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL08
+      --with-graph-names GL08""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL10
+      --with-graph-names GL10""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL12
+      --with-graph-names GL12""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL18
+      --with-graph-names GL18""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL20
+      --with-graph-names GL20""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL22
+      --with-graph-names GL22""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL26
+      --with-graph-names GL26""",
+  """select -p epem_a_ttxh -i NLO 
+      --output_process epem_a_ttxh --output_integrand NLO_GL30
+      --with-graph-names GL30""",
   "remove processes -p epem_a_ttxh -i NLO",
   "save dot",
 ]
@@ -38,30 +69,10 @@ commands = [
 name = "generate_integrands"
 commands = [
     "generate existing",
-    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_2",
-    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_5",
-    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_10",
-    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_20",
-    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_50",
-    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_91_188",
-    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_173",
-    "duplicate integrand -p epem_a_ttxh -i NLO_GL02_1 --output_process_name epem_a_ttxh --output_integrand_name NLO_GL02_500",
-    "run set_integrand_mu_v",
+    "run set_model_parameters",
+    "run set_differential_quantities",
+    "run set_differential_observables",
     "save state -o"
-]
-
-[[command_blocks]]
-name = "set_integrand_mu_v"
-commands = [
-    "set process -p epem_a_ttxh -i NLO_GL02_1 kv general.m_uv=1.0",
-    "set process -p epem_a_ttxh -i NLO_GL02_2 kv general.m_uv=2.0",
-    "set process -p epem_a_ttxh -i NLO_GL02_5 kv general.m_uv=5.0",
-    "set process -p epem_a_ttxh -i NLO_GL02_10 kv general.m_uv=10.0",
-    "set process -p epem_a_ttxh -i NLO_GL02_20 kv general.m_uv=20.0",
-    "set process -p epem_a_ttxh -i NLO_GL02_50 kv general.m_uv=50.0",
-    "set process -p epem_a_ttxh -i NLO_GL02_91_188 kv general.m_uv=91.188",
-    "set process -p epem_a_ttxh -i NLO_GL02_173 kv general.m_uv=173",
-    "set process -p epem_a_ttxh -i NLO_GL02_500 kv general.m_uv=500.0",
 ]
 
 [[command_blocks]]
@@ -77,14 +88,21 @@ commands = [
 ]
 
 [[command_blocks]]
-name = "integrate_single"
+name = "integrate"
 commands = [
   "run set_model_parameters",
-  "run set_differential_quantities",
-  "run set_differential_observables",
   """
-  integrate -p epem_a_ttxh -i NLO_GL02_"$(m_uv:1)" --n-cores 10
-         --target epem_a_ttxh@NLO_GL02_"$(m_uv:1)"=-2.504e-06,0.0
+  set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" kv
+    integrator.n_increase=100000
+    integrator.n_start=100000
+    integrator.n_max=10000000000
+    integrator.seed=1337
+    integrator.integrated_phase="real"
+    integrator.continuous_dim_learning_rate=0.4
+  """,
+  """
+  integrate -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" --n-cores 10
+         --target epem_a_ttxh@"$(integrand_name:NLO_GL00)"="$(integration_target:+3.1908e-05)",0.0
 				 --renderer ratatui
 				 --batch-size 10000
 				 --show-phase both
@@ -102,17 +120,28 @@ commands = [
   "run set_model_parameters",
   """
   integrate 
-         -p epem_a_ttxh -i NLO_GL02_1
-         -p epem_a_ttxh -i NLO_GL02_2
-         -p epem_a_ttxh -i NLO_GL02_5
-         -p epem_a_ttxh -i NLO_GL02_10
-         -p epem_a_ttxh -i NLO_GL02_20
-         -p epem_a_ttxh -i NLO_GL02_50
-         -p epem_a_ttxh -i NLO_GL02_91_188
-         -p epem_a_ttxh -i NLO_GL02_173
-         -p epem_a_ttxh -i NLO_GL02_500
-         --target=-2.504e-06,0.0
-         --uncorrelated
+         -p epem_a_ttxh -i NLO_GL00
+         -p epem_a_ttxh -i NLO_GL02
+         -p epem_a_ttxh -i NLO_GL06
+         -p epem_a_ttxh -i NLO_GL08
+         -p epem_a_ttxh -i NLO_GL10
+         -p epem_a_ttxh -i NLO_GL12
+         -p epem_a_ttxh -i NLO_GL18
+         -p epem_a_ttxh -i NLO_GL20
+         -p epem_a_ttxh -i NLO_GL22
+         -p epem_a_ttxh -i NLO_GL26
+         -p epem_a_ttxh -i NLO_GL30
+         --target epem_a_ttxh@NLO_GL00=+3.1908e-05,0.0
+         --target epem_a_ttxh@NLO_GL02=-2.504e-06,0.0
+         --target epem_a_ttxh@NLO_GL06=-2.4706e-04,0.0
+         --target epem_a_ttxh@NLO_GL08=-3.2336e-06,0.0
+         --target epem_a_ttxh@NLO_GL10=+4.7475e-05,0.0
+         --target epem_a_ttxh@NLO_GL12=+5.5828e-05,0.0
+         --target epem_a_ttxh@NLO_GL18=+1.3472e-04,0.0
+         --target epem_a_ttxh@NLO_GL20=+2.0875e-04,0.0
+         --target epem_a_ttxh@NLO_GL22=-9.1283e-05,0.0
+         --target epem_a_ttxh@NLO_GL26=-1.47653e-04,0.0
+         --target epem_a_ttxh@NLO_GL30=-1.18480e-04,0.0
          --n-cores 30
 				 --renderer ratatui
 				 --batch-size 10000
@@ -120,6 +149,7 @@ commands = [
 				 --show-max-weight-info
 				 --show-top-discrete-grid
 				 --write-results-for-each-iteration
+                 --uncorrelated
          --restart
   """,
 ]
@@ -158,15 +188,19 @@ debug_cache = false
 generate_events = false
 store_additional_weights_in_event = false
 integral_unit = "picobarn"
+m_uv = 91.188
 mu_r = 91.188
 
 [default_runtime_settings.integrator]
 n_increase=100000
 n_start=100000
-n_max=100000000
+n_max=10000000000
 seed=1337
 integrated_phase="real"
 continuous_dim_learning_rate=0.4
+
+[cli_settings.global.generation]
+override_lmb_heuristics = true
 
 [cli_settings.global.generation.evaluator]
 do_algebra = false
@@ -247,7 +281,39 @@ escalate_for_large_weight_threshold = -1.0
 [[command_blocks]]
 name = "set_differential_quantities"
 commands = [
-  """set process -p epem_a_ttxh -i NLO_GL02_"$(m_uv:1)" string '
+    "run -D integrand_name=NLO_GL00 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL02 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL06 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL08 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL10 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL12 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL18 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL20 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL22 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL26 set_differential_quantities_single",
+    "run -D integrand_name=NLO_GL30 set_differential_quantities_single",
+]
+
+[[command_blocks]]
+name = "set_differential_observables"
+commands = [
+    "run -D integrand_name=NLO_GL00 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL02 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL06 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL08 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL10 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL12 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL18 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL20 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL22 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL26 set_differential_observables_single",
+    "run -D integrand_name=NLO_GL30 set_differential_observables_single",
+]
+
+[[command_blocks]]
+name = "set_differential_quantities_single"
+commands = [
+  """set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" string '
 
 [quantities.integral]
 type = "integral"
@@ -382,9 +448,9 @@ quantity = "CosTheta"
 ]
 
 [[command_blocks]]
-name = "set_differential_observables"
+name = "set_differential_observables_single"
 commands = [
-  """set process -p epem_a_ttxh -i NLO_GL02_"$(m_uv:1)" string '
+  """set process -p epem_a_ttxh -i "$(integrand_name:NLO_GL00)" string '
 
 [observables.integral]
 title = "xs"

@@ -1,7 +1,7 @@
-replacements = { run_name = "epem_a_ttxh", integrand_name = "NLO_GL22", seed = 0, target_real = -9.1283e-05, train_samples = 20000, sample_samples = 1000000000, max_batch_size = 20000, target_batch_eval_ms = 1000 }
+replacements = { run_name = "epem_a_ttxh", integrand_name = "NLO_GL00", cuda_id = 0, seed = 0, target_real = +9.4622e-04, train_steps = 2000, train_batch_size = 10000, train_samples = 20000000, lr = 5e-4, sample_samples = 1000000000, max_batch_size = 40000, target_batch_eval_ms = 2000 }
 
 name = '$(run_name:"epem_a_ttxh")_$(integrand_name:"NLO_GL00")_$(seed:0)'
-target = { kind = "vector", components = { real = "$(target_real:3.1908e-5)" , imag = 0.0 } }
+target = { kind = "vector", components = { real = "$(target_real:+9.4622e-04)" , imag = 0.0 } }
 
 [evaluator]
 kind = "gammaloop"
@@ -13,14 +13,14 @@ momentum_space = false
 read_only = true
 
 [[task_queue]]
-name = "accumulator"
+name = "accumulator-train"
 kind = "set_accumulator"
 accumulator = "gammaloop"
 
 [[task_queue]]
 name = "madnis-train"
 kind = "sample"
-stop_condition = { max_samples = "$(train_samples:1000000)" }
+stop_condition = { max_samples = "$(train_samples:20000000)" }
 accumulator = "latest"
 
 [task_queue.sampler_aggregator.config]
@@ -35,25 +35,31 @@ requires_training_values = true
 
 [task_queue.sampler_aggregator.config.args]
 seed = 0
-training_steps = 20
-training_batch_size = 1000
-learning_rate = 5e-4
+training_steps = "$(train_steps:2000)"
+training_batch_size = "$(train_batch_size:10000)"
+learning_rate = "$(lr:5e-4)"
 use_gpu = true
-cuda_id = 0
-save_path = "integrations/glnis_gammaboard_api/checkpoints/epem_a_ttxh_test"
-max_batch_size = "$(max_batch_size:10000)"
+cuda_id = "$(cuda_id:0)"
+save_path = "integrations/glnis_gammaboard_api/checkpoints/epem_a_ttxh_$(integrand_name:NLO_GL00)_$(seed:0)"
+max_batch_size = "$(max_batch_size:40000)"
 
 [task_queue.sampler_aggregator.config.args.flow_config]
 layers = 4
 units = 1000
-bins = 10
+bins = 12
 min_bin_width = 2e-4
-min_bin_height = 2e-4
+min_bin_height = 5e-4
 min_bin_derivative = 1e-4
 
 [task_queue.queue_tuning]
-target_batch_eval_ms = "$(target_batch_eval_ms:2000)"
-max_batch_size = "$(max_batch_size:10000)"
+# target_batch_eval_ms = "$(target_batch_eval_ms:2000)"
+max_batch_size = "$(max_batch_size:40000)"
+bulk_sample_generation = true
+
+[[task_queue]]
+name = "accumulator-sample"
+kind = "set_accumulator"
+accumulator = "gammaloop"
 
 [[task_queue]]
 name = "sample"
@@ -63,5 +69,6 @@ stop_condition = { max_samples = "$(sample_samples:10000000)" }
 sampler_aggregator = { from_name = "madnis-train", config = { requires_training_values = false } }
 
 [task_queue.queue_tuning]
-target_batch_eval_ms = "$(target_batch_eval_ms:1000)"
-max_batch_size = "$(max_batch_size:10000)"
+# target_batch_eval_ms = "$(target_batch_eval_ms:2000)"
+max_batch_size = "$(max_batch_size:40000)"
+bulk_sample_generation = true

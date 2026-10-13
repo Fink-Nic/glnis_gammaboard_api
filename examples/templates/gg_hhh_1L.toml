@@ -2,7 +2,7 @@
 # gg -> HHH @ 1L amplitude, sqrt(s) = 1000 GeV  --  GammaLoop engine
 # =============================================================================
 
-replacements = { run_name = "gg_hhh_1_L_madnis", train_samples = 200000, sample_samples = 10000000, max_batch_size = 100000, training_steps = 200, training_batch_size = 1000 }
+replacements = { run_name = "gg_hhh_1_L_madnis", train_samples = 5000000, sample_samples = 10000000, max_batch_size = 100000, training_steps = 500, training_batch_size = 10000 }
 
 name = '$(run_name:"gg_hhh_1L_madnis")'
 target = { kind = "vector", components = { real = 5.4660399e-6, imag = 1.892036e-6 } }
@@ -17,7 +17,7 @@ momentum_space = true
 read_only = true
 
 [[task_queue]]
-name = "accumulator"
+name = "accumulator-train"
 kind = "set_accumulator"
 accumulator = "gammaloop"
 
@@ -43,14 +43,19 @@ training_steps = "$(training_steps:200)"
 training_batch_size = "$(training_batch_size:1000)"
 use_gpu = true
 cuda_id = 0
-save_path = "integrations/glnis_gammaboard_api/checkpoints/gg_hhh_1L_madnis"
+save_path = "integrations/madnis_checkpoints/gg_hhh_1L_madnis"
 mapping.layer_cfgs = [
     { kind = "spherical" },
 ]
 
 [task_queue.queue_tuning]
-target_batch_eval_ms = 1000.0
 max_batch_size = "$(max_batch_size:10000)"
+bulk_sample_generation = true
+
+[[task_queue]]
+name = "accumulator-sample"
+kind = "set_accumulator"
+accumulator = "gammaloop"
 
 [[task_queue]]
 name = "sample"
@@ -60,26 +65,68 @@ stop_condition = { max_samples = "$(sample_samples:10000000)" }
 sampler_aggregator = { from_name = "madnis-train" }
 
 [task_queue.queue_tuning]
-target_batch_eval_ms = 200.0
 max_batch_size = "$(max_batch_size:10000)"
+bulk_sample_generation = true
 
 [[task_queue]]
-name = "pdf-2d"
+name = "pdf-2d-x-y"
 kind = "pdf_adaptation_image"
 sampler_aggregator = { from_name = "madnis-train" }
 
 [task_queue.geometry]
 discrete = [0, 0]
-offset = [0.0, 0.0, 0.0]
-u_vector = [138.52981118,  29.28692941, -79.89016993]
-v_vector = [-155.33220018, -348.01603965,  177.37736157]
+offset = [-369.0, -443.0, 278.0]
+u_vector = [10.0, 0.0, 0.0]
+v_vector = [0.0, 10.0, 0.0]
 
 [task_queue.geometry.u_linspace]
-start = -0.2
-stop = 1.2
+start = -0.5
+stop = 0.5
 count = 128
 
 [task_queue.geometry.v_linspace]
-start = -0.2
-stop = 1.2
+start = -0.5
+stop = 0.5
+count = 128
+
+[[task_queue]]
+name = "pdf-2d-x-z"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+discrete = [0, 0]
+offset = [-369.0, -443.0, 278.0]
+u_vector = [10.0, 0.0, 0.0]
+v_vector = [0.0, 0.0, 10.0]
+
+[task_queue.geometry.u_linspace]
+start = -0.5
+stop = 0.5
+count = 128
+
+[task_queue.geometry.v_linspace]
+start = -0.5
+stop = 0.5
+count = 128
+
+[[task_queue]]
+name = "pdf-2d-y-z"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+discrete = [0, 0]
+offset = [-369.0, -443.0, 278.0]
+u_vector = [0.0, 10.0, 0.0]
+v_vector = [0.0, 0.0, 10.0]
+
+[task_queue.geometry.u_linspace]
+start = -0.5
+stop = 0.5
+count = 128
+
+[task_queue.geometry.v_linspace]
+start = -0.5
+stop = 0.5
 count = 128

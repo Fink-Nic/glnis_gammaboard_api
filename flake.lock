@@ -1,5 +1,20 @@
 {
   "nodes": {
+    "crane": {
+      "locked": {
+        "lastModified": 1791754810,
+        "narHash": "sha256-cN0Mgk+sQtCJcGWs9H4M0CnLRAuC4I8aCwiBTcBJs6E=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "bd63bf1d0a0f6dcacd7549c714a671ee63b0db6a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -21,11 +36,11 @@
     "gammaboard-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1784098529,
-        "narHash": "sha256-04gY5VKeH1fuy5QVKY9aUwx4nSm6Bvj8P3aROOKz0sc=",
+        "lastModified": 1791476199,
+        "narHash": "sha256-nWok5uAP6fEqaVGIt5S3oKEpSKhW3uQIvdqY7Iwscvk=",
         "owner": "alphal00p",
         "repo": "gammaboard",
-        "rev": "0da0bd10bb9a228b9de08eb32b19379dbff1881f",
+        "rev": "f2a3911a66a9035e16ce9bea2dd28fdc158f8ec9",
         "type": "github"
       },
       "original": {
@@ -38,11 +53,11 @@
     "madnis-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1777456786,
-        "narHash": "sha256-kJUIETiEYXuMRnmK0psCphdtBClSpaJLqyBfsbvirWc=",
+        "lastModified": 1781884419,
+        "narHash": "sha256-TRUQuozaAc5ItEqrVnlPsyRVsrVUxUN0oVpqyl4Kkbs=",
         "owner": "madgraph-ml",
         "repo": "madnis",
-        "rev": "cc8da074faaf1f1c670c809f56c9ff448390649c",
+        "rev": "f16fb71d41271e3078b8ffc9db072a4241c12498",
         "type": "github"
       },
       "original": {
@@ -54,11 +69,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1778274207,
-        "narHash": "sha256-I4puXmX1iovcCHZlRmztO3vW0mAbbRvq4F8wgIMQ1MM=",
+        "lastModified": 1791487292,
+        "narHash": "sha256-tqM7xDEsaeK1p6VvRygeZ9LkQRpUUkbRT02BHv6hnTM=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "b3da656039dc7a6240f27b2ef8cc6a3ef3bccae7",
+        "rev": "8edc0c72e3a38faf5434e40d1f19431125fe4b30",
         "type": "github"
       },
       "original": {
@@ -70,6 +85,7 @@
     },
     "root": {
       "inputs": {
+        "crane": "crane",
         "flake-utils": "flake-utils",
         "gammaboard-src": "gammaboard-src",
         "madnis-src": "madnis-src",

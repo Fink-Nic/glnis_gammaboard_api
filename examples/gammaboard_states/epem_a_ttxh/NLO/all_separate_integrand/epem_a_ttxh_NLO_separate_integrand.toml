@@ -72,7 +72,6 @@ commands = [
     "run set_model_parameters",
     "run set_differential_quantities",
     "run set_differential_observables",
-    "set process -p epem_a_ttxh -i NLO_GL30 kv general.m_uv=10.0",
     "save state -o"
 ]
 

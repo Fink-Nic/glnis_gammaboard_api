@@ -36,7 +36,7 @@ training_steps = 200
 training_batch_size = 1000
 use_gpu = true
 cuda_id = 0
-save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
+save_path = "integrations/madnis_checkpoints/ghost_bump_madnis"
 
 [[task_queue]]
 name = "pdf-2d"

@@ -77,7 +77,6 @@ EOF
     export OMP_NUM_THREADS="${OMP_NUM_THREADS:-64}"
     export PYTHONUNBUFFERED=1
     export UV_PYTHON_DOWNLOADS=never
-    export SYMBOLICA_OEM_LICENSE="${SYMBOLICA_OEM_LICENSE:-SYMBOLICA_OEM_GAMMALOOP}"
 
 %runscript
     exec /usr/local/bin/glnis_gammaboard_sampler "$@"
@@ -86,8 +85,11 @@ EOF
     python - <<'PY'
 import gammaboard_process
 import glnis
+from glnis import _rust
 import madnis
 import madnis_sampler
 import run_sampler
+assert _rust.health_check() == "glnis-gammaboard-api rust extension ok"
+assert callable(run_sampler.main)
 print("glnis gammaboard sampler runtime ok")
 PY

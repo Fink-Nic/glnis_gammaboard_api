@@ -1,22 +1,26 @@
 """Bootstrap native-library and Triton compatibility for sampler launches.
 
-The Nix runtime wrapper supplies the native library path, but Triton still probes
-``/sbin/ldconfig -p`` directly. Direct virtual environments also need the Nix
-library/compiler discovery below, so keep this shim before NumPy/Torch/MadNIS.
+The Nix shell and runtime wrapper supply explicit native paths. ``glnis-dev``
+also saves those paths in the venv so worker launches can run outside the shell.
+Keep this shim before NumPy/Torch/MadNIS; Triton probes ``/sbin/ldconfig -p``
+directly even on systems which do not provide that command.
 """
 
 from __future__ import annotations
 
 import ctypes.util as _ctypes_util
 import glob as _glob
+import json as _json
 import os as _os
 import subprocess as _subprocess
 import sys as _sys
 from collections.abc import Sequence
 from os import PathLike
+from pathlib import Path as _Path
 from typing import Any
 
 _DRIVER_DIRS = (
+    "/.singularity.d/libs",
     "/run/opengl-driver/lib",
     "/usr/lib64",
     "/usr/lib/x86_64-linux-gnu",
@@ -25,32 +29,28 @@ _DRIVER_DIRS = (
     "/usr/lib/wsl/lib",
 )
 
-_NATIVE_LIBRARY_PATTERNS = (
-    "/nix/store/*gcc*-lib/lib/libstdc++.so.6",
-    "/nix/store/*zlib-*/lib/libz.so*",
-    "/nix/store/*gmp*/lib/libgmp.so*",
-    "/nix/store/*mpfr-*/lib/libmpfr.so*",
-    "/nix/store/*libmpc-*/lib/libmpc.so*",
-)
+_REEXEC_NEEDED = False
 
-_NATIVE_TOOL_PATTERNS = (
-    "/nix/store/*gcc-wrapper-*/bin/gcc",
-    "/nix/store/*clang-wrapper-*/bin/cc",
-)
+
+def _configured_dirs(key: str, env_var: str) -> list[str]:
+    config_file = _Path(_sys.prefix) / "glnis-runtime.json"
+    config = _json.loads(config_file.read_text()) if config_file.is_file() else {}
+    return [
+        path
+        for path in [*_os.environ.get(env_var, "").split(":"), *config.get(key, [])]
+        if path and _os.path.isdir(path)
+    ]
 
 
 def _native_library_dirs() -> list[str]:
-    dirs = [directory for directory in _DRIVER_DIRS if _os.path.isdir(directory)]
-    for pattern in _NATIVE_LIBRARY_PATTERNS:
-        dirs.extend(_os.path.dirname(path) for path in _glob.glob(pattern))
-    return dirs
+    return [
+        *_configured_dirs("library_dirs", "GLNIS_LIBRARY_PATH"),
+        *(directory for directory in _DRIVER_DIRS if _os.path.isdir(directory)),
+    ]
 
 
 def _native_tool_dirs() -> list[str]:
-    dirs: list[str] = []
-    for pattern in _NATIVE_TOOL_PATTERNS:
-        dirs.extend(_os.path.dirname(path) for path in _glob.glob(pattern))
-    return dirs
+    return _configured_dirs("tool_dirs", "GLNIS_TOOL_PATH")
 
 
 def _first_existing_tool(name: str) -> str | None:
@@ -62,6 +62,7 @@ def _first_existing_tool(name: str) -> str | None:
 
 
 def _bootstrap_native_environment(*, allow_reexec: bool) -> None:
+    global _REEXEC_NEEDED
     changed = False
 
     existing_libs = [path for path in _os.environ.get("LD_LIBRARY_PATH", "").split(":") if path]
@@ -91,24 +92,19 @@ def _bootstrap_native_environment(*, allow_reexec: bool) -> None:
         _os.environ["CXX"] = cxx
         changed = True
 
+    _REEXEC_NEEDED = _REEXEC_NEEDED or changed
     if (
         not allow_reexec
-        or not changed
+        or not _REEXEC_NEEDED
         or _os.environ.get("GLNIS_RUNTIME_BOOTSTRAPPED") == "1"
     ):
         return
 
-    # During Python startup from `python -m module`, sitecustomize can observe
-    # sys.argv[0] == "-m" before the module name is available.  Reconstructing
-    # argv from that state would re-exec as `python -m` and fail with
-    # "Argument expected for the -m option".  The `run_sampler` entry point calls
-    # bootstrap() again after normal module dispatch, where sys.argv[0] is safe.
-    if not _sys.argv or _sys.argv[0] in {"-c", "-m", ""}:
-        return
-
+    # orig_argv retains interpreter flags and the module/code argument even
+    # during site initialization, unlike sys.argv. Keep the active venv Python.
     env = _os.environ.copy()
     env["GLNIS_RUNTIME_BOOTSTRAPPED"] = "1"
-    _os.execve(_sys.executable, [_sys.executable, *_sys.argv], env)
+    _os.execve(_sys.executable, [_sys.executable, *_sys.orig_argv[1:]], env)
 
 
 def _library_dirs():
@@ -164,6 +160,9 @@ def _patch_triton_ldconfig_probe() -> None:
     if _libcuda and "TRITON_LIBCUDA_PATH" not in _os.environ:
         _os.environ["TRITON_LIBCUDA_PATH"] = _os.path.dirname(_libcuda)
 
+    if _os.access("/sbin/ldconfig", _os.X_OK):
+        return
+
     original_check_output = _subprocess.check_output
     if getattr(original_check_output, "_glnis_patched", False):
         return
@@ -181,6 +180,7 @@ def _patch_triton_ldconfig_probe() -> None:
 
 
 def bootstrap(*, allow_reexec: bool = True) -> None:
+    _os.environ.setdefault("OMP_NUM_THREADS", "64")
     _bootstrap_native_environment(allow_reexec=allow_reexec)
     _patch_ctypes_find_library()
     _patch_triton_ldconfig_probe()

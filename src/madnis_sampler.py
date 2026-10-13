@@ -1,13 +1,12 @@
 # type: ignore
 from __future__ import annotations
 
-import glnis_runtime_bootstrap  # noqa: F401
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Literal, Tuple
 
 import numpy as np
 import torch
-from gammaboard_process import SampleBatch, Sampler, log
+import gammaboard_process as gb
 from madnis.integrator import Integrand, Integrator, losses
 from madnis.integrator import SampleBatch as MadnisSampleBatch
 from numpy.typing import NDArray
@@ -133,6 +132,75 @@ class MadnisConfig:
 
 
 @dataclass
+class TrainingStatus:
+    sample_dim: int
+    training_batch_size: int
+    num_generated: int = 0
+    num_ingested: int = 0
+    total_trained_samples: int = 0
+    produced_batches: int = 0
+    produced_samples: int = 0
+    step: int = 0
+    last_loss: float | None = None
+    loss_history: List[float | None] = field(default_factory=list)
+    generated_samples: Tensor = None
+    generated_probs: Tensor = None
+    ingested_weights: Tensor = None
+
+    def __post_init__(self):
+        if self.generated_samples is None:
+            self.generated_samples = torch.empty(
+                (self.training_batch_size, self.sample_dim), dtype=torch.float64
+            )
+        if self.generated_probs is None:
+            self.generated_probs = torch.empty(
+                (self.training_batch_size,), dtype=torch.float64
+            )
+        if self.ingested_weights is None:
+            self.ingested_weights = torch.empty(
+                (self.training_batch_size,), dtype=torch.float64
+            )
+
+    def to_device(self, device: torch.device) -> None:
+        self.generated_samples = self.generated_samples.to(device)
+        self.generated_probs = self.generated_probs.to(device)
+        self.ingested_weights = self.ingested_weights.to(device)
+
+    def add_generation_data(self, samples: Tensor, probs: Tensor) -> None:
+        assert samples.shape[0] == probs.shape[0], "Number of samples and sampling weights must match."
+        n_samples = samples.shape[0]
+        if n_samples == self.training_batch_size:
+            self.generated_samples = samples
+            self.generated_probs = probs
+        else:
+            self.generated_probs[self.num_generated:self.num_generated + n_samples] = probs
+            self.generated_samples[self.num_generated:self.num_generated + n_samples, :] = samples
+        self.num_generated += n_samples
+        self.produced_batches += 1
+
+    def add_feedback_data(self, weights: NDArray) -> None:
+        weights = torch.as_tensor(weights, dtype=torch.float64, device=self.ingested_weights.device)
+        n_weights = weights.shape[0]
+        if n_weights == self.training_batch_size:
+            self.ingested_weights = weights
+        else:
+            self.ingested_weights[self.num_ingested:self.num_ingested + n_weights] = weights
+        self.num_ingested += n_weights
+
+    def test_ready_for_training(self) -> bool:
+        return self.num_generated == self.training_batch_size and self.num_ingested == self.training_batch_size
+
+    def add_loss(self, loss: float) -> None:
+        self.loss_history.append(loss)
+        self.last_loss = loss
+        self.step += 1
+        self.num_generated = 0
+        self.num_ingested = 0
+        self.total_trained_samples += self.training_batch_size
+
+
+
+@dataclass
 class GammaLoopEvaluatorMetadata:
     state_folder: str
     process_id: int
@@ -165,7 +233,7 @@ def parse_gammaloop_metadata(
     return GammaLoopEvaluatorMetadata.from_dict(evaluator_metadata)
 
 
-class MadnisSampler(Sampler):
+class MadnisSampler(gb.Sampler):
     def __init__(
         self,
         *,
@@ -191,15 +259,7 @@ class MadnisSampler(Sampler):
         flow_config: dict[str, Any] | FlowConfig | None = None,
         transformer_config: dict[str, Any] | TransformerConfig | None = None,
         made_config: dict[str, Any] | MadeConfig | None = None,
-        trained_samples: int | None = None,
-        total_trained_samples: int | None = None,
-        produced_batches: int | None = None,
-        produced_samples: int | None = None,
-        step: int | None = None,
-        last_loss: float | None = None,
-        pending_weights: List[NDArray] | None = None,
-        pending_training_samples: List[Tensor] | None = None,
-        pending_training_probs: List[Tensor] | None = None,
+        training_status: TrainingStatus | None = None,
         torch_cpu_rng_state: Tensor | None = None,
         torch_gpu_rng_state: Tensor | None = None,
         madnis_blob: bytes | None = None,
@@ -303,20 +363,9 @@ class MadnisSampler(Sampler):
             raise ValueError("continuous_dims must be > 0")
 
         self.device = self._get_device()
-        self.step: int = step or 0
-        self.last_loss: float | None = last_loss or None
+        self.training_status = training_status or TrainingStatus(self.continuous_dims + self.num_discrete_dims, self.cfg.training_batch_size)
+        self.training_status.to_device(self.device)
 
-        self.training_target_samples = (
-            self.cfg.training_steps * self.cfg.training_batch_size
-        )
-        self.trained_samples: int = trained_samples or 0
-        self.total_trained_samples: int = total_trained_samples or 0
-        self.produced_batches: int = produced_batches or 0
-        self.produced_samples: int = produced_samples or 0
-
-        self.pending_weights: List[NDArray] = pending_weights or []
-        self.pending_training_samples: List[Tensor] = pending_training_samples or []
-        self.pending_training_probs: List[Tensor] = pending_training_probs or []
         if torch_cpu_rng_state is not None:
             if torch_gpu_rng_state is not None and self.device.type == "cuda":
                 torch.cuda.set_rng_state(torch_gpu_rng_state)
@@ -334,7 +383,7 @@ class MadnisSampler(Sampler):
         else:
             self.madnis: Integrator = self._get_madnis_integrator()
 
-        # log(
+        # gb.log(
         #     f"sampler: {self.continuous_dims}, {self.discrete_cardinalities}, n_disc={self.num_discrete_dims}  mapping:     self.mapping.continuous_dims},     self.mapping.discrete_cardinalities}"
         # )
 
@@ -355,33 +404,21 @@ class MadnisSampler(Sampler):
                 "Snapshot is missing 'save_path' key required for loading the Integrator state."
             )
         try:
-            import pickle
-
             with open(save_path, "rb") as f:
-                state: Dict[str, Any] = pickle.load(f)
+                state: Dict[str, Any] = torch.load(f, map_location="cpu", weights_only=False)
 
-            init_args = dict(init_args)
-            parser = init_args.pop("parser", None) if init_args else None
-            mapping = (
-                init_args.pop("mapping", None) if init_args else None
-            )
+            init_args = dict({} if init_args is None else init_args)
+            parser = init_args.pop("parser", None)
+            mapping = init_args.pop("mapping", None)
             graph_properties = snapshot.get("graph_properties")
             if graph_properties is None:
-                graph_properties = init_args.get("graph_properties") if init_args else None
+                graph_properties = init_args.get("graph_properties")
 
             instance = cls(
                 discrete_cardinalities=discrete_cardinalities,
                 continuous_dims=int(continuous_dims),
-                cfg=MadnisConfig.from_dict(init_args or {}),
-                trained_samples=snapshot.get("trained_samples"),
-                total_trained_samples=snapshot.get("total_trained_samples"),
-                produced_batches=snapshot.get("produced_batches"),
-                produced_samples=snapshot.get("produced_samples"),
-                step=snapshot.get("step"),
-                last_loss=snapshot.get("last_loss"),
-                pending_weights=state.get("pending_weights"),
-                pending_training_samples=state.get("pending_training_samples"),
-                pending_training_probs=state.get("pending_training_probs"),
+                cfg=MadnisConfig.from_dict(init_args),
+                training_status=snapshot.get("training_status"),
                 torch_cpu_rng_state=state.get("torch_cpu_rng_state"),
                 torch_gpu_rng_state=state.get("torch_gpu_rng_state"),
                 madnis_blob=state.get("madnis_blob"),
@@ -439,6 +476,7 @@ class MadnisSampler(Sampler):
             if self.madnis.group_channels and not self.madnis.group_channels_uniform
             else tmp_integrand.remap_channels
         )
+        tmp_save_path = self.cfg.save_path + ".tmp"
         try:
             self.madnis.integrand = None
             self.madnis.loss = None
@@ -459,18 +497,15 @@ class MadnisSampler(Sampler):
                     self.madnis.flow.discrete_flow.channel_remap_function = None
 
             import io
-            import pickle
             from pathlib import Path
 
             Path(self.cfg.save_path).parent.mkdir(parents=True, exist_ok=True)
             buffer = io.BytesIO()
             torch.save(self.madnis, buffer)
-            with open(self.cfg.save_path, "wb") as f:
-                pickle.dump(
+            with open(tmp_save_path, "wb") as f:
+                torch.save(
                     dict(
-                        pending_weights=self.pending_weights,
-                        pending_training_samples=self.pending_training_samples,
-                        pending_training_probs=self.pending_training_probs,
+                        training_status=self.training_status,
                         torch_cpu_rng_state=torch.get_rng_state(),
                         torch_gpu_rng_state=torch.cuda.get_rng_state()
                         if self.device.type == "cuda"
@@ -479,12 +514,14 @@ class MadnisSampler(Sampler):
                     ),
                     f,
                 )
+            Path(tmp_save_path).rename(self.cfg.save_path)
 
         except Exception as e:
             raise RuntimeError(
                 f"Failed to save MadNIS Integrator state to file '{self.cfg.save_path}': {e}"
             )
         finally:
+            Path(tmp_save_path).unlink(missing_ok=True)
             self.madnis.integrand = tmp_integrand
             self.madnis.loss = tmp_loss
             self.madnis.flow.prior_prob_function = (
@@ -507,36 +544,22 @@ class MadnisSampler(Sampler):
                 if hasattr(self.madnis.flow.discrete_flow, "channel_remap_function"):
                     self.madnis.flow.discrete_flow.channel_remap_function = tmp_ch_remap
         snapshot: Dict[str, int | str | float] = dict(
-            trained_samples=self.trained_samples,
-            total_trained_samples=self.total_trained_samples,
-            produced_batches=self.produced_batches,
-            produced_samples=self.produced_samples,
-            step=self.step,
             save_path=self.cfg.save_path,
-            last_loss=0.0 if self.last_loss is None else self.last_loss,
             graph_properties=self.mapping.graph_properties.as_init_dict() if self.mapping is not None else None,
         )
-        # if self.last_loss is not None:
-        #     snapshot["last_loss"] = self.last_loss
         return snapshot
 
-    def sample_plan(self) -> Dict[str, Any]:
-        n_batch_remaining = self.training_samples_remaining()
-        return dict(
-            kind="produce",
-            nr_samples=n_batch_remaining
-            if n_batch_remaining is not None
-            else self.cfg.max_batch_size,
-        )
-
-    def training_samples_remaining(self) -> int | None:
-        if self.total_trained_samples >= self.training_target_samples:
-            return None
-        if self.step < self.cfg.training_steps:
-            return max(self.cfg.training_batch_size - self.trained_samples, 0)
-        return None
-
-    def produce_latent_batch(self, nr_samples: int) -> SampleBatch:
+    def generate(self, remaining_sample_budget: int | None) -> Any:
+        training_remaining = self.training_samples_remaining()
+        if training_remaining == 0:
+            return gb.GenerationStatus.WAITING
+        if training_remaining is not None:
+            if remaining_sample_budget is not None:
+                remaining_sample_budget = min(remaining_sample_budget, training_remaining)
+            else:
+                remaining_sample_budget = training_remaining
+        nr_samples = remaining_sample_budget if remaining_sample_budget is not None else self.cfg.max_batch_size
+        gb.log(f"Producing {nr_samples} samples with MadNIS sampler ({self.training_status.step=}, {self.training_status.produced_samples=}, {self.training_status.total_trained_samples})")
         continuous = np.empty((nr_samples, self.continuous_dims), dtype=np.float64)
         discrete = np.empty((nr_samples, self.num_discrete_dims), dtype=np.int64)
         wgt = np.empty((nr_samples), dtype=np.float64)
@@ -551,45 +574,43 @@ class MadnisSampler(Sampler):
                     device=self.device,
                     dtype=torch.float64,
                 )
+
+            if training_remaining is not None:
+                self.training_status.add_generation_data(x_all, prob)
+
             discrete[n_eval: n_eval + n, :], continuous[n_eval: n_eval + n, :] = (
                 self._madnis_output_to_disc_cont(x_all)
             )
             wgt[n_eval: n_eval + n] = 1 / prob.numpy(force=True)
             n_eval += n
-            if self.training_samples_remaining() is not None:
-                self.pending_training_samples.append(x_all)
-                self.pending_training_probs.append(prob)
-                self.trained_samples += n
-                self.total_trained_samples += n
 
         discrete, continuous, wgt = self._apply_mapping(discrete, continuous, wgt)
-        self.produced_batches += 1
-        self.produced_samples += nr_samples
 
-        return SampleBatch(xs_discrete=discrete, xs_continuous=continuous, weights=wgt)
+        return gb.SampleBatch(xs_discrete=discrete, xs_continuous=continuous, weights=wgt, training_remaining=training_remaining)
 
-    def ingest_training_values(self, training_values: NDArray) -> None:
-        training_values = np.asarray(training_values)
-        self.pending_weights.append(training_values)
-
-        f_lens = [len(w) for w in self.pending_weights]
-        x_lens = [len(s) for s in self.pending_training_samples]
-        p_lens = [len(p) for p in self.pending_training_probs]
-        if (
-            f_lens == x_lens == p_lens
-            and sum(f_lens) >= self.cfg.training_batch_size
-        ):
+    def feedback(self, values: NDArray) -> None:
+        if self.training_status.step >= self.cfg.training_steps:
+            gb.log(f"Training target of {self.cfg.training_steps * self.cfg.training_batch_size} samples already reached. Ignoring additional training values.")
+            return
+        values = np.asarray(values)
+        self.training_status.add_feedback_data(values)
+        
+        if self.training_status.test_ready_for_training():
             self._train_step()
+
+    def training_samples_remaining(self) -> int | None:
+        if self.training_status.step < self.cfg.training_steps:
+            return max(self.cfg.training_batch_size - self.training_status.produced_samples, 0)
+        return None
 
     def get_diagnostics(self) -> Dict[str, Any]:
         """Optional runtime diagnostics. Empty dict means no diagnostics available."""
         diagnostics: Dict[str, Any] = dict(
-            produced_batches=self.produced_batches,
-            produced_samples=self.produced_samples,
-            total_trained_samples=self.total_trained_samples,
+            produced_batches=self.training_status.produced_batches,
+            produced_samples=self.training_status.produced_samples,
+            total_trained_samples=self.training_status.total_trained_samples,
+            last_loss=0.0 if self.training_status.last_loss is None else self.training_status.last_loss,
         )
-        if self.last_loss is not None:
-            diagnostics["loss"] = self.last_loss
         if self.gammaloop_metadata is not None:
             diagnostics["gammaloop_metadata"] = asdict(self.gammaloop_metadata)
         return diagnostics
@@ -607,10 +628,12 @@ class MadnisSampler(Sampler):
         _, continuous, prob = self._apply_mapping(xs_discrete, xs_continuous, np.ones(n_samples, dtype=np.float64), inverse=True)
         sampled_discrete = xs_discrete[:, self._sampled_discrete_indices]
         prob = prob.flatten()
+        # The flow lives in the coordinates before the physical-space mapping.
+        # The inverse mapping supplies both those coordinates and its Jacobian.
         if self.madnis.integrand.discrete_dims_position == "first":
-            x_all = np.hstack([sampled_discrete, xs_continuous])
+            x_all = np.hstack([sampled_discrete, continuous])
         elif self.madnis.integrand.discrete_dims_position == "last":
-            x_all = np.hstack([xs_continuous, sampled_discrete])
+            x_all = np.hstack([continuous, sampled_discrete])
         else:
             raise ValueError(
                 f"Invalid discrete_dims_position: {self.madnis.integrand.discrete_dims_position}"
@@ -674,38 +697,17 @@ class MadnisSampler(Sampler):
         return get_loss(self.cfg.loss_type.lower())
 
     def _train_step(self) -> None:
-        f_lens = [len(w) for w in self.pending_weights]
-        x_lens = [len(s) for s in self.pending_training_samples]
-        p_lens = [len(p) for p in self.pending_training_probs]
-        if not (f_lens == x_lens == p_lens):
-            raise RuntimeError(
-                f"Mismatch in pending training data lengths: integrand weights {f_lens}, samples {x_lens}, probs {p_lens}."
-            )
-
-        func_vals = torch.cat(
-            [
-                torch.from_numpy(w).to(device=self.device, dtype=torch.float64)
-                for w in self.pending_weights
-            ]
-        )
-        x_all = torch.cat(self.pending_training_samples, dim=0)
-        probs = torch.cat(self.pending_training_probs, dim=0)
         madnis_samples = MadnisSampleBatch(
-            x=x_all,
+            x=self.training_status.generated_samples,
             y=None,
-            q_sample=probs,
-            func_vals=func_vals,
+            q_sample=self.training_status.generated_probs,
+            func_vals=self.training_status.ingested_weights / self.training_status.generated_probs,
             channels=None,
         )
-        self.last_loss = self.madnis._optimization_step(madnis_samples)[0]
-        if self.madnis.scheduler is not None:
-            self.madnis.scheduler.step()
-        self.madnis.step += 1
-        self.step += 1
-        self.trained_samples = 0
-        self.pending_training_samples.clear()
-        self.pending_training_probs.clear()
-        self.pending_weights.clear()
+        last_loss = self.madnis._optimization_step(madnis_samples)[0]
+        if not np.isfinite(last_loss):
+            last_loss = None
+        self.training_status.add_loss(last_loss)
 
     def _madnis_discrete_prior_prob_function(
         self, indices: Tensor, dim: int = 0

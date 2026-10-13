@@ -70,9 +70,9 @@ def gaussian_eval(discrete: NDArray, momentum: NDArray) -> NDArray:
 def train(n: int, batch_size: int, sampler: MadnisSampler) -> None:
     for _ in range(n):
         batch_size = sampler.training_samples_remaining() or 0
-        samples = sampler.produce_latent_batch(batch_size)
+        samples = sampler.generate(batch_size)
         res = gaussian_eval(samples.xs_discrete, samples.xs_continuous) * samples.weights
-        sampler.ingest_training_values(res)
+        sampler.feedback(res)
 
 
 if __name__ == "__main__":
@@ -106,14 +106,14 @@ if __name__ == "__main__":
         )
         print(f"============== STARTING RUN {run+1} ==============")
         print("Getting initial samples...")
-        samples = sampler.produce_latent_batch(sampler.training_samples_remaining() or 0)
+        samples = sampler.generate(sampler.training_samples_remaining() or 0)
         res = gaussian_eval(samples.xs_discrete, samples.xs_continuous) * samples.weights
         mean, std = res.mean(), res.std()
         print(f"Result before training: {mean} +- {std / np.sqrt(1000)}, RSD={std/mean}     TARGET: 1.0")
-        sampler.ingest_training_values(res)
+        sampler.feedback(res)
         print("Starting training...")
         train(n=config.training_steps-1, batch_size=config.training_batch_size, sampler=sampler)
-        samples = sampler.produce_latent_batch(sampler.training_samples_remaining() or 10000)
+        samples = sampler.generate(sampler.training_samples_remaining() or 10000)
         res = gaussian_eval(samples.xs_discrete, samples.xs_continuous) * samples.weights
         mean, std = res.mean(), res.std()
         print(f"Result after training: {mean} +- {std / np.sqrt(1000)}, RSD={std/mean}     TARGET: 1.0")
