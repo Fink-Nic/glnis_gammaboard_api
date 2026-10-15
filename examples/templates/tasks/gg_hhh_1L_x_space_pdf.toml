@@ -1,0 +1,45 @@
+# Interior unit-cube PDF slices for a three-dimensional gg -> HHH x-space run.
+# Requires momentum_space = false and a completed task named "madnis-train".
+# Use these instead of the physical-momentum PDF tasks in gg_hhh_1L.toml.
+# The 128 cell centers avoid 0 and 1; the unsliced coordinate stays at 0.5.
+# From the GammaBoard checkout:
+# ./gammaboard run task append <RUN> ../glnis_gammaboard_api/examples/templates/tasks/gg_hhh_1L_x_space_pdf.toml
+
+[[task_queue]]
+name = "pdf-2d-x-y-interior"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+discrete = [0, 0]
+offset = [0.5, 0.5, 0.5]
+u_vector = [1.0, 0.0, 0.0]
+v_vector = [0.0, 1.0, 0.0]
+u_linspace = { start = -0.49609375, stop = 0.49609375, count = 128 }
+v_linspace = { start = -0.49609375, stop = 0.49609375, count = 128 }
+
+[[task_queue]]
+name = "pdf-2d-x-z-interior"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+discrete = [0, 0]
+offset = [0.5, 0.5, 0.5]
+u_vector = [1.0, 0.0, 0.0]
+v_vector = [0.0, 0.0, 1.0]
+u_linspace = { start = -0.49609375, stop = 0.49609375, count = 128 }
+v_linspace = { start = -0.49609375, stop = 0.49609375, count = 128 }
+
+[[task_queue]]
+name = "pdf-2d-y-z-interior"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+discrete = [0, 0]
+offset = [0.5, 0.5, 0.5]
+u_vector = [0.0, 1.0, 0.0]
+v_vector = [0.0, 0.0, 1.0]
+u_linspace = { start = -0.49609375, stop = 0.49609375, count = 128 }
+v_linspace = { start = -0.49609375, stop = 0.49609375, count = 128 }

@@ -4,8 +4,9 @@
 # =============================================================================
 
 replacements = {
-    run_name = "epem_a_ttxh", 
-    state_folder = "../../gammaloop/gammaboard_states/epem_a_ttxh/all_separate_integrand/state/",
+    run_name = "epem_a_ttxh",
+    seed = 0,
+    state_folder = "../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state",
     integrand_name = "NLO_GL30",
     target_real = -1.1848e-04,
     target_imag = 0.0,
@@ -15,7 +16,8 @@ replacements = {
     # Must equal train_steps * train_batch_size
     train_samples = 20_000_000,
     cuda_id = 0,
-    max_batch_size = 40_000,
+    max_batch_size = 32_768,
+    max_generation_size = 262_144,
     flow_layers = 4,
     flow_units = 1_000,
     rqs_bins = 10,
@@ -29,7 +31,7 @@ target = { kind = "vector", components = { real = "$(target_real:-1.1848e-04)", 
 
 [evaluator]
 kind = "gammaloop"
-state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/all_separate_integrand/state/)"
+state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)"
 integrand_name = "$(integrand_name:NLO_GL30)"
 momentum_space = false
 
@@ -52,10 +54,10 @@ accumulator = "latest"
 kind = "process_sampler"
 command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
 cwd = "$resources/.."
-requires_training_values = true
+# SampleBatch.training_remaining requests feedback only while training.
 
 [task_queue.sampler_aggregator.config.args]
-seed = 0
+seed = "$(seed:0)"
 training_steps = "$(train_steps:2_000)"
 training_batch_size = "$(train_batch_size:10_000)"
 use_gpu = true
@@ -71,8 +73,8 @@ min_bin_height = "$(rqs_bin_height:5e-4)"
 min_bin_derivative = "$(rqs_bin_derivative:1e-4)"
 
 [task_queue.queue_tuning]
-max_batch_size = "$(max_batch_size:40_000)"
-bulk_sample_generation = true
+max_batch_size = "$(max_batch_size:32_768)"
+max_generation_size = "$(max_generation_size:262_144)"
 
 [[task_queue]]
 name = "accumulator-sample"
@@ -84,11 +86,8 @@ name = "madnis-sample"
 kind = "sample"
 measurement = { quantity = "central_value" }
 stop_condition = { max_samples = "$(sample_samples:1_000_000_000)" }
-sampler_aggregator = { 
-    from_name = "madnis-train",  
-    config = { requires_training_values = false },
-}
+sampler_aggregator = { from_name = "madnis-train" }
 
 [task_queue.queue_tuning]
-max_batch_size = "$(max_batch_size:40_000)"
-bulk_sample_generation = true
+max_batch_size = "$(max_batch_size:32_768)"
+max_generation_size = "$(max_generation_size:262_144)"

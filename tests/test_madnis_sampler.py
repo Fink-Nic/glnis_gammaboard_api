@@ -5,7 +5,38 @@ import numpy as np
 import pytest
 import torch
 
+from gammaboard_process import GenerationStatus
+
 from madnis_sampler import MadnisSampler
+
+
+def test_partial_training_draws_request_feedback_until_the_window_is_complete() -> None:
+    sampler = MadnisSampler(
+        discrete_cardinalities=[],
+        continuous_dims=2,
+        use_gpu=False,
+        training_steps=1,
+        training_batch_size=4,
+        max_batch_size=2,
+        flow_config={"layers": 2, "units": 16, "bins": 4},
+    )
+
+    first = sampler.generate(2)
+    second = sampler.generate(2)
+    assert first.training_remaining == 4
+    assert second.training_remaining == 2
+    assert sampler.generate(1) == GenerationStatus.WAITING
+
+    # Weighted feedback for the constant integrand f=1 is 1/q, i.e. weights.
+    sampler.feedback(first.weights)
+    assert sampler.training_status.step == 0
+    sampler.feedback(second.weights)
+    assert sampler.training_status.step == 1
+    assert sampler.training_status.total_trained_samples == 4
+
+    inference = sampler.generate(3)
+    assert inference.training_remaining is None
+    assert inference.xs_continuous.shape == (3, 2)
 
 
 def test_pdf_masks_cardinality_one_discrete_dimensions(monkeypatch) -> None:

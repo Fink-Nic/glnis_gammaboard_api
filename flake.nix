@@ -2,7 +2,15 @@
   description = "glNIS GammaBoard API development environment";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # Match GammaBoard's package set, including its Python 3.13.12 interpreter.
+    nixpkgs.url = "github:NixOS/nixpkgs/b6067cc0127d4db9c26c79e4de0513e58d0c40c9";
+    # Keep Maturin >= 1.12 without changing the runtime's Python package set.
+    build-tools-nixpkgs.url = "github:NixOS/nixpkgs/8edc0c72e3a38faf5434e40d1f19431125fe4b30";
+    fenix = {
+      url = "github:nix-community/fenix/04b421dace0f5bf18d3ca363e95e59395d4cc680";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.rust-analyzer-src.follows = "";
+    };
     flake-utils.url = "github:numtide/flake-utils";
     crane.url = "github:ipetkov/crane";
 
@@ -16,7 +24,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, crane, madnis-src, gammaboard-src, ... }:
+  outputs = { self, nixpkgs, build-tools-nixpkgs, fenix, flake-utils, crane, madnis-src, gammaboard-src, ... }:
     # The pinned scientific wheels below target Linux x86_64.
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
@@ -27,25 +35,35 @@
 
         inherit (pkgs) lib;
         python = pkgs.python313;
+        maturin = build-tools-nixpkgs.legacyPackages.${system}.maturin;
         projectVersion = (builtins.fromTOML (builtins.readFile ./pyproject.toml)).project.version;
-        cudaPackages = pkgs.cudaPackages_13_0;
-        triton = (python.pkgs.triton-bin.override { inherit cudaPackages; }).overrideAttrs (old: {
-          # Nixpkgs' wheel patch returns a filename string from libcuda_dirs,
-          # which Triton expands into individual characters as linker paths.
-          # Preserve explicit driver overrides and discover the runtime's driver
-          # directories, including those supplied by Apptainer --nv.
-          postFixup = (old.postFixup or "") + ''
-            substituteInPlace "$out/${python.sitePackages}/triton/backends/nvidia/driver.py" \
-              --replace-fail "return '${pkgs.addDriverRunpath.driverLink}/lib/libcuda.so'" \
-                'if env_libcuda_path := knobs.nvidia.libcuda_path:
-                    return [env_libcuda_path]
-                if driver_dirs := [d for d in os.getenv("LD_LIBRARY_PATH", "").split(":") if os.path.isfile(os.path.join(d, "libcuda.so.1"))]:
-                    return driver_dirs'
+        # Use this package set's matching PyTorch, Triton, and CUDA 12 stack.
+        torch = python.pkgs.torch-bin.overridePythonAttrs (old: {
+          dependencies = (old.dependencies or []) ++ [ python.pkgs.fsspec ];
+          # The fetched filename omits the wheel's local CUDA version. Restore
+          # it so wheel unpack/repack can find the matching dist-info directory.
+          preBuild = (old.preBuild or "") + ''
+            for torch_wheel in dist/torch-${old.version}-*.whl; do
+              mv "$torch_wheel" "''${torch_wheel/torch-${old.version}-/torch-${old.version}+cu128-}"
+            done
           '';
+          # Nix supplies these CUDA libraries through torch-bin's buildInputs.
+          pythonRemoveDeps = (old.pythonRemoveDeps or []) ++ [
+            "nvidia-cuda-nvrtc-cu12" "nvidia-cuda-runtime-cu12"
+            "nvidia-cuda-cupti-cu12" "nvidia-cudnn-cu12" "nvidia-cublas-cu12"
+            "nvidia-cufft-cu12" "nvidia-curand-cu12" "nvidia-cusolver-cu12"
+            "nvidia-cusparse-cu12" "nvidia-cusparselt-cu12" "nvidia-nccl-cu12"
+            "nvidia-nvshmem-cu12" "nvidia-nvtx-cu12" "nvidia-nvjitlink-cu12"
+            "nvidia-cufile-cu12"
+          ];
+          # Use the bindings packaged with this CUDA 12.8 stack.
+          pythonRelaxDeps = (old.pythonRelaxDeps or []) ++ [ "cuda-bindings" ];
         });
-        # The pinned PyTorch wheel requires CUDA 13; nixpkgs defaults to CUDA 12.
-        torch = python.pkgs.torch-bin.override { inherit cudaPackages triton; };
-        craneLib = crane.mkLib pkgs;
+        # Symbolica 3.0.1 needs newer Rust than this nixpkgs pin provides.
+        rustToolchain = fenix.packages.${system}.stable.withComponents [
+          "cargo" "clippy" "rust-src" "rust-std" "rustc" "rustfmt"
+        ];
+        craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
         rustTarget = pkgs.stdenv.hostPlatform.rust.rustcTarget;
         cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
         cc = "${pkgs.stdenv.cc}/bin/cc";
@@ -77,16 +95,6 @@
 
         cargoVendorDir = craneLib.vendorCargoDeps {
           cargoLock = ./Cargo.lock;
-          # A registry release has no .git/HEAD. Watching that missing file
-          # makes Cargo discard Symbolica and all its dependents on every build.
-          overrideVendorCargoPackage = package: drv:
-            if package.name == "symbolica" && package.version == "3.0.0"
-            then drv.overrideAttrs (old: {
-              postPatch = (old.postPatch or "") + ''
-                substituteInPlace build.rs \
-                  --replace-fail 'println!("cargo:rerun-if-changed=.git/HEAD");' ""
-              '';
-            }) else drv;
           # GammaLoop embeds assets outside its individual crate directories.
           # Point vendored sources at the full checkout Crane already fetched
           # from Cargo.lock, so assets cannot drift to another revision.
@@ -94,11 +102,14 @@
             if lib.any (p: lib.hasPrefix "git+https://github.com/alphal00p/gammaloop.git" p.source) packages
             then drv.overrideAttrs (old: {
               postInstall = (old.postInstall or "") + ''
-                find "$out" -type f -name '*.rs' -exec sed -i \
-                  -e 's|"\.\./\.\./assets/|"${old.src}/assets/|g' \
-                  -e 's|\$CARGO_MANIFEST_DIR/\.\./\.\./assets/|${old.src}/assets/|g' \
+                find "$out" -type f -name '*.rs' -exec sed -i -E \
+                  -e 's|"(\.\./)+assets/|"${old.src}/assets/|g' \
+                  -e 's|\$CARGO_MANIFEST_DIR/(\.\./)+assets/|${old.src}/assets/|g' \
+                  -e 's|"\.\./linnest/build_assets.rs"|"${old.src}/crates/linnest/build_assets.rs"|g' \
                   -e 's|\$CARGO_MANIFEST_DIR/\.\./linnest/typst|${old.src}/crates/linnest/typst|g' \
                   -e 's|\$CARGO_MANIFEST_DIR/\.\./kurvst/typst|${old.src}/crates/kurvst/typst|g' {} +
+                find "$out" -path '*/gammaloop-api-*/build.rs' -exec sed -i \
+                  -e 's|&manifest.join("\.\.")|\&manifest.join("${old.src}/crates")|g' {} +
               '';
             }) else drv;
         };
@@ -123,7 +134,7 @@
         wheel = craneLib.mkCargoDerivation ((builtins.removeAttrs rustArgs [ "cargoExtraArgs" ]) // {
           src = projectSource;
           inherit cargoArtifacts;
-          nativeBuildInputs = rustArgs.nativeBuildInputs ++ [ pkgs.maturin ];
+          nativeBuildInputs = rustArgs.nativeBuildInputs ++ [ maturin ];
           buildPhaseCargoCommand = ''
             maturin build --release --locked --offline --manylinux off \
               --interpreter ${python}/bin/python3.13 --out dist
@@ -357,12 +368,9 @@
             developVenv
             pkgs.uv
             pkgs.git
-            pkgs.cargo
-            pkgs.clippy
-            pkgs.rustc
-            pkgs.rustfmt
+            rustToolchain
             pkgs.rust-analyzer
-            pkgs.maturin
+            maturin
             pkgs.pkg-config
             pkgs.m4
           ] ++ libs;

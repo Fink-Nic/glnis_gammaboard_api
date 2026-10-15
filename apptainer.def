@@ -2,6 +2,9 @@ Bootstrap: docker
 From: nixos/nix:2.24.11
 Stage: build
 
+%arguments
+    BUILD_CORES=4
+
 # Build from the local checkout, not from Git. Run `apptainer build` from this
 # directory so these relative paths resolve to the project files.
 %files
@@ -21,12 +24,16 @@ experimental-features = nix-command flakes
 sandbox = false
 filter-syscalls = false
 accept-flake-config = true
+max-jobs = 1
+cores = {{ BUILD_CORES }}
 EOF
 
     export NIX_CONFIG='experimental-features = nix-command flakes
 sandbox = false
 filter-syscalls = false
-accept-flake-config = true'
+accept-flake-config = true
+max-jobs = 1
+cores = {{ BUILD_CORES }}'
 
     cd /build-src/glnis_gammaboard_api
     runtime_path="$(nix build .#runtime --no-link --print-out-paths)"

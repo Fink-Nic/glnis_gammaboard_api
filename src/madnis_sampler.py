@@ -87,11 +87,11 @@ class MadnisConfig:
     training_steps: int = 100
     training_batch_size: int = 1000
     max_batch_size: int = 100_000
+    save_path: str | None = None
     use_gpu: bool = True
     cuda_id: int = 1
     learning_rate: float = 1e-3
     use_scheduler: bool = True
-    save_path: str | None = None
     scheduler_type: Literal["cosineannealing"] = "cosineannealing"
     loss_type: Literal[
         "variance", "variance_softclip", "kl_divergence", "kl_divergence_softclip"
@@ -102,6 +102,7 @@ class MadnisConfig:
     flow_config: FlowConfig = field(default_factory=FlowConfig)
     transformer_config: TransformerConfig = field(default_factory=TransformerConfig)
     made_config: MadeConfig = field(default_factory=MadeConfig)
+    gb_loglevel: Literal["trace", "debug", "info", "warn", "error"] = "trace"
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> MadnisConfig:
@@ -199,7 +200,6 @@ class TrainingStatus:
         self.total_trained_samples += self.training_batch_size
 
 
-
 @dataclass
 class GammaLoopEvaluatorMetadata:
     state_folder: str
@@ -267,6 +267,7 @@ class MadnisSampler(gb.Sampler):
         parser: dict[str, Any] | None = None,
         mapping: dict[str, Any] | None = None,
         graph_properties: dict[str, Any] | None = None,
+        gb_loglevel: Literal["trace", "debug", "info", "warn", "error"] = "trace",
     ):
         torch.set_default_dtype(torch.float64)
 
@@ -300,6 +301,7 @@ class MadnisSampler(gb.Sampler):
                 if isinstance(made_config, MadeConfig)
                 else MadeConfig(**(made_config or {}))
             ),
+            gb_loglevel=gb_loglevel,
         )
 
         self.discrete_cardinalities: List[int] = discrete_cardinalities
@@ -383,9 +385,8 @@ class MadnisSampler(gb.Sampler):
         else:
             self.madnis: Integrator = self._get_madnis_integrator()
 
-        # gb.log(
-        #     f"sampler: {self.continuous_dims}, {self.discrete_cardinalities}, n_disc={self.num_discrete_dims}  mapping:     self.mapping.continuous_dims},     self.mapping.discrete_cardinalities}"
-        # )
+        gb.log(f"MadNIS Sampler initialized with {self.continuous_dims} continuous dims and {self.num_discrete_dims} discrete dims (cardinalities: {self.discrete_cardinalities})", level=self.cfg.gb_loglevel)
+
 
     @classmethod
     def from_snapshot(
@@ -559,7 +560,7 @@ class MadnisSampler(gb.Sampler):
             else:
                 remaining_sample_budget = training_remaining
         nr_samples = remaining_sample_budget if remaining_sample_budget is not None else self.cfg.max_batch_size
-        gb.log(f"Producing {nr_samples} samples with MadNIS sampler ({self.training_status.step=}, {self.training_status.produced_samples=}, {self.training_status.total_trained_samples})")
+        gb.log(f"Producing {nr_samples} samples with MadNIS sampler ({self.training_status.step=}, {self.training_status.produced_samples=}, {self.training_status.total_trained_samples})", level=self.cfg.gb_loglevel)
         continuous = np.empty((nr_samples, self.continuous_dims), dtype=np.float64)
         discrete = np.empty((nr_samples, self.num_discrete_dims), dtype=np.int64)
         wgt = np.empty((nr_samples), dtype=np.float64)
@@ -590,7 +591,7 @@ class MadnisSampler(gb.Sampler):
 
     def feedback(self, values: NDArray) -> None:
         if self.training_status.step >= self.cfg.training_steps:
-            gb.log(f"Training target of {self.cfg.training_steps * self.cfg.training_batch_size} samples already reached. Ignoring additional training values.")
+            gb.log(f"Training target of {self.cfg.training_steps * self.cfg.training_batch_size} samples already reached. Ignoring additional training values.", level="warn")
             return
         values = np.asarray(values)
         self.training_status.add_feedback_data(values)
@@ -600,7 +601,7 @@ class MadnisSampler(gb.Sampler):
 
     def training_samples_remaining(self) -> int | None:
         if self.training_status.step < self.cfg.training_steps:
-            return max(self.cfg.training_batch_size - self.training_status.produced_samples, 0)
+            return max(self.cfg.training_batch_size - self.training_status.num_generated, 0)
         return None
 
     def get_diagnostics(self) -> Dict[str, Any]:
@@ -701,7 +702,7 @@ class MadnisSampler(gb.Sampler):
             x=self.training_status.generated_samples,
             y=None,
             q_sample=self.training_status.generated_probs,
-            func_vals=self.training_status.ingested_weights / self.training_status.generated_probs,
+            func_vals=self.training_status.ingested_weights * self.training_status.generated_probs,
             channels=None,
         )
         last_loss = self.madnis._optimization_step(madnis_samples)[0]

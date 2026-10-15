@@ -14,6 +14,11 @@ export SYMBOLICA_LICENSE='your-license-key'
 
 ### Nix
 
+Python is pinned to the same Nixpkgs revision as GammaBoard: Python 3.13.12 with
+the matching PyTorch/CUDA 12 stack. Update both repositories' pins together.
+Rust uses a separate Fenix toolchain because Symbolica 3.0.1 requires Rust 1.96
+or newer. Rerun `glnis-dev` after changing the pin to refresh an editable venv.
+
 Build the project environment:
 
 ```bash
@@ -33,6 +38,10 @@ cwd = "$resources/.."
 
 ### Apptainer
 
+For the complete three-directory UBELIX setup, image builds, ttH LO state
+creation and campaign launch, follow
+[the Apptainer deployment guide](examples/apptainer/README.md).
+
 Apptainer/SIF is the portable runtime path for HPC systems that do not provide
 Nix. The definition uses Nix only inside the image build container to reproduce
 `nix build .#runtime`; the final SIF exposes normal executables and does not
@@ -48,7 +57,7 @@ apptainer build --force glnis.sif apptainer.def
 Use this GammaBoard process command:
 
 ```toml
-command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis_gammaboard_sampler"]
+command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/../..:$resources/../..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis-gammaboard-sampler"]
 cwd = "$resources/.."
 ```
 
@@ -113,21 +122,14 @@ nix build .#runtime
 Commit `Cargo.toml` and `Cargo.lock` together. Maturin and Nix both build with
 `--locked`. The GammaLoop revision is also used for its embedded assets, with no
 separate source hash to maintain. Cargo uses this project's lockfile, not the
-lockfile inside a Git dependency. For GammaLoop `40616e5`, keep Rust Symbolica
-and its transitive Numerica dependency locked to 3.0.0: Numerica 3.0.1 adds a
-required method that this GammaLoop revision does not implement. If a broader
-Cargo update changes those versions, restore them with:
-
-```bash
-cargo update -p symbolica --precise 3.0.0
-cargo update -p numerica --precise 3.0.0
-```
+lockfile inside a Git dependency. GammaLoop `2e22d46` uses Rust Symbolica and
+Numerica 3.0.1, as recorded in `Cargo.lock`.
 
 Use `nix flake update <input-name>` to update a Nix input and commit `flake.lock`.
 The editable Python dependencies use the sources declared in `pyproject.toml`;
 the Nix runtime uses the source revisions in `flake.lock` and Nixpkgs packages.
-Both the Python Symbolica wheel and the Rust Symbolica crate are pinned to
-3.0.0. When updating the Python wheel, update its version in `pyproject.toml`
+The Python Symbolica wheel remains pinned to 3.0.0. When updating the Python
+wheel, update its version in `pyproject.toml`
 and the version, Python ABI tag, and checksum in `flake.nix` using the release
 files published on PyPI.
 
@@ -137,8 +139,35 @@ editable builds retain Cargo's incremental cache across dependency updates.
 
 ## Use With GammaBoard
 
-`examples/ghost_bump_madnis.toml` is a ready-to-copy run template. It uses the
-nix build command by default.
+Run templates live in `examples/templates/runs/`. Load them directly from the
+GammaBoard checkout, for example:
+
+```bash
+./gammaboard run create ../glnis_gammaboard_api/examples/templates/runs/ghost_bump_madnis.toml
+```
+
+Campaigns resolve their child template relative to the campaign file. Keep the
+base `madnis_gammaloop_train_sample.toml` beside the campaign when copying files.
+The templates launch the built Nix runtime by default.
+
+Training feedback follows `SampleBatch.training_remaining`; these templates do
+not need `requires_training_values`. Keep the training task's `max_samples`
+equal to `training_steps * training_batch_size` so inference restores a fully
+trained snapshot. Bulk generation is now automatic; `bulk_sample_generation`
+is retired.
+
+The physics templates expose independent `max_batch_size` (32,768 evaluator
+samples) and `max_generation_size` (262,144 samples per sampler draw) replacements.
+Training draws also stop at the minibatch boundary. Leave evaluator batch sizing
+adaptive; try `sampler_aggregator_runner_params.io_threads = 2` or `4` only when
+transport is limiting throughput and those CPU threads are available. The default
+is one I/O thread per active sampler, so account for concurrent campaign children.
+
+For GammaLoop x-space PDF images, every coordinate must be strictly inside
+`(0, 1)`, including coordinates held fixed by a slice. The task template
+`examples/templates/tasks/gg_hhh_1L_x_space_pdf.toml` supplies three interior
+128-by-128 slices with the fixed coordinate at 0.5. Physical-momentum runs use
+the separate slices and spherical mapping in `gg_hhh_1L.toml`.
 
 The sampler command uses `$resources/..` because GammaBoard expands
 `$resources` to the default resource directory. Sampler `args` are passed
