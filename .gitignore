@@ -2,6 +2,11 @@
 result
 result-*
 *.sif
+*.sif.meta.json
+*.sif.lock
+*.sif.build-*/
+/artifacts/ubelix/
+/logs/slurm/build/
 build
 madnis_gammaboard_api.egg-info
 checkpoints/

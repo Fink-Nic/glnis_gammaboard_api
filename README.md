@@ -38,9 +38,9 @@ cwd = "$resources/.."
 
 ### Apptainer
 
-For the complete three-directory UBELIX setup, image builds, ttH LO state
-creation and campaign launch, follow
-[the Apptainer deployment guide](examples/apptainer/README.md).
+On UBELIX, clone this repository and run `python3 ubelix.py` to submit a Slurm
+build of the sampler image. See [the UBELIX guide](ops/ubelix/README.md) for
+resource options, build monitoring, and using the image with GammaBoard.
 
 Apptainer/SIF is the portable runtime path for HPC systems that do not provide
 Nix. The definition uses Nix only inside the image build container to reproduce
