@@ -1,41 +1,41 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./gammaboard_states/epem_a_ttxh/NLO/all_single_integrand/state"
+folder = "./gammaboard_states/epem_a_ttxh/LO/state"
 
 [[command_blocks]]
-name = "generate_diagrams"
-# Mapping of the 11 NLO diagrams w.r.t our notation in https://arxiv.org/pdf/2203.11038
+# Mapping of the 2 LO diagrams w.r.t our notation in https://arxiv.org/pdf/2203.11038
 # Targets from the real part of the cross-section in the OS+MSbar scheme
 # (table 7 of https://arxiv.org/pdf/2203.11038 and model parameters defined therein)
-# GL00 -> F.2 ->  +3.1908e-05
-# GL02 -> F.1 ->  -2.504e-06
-# GL06 -> F.8 ->  -2.4706e-04
-# GL08 -> F.5 ->  -3.2336e-06
-# GL10 -> F.9 ->  +4.7475e-05
-# GL12 -> F.6 ->  +5.5828e-05
-# GL18 -> F.3 ->  +1.3472e-04
-# GL20 -> F.10 -> +2.0875e-04
-# GL22 -> F.11 -> -9.1283e-05
-# GL26 -> F.4 ->  -1.47653e-04
-# GL30 -> F.7 ->  -1.18480e-04
-# total -> MG5aMC -> -1.3205e-4
+# GL0 -> E.2 ->  +9.4622e-04
+# GL2 -> E.1 ->  +6.17234e-04
+# total -> MG5aMC -> +1.56331e-03
+name = "generate_diagrams"
 commands = [
   "import model sm-default.json",
-  "set global kv global.n_cores.feyngen=10",
   "remove processes",
-  """generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD=1]
+  """generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0]
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
-      -p epem_a_ttxh -i NLO
+      -p epem_a_ttxh -i LO
       --only-diagrams""",
+  """select -p epem_a_ttxh -i LO
+      --output_process epem_a_ttxh --output_integrand LO_GL0
+      --with-graph-names GL0""",
+  """select -p epem_a_ttxh -i LO
+      --output_process epem_a_ttxh --output_integrand LO_GL2
+      --with-graph-names GL2""",
+  "remove processes -p epem_a_ttxh -i LO",
   "save dot",
 ]
 
 [[command_blocks]]
 name = "generate_integrands"
 commands = [
-    "generate existing -p epem_a_ttxh -i NLO",
-    "save state -o"
+  "generate existing",
+  "run set_model_parameters",
+  "run set_differential_quantities",
+  "run set_differential_observables",
+  "save state -o"
 ]
 
 [[command_blocks]]
@@ -48,27 +48,25 @@ commands = [
   "set model aEWM1=132.507",
   "set model Gf=1.166390e-05",
   "set model MZ=91.188",
+
 ]
 
 [[command_blocks]]
 name = "integrate"
 commands = [
   "run set_model_parameters",
-  "run set_differential_quantities",
-  "run set_differential_observables",
   """
-  set process -p epem_a_ttxh -i NLO kv
+  set process -p epem_a_ttxh -i "$(integrand_name:LO_GL0)" kv
     integrator.n_increase=100000
     integrator.n_start=100000
     integrator.n_max=10000000000
     integrator.seed=1337
     integrator.integrated_phase="real"
     integrator.continuous_dim_learning_rate=0.4
-    integrator.max_prob_ratio=10
   """,
   """
-  integrate -p epem_a_ttxh -i NLO --n-cores 10
-         --target epem_a_ttxh@NLO=-1.3205e-04,0.0
+  integrate -p epem_a_ttxh -i "$(integrand_name:LO_GL0)" --n-cores 10
+         --target epem_a_ttxh@"$(integrand_name:LO_GL0)"="$(integration_target:+9.4622e-04)",0.0
 				 --renderer ratatui
 				 --batch-size 10000
 				 --show-phase both
@@ -80,6 +78,35 @@ commands = [
   """
 ]
 
+[[command_blocks]]
+name = "integrate_all"
+commands = [
+  "run set_model_parameters",
+  """
+  integrate
+         -p epem_a_ttxh -i LO_GL0
+         -p epem_a_ttxh -i LO_GL2
+         --target epem_a_ttxh@LO_GL0=+9.4622e-04,0.0
+         --target epem_a_ttxh@LO_GL2=+6.17234e-04,0.0
+         --n-cores 10
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --write-results-for-each-iteration
+                 --uncorrelated
+         --restart
+  """,
+]
+
+[[command_blocks]]
+name = "generate"
+commands = ["run generate_diagrams generate_integrands"]
+
+[[command_blocks]]
+name = "all"
+commands = ["run generate integrate_all"]
 
 [default_runtime_settings.kinematics]
 e_cm = 1000.0
@@ -103,7 +130,7 @@ momenta = [
 	],
 ]
 helicities = [
-  "summed_averaged",
+    "summed_averaged",
 	"summed_averaged",
 ]
 
@@ -116,6 +143,17 @@ store_additional_weights_in_event = false
 integral_unit = "picobarn"
 m_uv = 91.188
 mu_r = 91.188
+
+[default_runtime_settings.integrator]
+n_increase=100000
+n_start=100000
+n_max=10000000000
+seed=1337
+integrated_phase="real"
+continuous_dim_learning_rate=0.4
+
+[cli_settings.global.generation]
+override_lmb_heuristics = true
 
 [cli_settings.global.generation.evaluator]
 do_algebra = false
@@ -148,10 +186,14 @@ disable_threshold_subtraction = false
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channel_weight = "ose"
-# For importance-sampling over channels, use the quantity below
-lmb_channels = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+default_channel_selection = ["auto:optimized_lmb"]
+sampling_channel_weight = "ose"
+alpha = 3.0
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
 
 [default_runtime_settings.integrator.observables_output]
 format = ["hwu","json"]
@@ -196,10 +238,26 @@ escalate_for_large_weight_threshold = -1.0
 [[command_blocks]]
 name = "set_differential_quantities"
 commands = [
-  """set process -p epem_a_ttxh -i NLO string '
+  "run -D integrand_name=LO_GL0 set_differential_quantities_single",
+  "run -D integrand_name=LO_GL2 set_differential_quantities_single",
+]
+
+[[command_blocks]]
+name = "set_differential_observables"
+commands = [
+  "run -D integrand_name=LO_GL0 set_differential_observables_single",
+  "run -D integrand_name=LO_GL2 set_differential_observables_single",
+]
+
+[[command_blocks]]
+name = "set_differential_quantities_single"
+commands = ["""set process -p epem_a_ttxh -i "$(integrand_name:LO_GL0)" string '
 
 [quantities.integral]
 type = "integral"
+
+[quantities.graph_id]
+type = "graph_id"
 
 [quantities.jet_pt]
 type = "jet"
@@ -328,27 +386,90 @@ computation = "scalar"
 pdgs = [25,]
 quantity = "CosTheta"
 '""",
+# """set process -p epem_a_ttxh -i LO_semi_inclusive string '
+#
+# [quantities.higgs_cos_theta]
+# type = "particle"
+# computation = "scalar"
+# pdgs = [25,]
+# quantity = "CosTheta"
+#
+# [quantities.higgs_energy]
+# type = "particle"
+# computation = "scalar"
+# pdgs = [25,]
+# quantity = "E"
+#
+# '"""
 ]
 
 [[command_blocks]]
-name = "set_differential_observables"
-commands = [
-  """set process -p epem_a_ttxh -i NLO string '
+name = "set_differential_observables_single"
+commands = ["""set process -p epem_a_ttxh -i "$(integrand_name:LO_GL0)" string '
 
 [observables.integral]
 title = "xs"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "integral"
-phase = "imag"
+phase = "real"
 kind = "discrete"
 domain = { type = "single_bin" }
 labels = { type = "custom", labels = ["total integral"] }
+
+[observables.graph_id]
+title = "graph"
+type_description = "AL,LO"
+quantity = "graph_id"
+phase = "real"
+kind = "discrete"
+domain = { type = "graph_ids" }
+labels = { type = "graph_name" }
+
+# [observables.graph_0_orientation_id]
+# title = "graph 0 orientation"
+# type_description = "AL,LO"
+# quantity = "orientation_id"
+# selections = ["graph_0_only"]
+# phase = "real"
+# kind = "discrete"
+# domain = { type = "orientation_ids" }
+# labels = { type = "orientation" }
+#
+# [observables.graph_1_orientation_id]
+# title = "graph 1 orientation"
+# type_description = "AL,LO"
+# quantity = "orientation_id"
+# selections = ["graph_1_only"]
+# phase = "real"
+# kind = "discrete"
+# domain = { type = "orientation_ids" }
+# labels = { type = "orientation" }
+#
+# [observables.graph_0_lmb_channel_id]
+# title = "graph 0 lmb channel"
+# type_description = "AL,LO"
+# quantity = "lmb_channel_id"
+# selections = ["graph_0_only"]
+# phase = "real"
+# kind = "discrete"
+# domain = { type = "lmb_channel_ids" }
+# labels = { type = "lmb_channel_edge_ids" }
+#
+# [observables.graph_1_lmb_channel_id]
+# title = "graph 1 lmb channel"
+# type_description = "AL,LO"
+# quantity = "lmb_channel_id"
+# selections = ["graph_1_only"]
+# phase = "real"
+# kind = "discrete"
+# domain = { type = "lmb_channel_ids" }
+# labels = { type = "lmb_channel_edge_ids" }
 
 # Higgs observables
 
 [observables.higgs_energy]
 title = "H E"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "higgs_energy"
 phase = "real"
 x_min = 0.0
@@ -357,7 +478,7 @@ n_bins = 100
 
 [observables.higgs_log_energy]
 title = "H log E"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "higgs_energy"
 value_transform = "log10"
 phase = "real"
@@ -367,7 +488,7 @@ n_bins = 100
 
 [observables.higgs_pt]
 title = "H pt"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "higgs_pt"
 phase = "real"
 x_min = 0.0
@@ -376,7 +497,7 @@ n_bins = 100
 
 [observables.higgs_log_pt]
 title = "H log pt"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "higgs_pt"
 value_transform = "log10"
 phase = "real"
@@ -386,7 +507,7 @@ n_bins = 100
 
 [observables.higgs_y]
 title = "H y"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "higgs_y"
 phase = "real"
 x_min = -6.0
@@ -395,7 +516,7 @@ n_bins = 60
 
 [observables.higgs_eta]
 title = "H eta"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "higgs_eta"
 phase = "real"
 x_min = -6.0
@@ -406,7 +527,7 @@ n_bins = 60
 
 [observables.top_energy]
 title = "top E"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "top_energy"
 phase = "real"
 x_min = 0.0
@@ -415,7 +536,7 @@ n_bins = 100
 
 [observables.top_log_energy]
 title = "top log E"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "top_energy"
 value_transform = "log10"
 phase = "real"
@@ -425,7 +546,7 @@ n_bins = 100
 
 [observables.top_pt]
 title = "top pt"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "top_pt"
 phase = "real"
 x_min = 0.0
@@ -434,7 +555,7 @@ n_bins = 100
 
 [observables.top_log_pt]
 title = "top log pt"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "top_pt"
 value_transform = "log10"
 phase = "real"
@@ -444,7 +565,7 @@ n_bins = 100
 
 [observables.top_y]
 title = "top y"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "top_y"
 phase = "real"
 x_min = -6.0
@@ -453,7 +574,7 @@ n_bins = 60
 
 [observables.top_eta]
 title = "top eta"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "top_eta"
 phase = "real"
 x_min = -6.0
@@ -464,7 +585,7 @@ n_bins = 60
 
 [observables.jet_energy]
 title = "jet E"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "jet_energy"
 phase = "real"
 x_min = 0.0
@@ -473,7 +594,7 @@ n_bins = 100
 
 [observables.jet_log_energy]
 title = "jet log E"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "jet_energy"
 value_transform = "log10"
 phase = "real"
@@ -483,7 +604,7 @@ n_bins = 100
 
 [observables.jet_pt]
 title = "jet pt"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "jet_pt"
 phase = "real"
 x_min = 0.0
@@ -492,7 +613,7 @@ n_bins = 100
 
 [observables.jet_log_pt]
 title = "jet log pt"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "jet_pt"
 value_transform = "log10"
 phase = "real"
@@ -502,7 +623,7 @@ n_bins = 100
 
 [observables.jet_y]
 title = "jet y"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "jet_y"
 phase = "real"
 x_min = -6.0
@@ -511,7 +632,7 @@ n_bins = 60
 
 [observables.jet_eta]
 title = "jet eta"
-type_description = "AL,NLO"
+type_description = "AL,LO"
 quantity = "jet_eta"
 phase = "real"
 x_min = -6.0
@@ -525,5 +646,42 @@ phase = "real"
 kind = "discrete"
 domain = { type = "explicit_range", min = 0, max = 1 }
 
-'"""
+'"""]
+
+[[command_blocks]]
+name = "set_differential_selectors"
+commands = ["""set process -p epem_a_ttxh -i LO string '
+
+# [selectors.graph_0_only]
+# quantity = "graph_id"
+# active = false
+# selector = "discrete_range"
+# min = 0
+# max = 0
+#
+# [selectors.graph_1_only]
+# quantity = "graph_id"
+# active = false
+# selector = "discrete_range"
+# min = 1
+# max = 1
+
+'""",
+# """set process -p epem_a_ttxh -i LO_semi_inclusive string '
+#
+# [selectors.higgs_energy_cut]
+# quantity = "higgs_energy"
+# selector = "value_range"
+# entry_selection = "leading_only"
+# min = 250.0
+# max = 500.0
+#
+# [selectors.higgs_cos_theta_cut]
+# quantity = "higgs_cos_theta"
+# selector = "value_range"
+# entry_selection = "leading_only"
+# min = -0.6
+# max = 0.6
+#
+# '"""
 ]

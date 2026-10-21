@@ -1,6 +1,8 @@
 # Ghost bump with the MADNIS process sampler.
 
-name = "ghost_bump_madnis"
+replacements = { run_name = "ghost_bump_madnis", seed = 0 }
+
+name = '$(run_name:"ghost_bump_madnis")'
 
 # Use this on UBELIX to ensure the job is scheduled on a GPU node
 # sampler_requirements = { gpu = 1 }
@@ -24,19 +26,19 @@ stop_condition = { max_samples = 200000 }
 kind = "process_sampler"
 # command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
 # Alternative with Apptainer when the host supports Apptainer/SIF execution:
-# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/..:$resources/..", "$resources/../integrations/glnis_gammaboard_api/madnis.sif", "glnis_gammaboard_sampler"]
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/../..:$resources/../..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis-gammaboard-sampler"]
 # Alternative with the Nix runtime when Nix is available:
 command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
 cwd = "$resources/.."
-requires_training_values = true
+# SampleBatch.training_remaining requests feedback only while training.
 
 [task_queue.sampler_aggregator.config.args]
-seed = 0
+seed = "$(seed:0)"
 training_steps = 200
 training_batch_size = 1000
 use_gpu = true
 cuda_id = 0
-save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
+save_path = 'integrations/madnis_checkpoints/$(run_name:"ghost_bump_madnis")/seed_$(seed:0)'
 
 [[task_queue]]
 name = "pdf-2d"

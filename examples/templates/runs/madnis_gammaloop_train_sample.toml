@@ -1,0 +1,93 @@
+# =============================================================================
+# Base runcard for a madnis training task followed by inference for a gammaloop
+# integrand. Default process is e+e- -> a* -> ttxh @ NLO for the graph GL30
+# =============================================================================
+
+replacements = {
+    run_name = "epem_a_ttxh",
+    seed = 0,
+    state_folder = "../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state",
+    integrand_name = "NLO_GL30",
+    target_real = -1.1848e-04,
+    target_imag = 0.0,
+    sample_samples = 1_000_000_000,
+    train_steps = 2_000,
+    train_batch_size = 10_000,
+    # Must equal train_steps * train_batch_size
+    train_samples = 20_000_000,
+    cuda_id = 0,
+    max_batch_size = 32_768,
+    max_generation_size = 262_144,
+    flow_layers = 4,
+    flow_units = 1_000,
+    rqs_bins = 10,
+    rqs_bin_width = 3e-4,
+    rqs_bin_height = 5e-4,
+    rqs_bin_derivative = 1e-4,
+}
+
+name = '$(run_name:"epem_a_ttxh")_$(integrand_name:"NLO_GL30")_$(seed:0)'
+target = { kind = "vector", components = { real = "$(target_real:-1.1848e-04)", imag = "$(target_imag:0.0)" } }
+
+[evaluator]
+kind = "gammaloop"
+state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)"
+integrand_name = "$(integrand_name:NLO_GL30)"
+momentum_space = false
+
+[evaluator.preprocessing]
+read_only = true
+commands = []
+
+[[task_queue]]
+name = "accumulator-train"
+kind = "set_accumulator"
+accumulator = "gammaloop"
+
+[[task_queue]]
+name = "madnis-train"
+kind = "sample"
+stop_condition = { max_samples = "$(train_samples:20_000_000)" }
+accumulator = "latest"
+
+[task_queue.sampler_aggregator.config]
+kind = "process_sampler"
+command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
+cwd = "$resources/.."
+# SampleBatch.training_remaining requests feedback only while training.
+
+[task_queue.sampler_aggregator.config.args]
+seed = "$(seed:0)"
+training_steps = "$(train_steps:2_000)"
+training_batch_size = "$(train_batch_size:10_000)"
+use_gpu = true
+cuda_id = "$(cuda_id:0)"
+save_path = 'integrations/madnis_checkpoints/$(run_name:"epem_a_ttxh")/$(integrand_name:"NLO_GL30")_$(seed:0)'
+
+[task_queue.sampler_aggregator.config.args.flow_config]
+layers = "$(flow_layers:4)"
+units = "$(flow_units:1_000)"
+bins = "$(rqs_bins:10)"
+min_bin_width = "$(rqs_bin_width:3e-4)"
+min_bin_height = "$(rqs_bin_height:5e-4)"
+min_bin_derivative = "$(rqs_bin_derivative:1e-4)"
+
+[task_queue.queue_tuning]
+max_batch_size = "$(max_batch_size:32_768)"
+max_generation_size = "$(max_generation_size:262_144)"
+
+[[task_queue]]
+name = "accumulator-sample"
+kind = "set_accumulator"
+accumulator = "gammaloop"
+
+[[task_queue]]
+name = "madnis-sample"
+kind = "sample"
+measurement = { quantity = "central_value" }
+stop_condition = { max_samples = "$(sample_samples:1_000_000_000)" }
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.queue_tuning]
+max_batch_size = "$(max_batch_size:32_768)"
+max_generation_size = "$(max_generation_size:262_144)"

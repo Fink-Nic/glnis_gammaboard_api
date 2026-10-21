@@ -1,0 +1,145 @@
+# =============================================================================
+# gg -> HHH @ 1L amplitude, sqrt(s) = 1000 GeV  --  GammaLoop engine
+# =============================================================================
+
+replacements = {
+    run_name = "gg_hhh_1_L_madnis",
+    seed = 0,
+    # Keep train_samples equal to training_steps * training_batch_size.
+    train_samples = 5_000_000,
+    training_steps = 500,
+    training_batch_size = 10_000,
+    sample_samples = 10_000_000,
+    max_batch_size = 32_768,
+    max_generation_size = 262_144,
+}
+
+name = '$(run_name:"gg_hhh_1_L_madnis")'
+target = { kind = "vector", components = { real = 5.4660399e-6, imag = 1.892036e-6 } }
+
+[evaluator]
+kind = "gammaloop"
+state_folder = "../../gammaloop/examples/cli/gg_hhh/1L/state"
+integrand_name = "1L"
+momentum_space = true
+# This card samples physical momenta through the spherical mapping below.
+# For x-space, set false, remove mapping.layer_cfgs, and use the interior-cube
+# PDF tasks in ../tasks/gg_hhh_1L_x_space_pdf.toml instead of these physical slices.
+
+[evaluator.preprocessing]
+read_only = true
+
+[[task_queue]]
+name = "accumulator-train"
+kind = "set_accumulator"
+accumulator = "gammaloop"
+
+[[task_queue]]
+name = "madnis-train"
+kind = "sample"
+stop_condition = { max_samples = "$(train_samples:5_000_000)" }
+accumulator = "latest"
+
+[task_queue.sampler_aggregator.config]
+kind = "process_sampler"
+# command = ["$resources/../../glnis_gammaboard_api/result/bin/glnis-gammaboard-sampler"]
+# Alternative with Apptainer when the host supports Apptainer/SIF execution:
+# command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/../..:$resources/../..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis-gammaboard-sampler"]
+# Alternative with the Nix runtime when Nix is available:
+command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
+cwd = "$resources/.."
+# SampleBatch.training_remaining requests feedback only while training.
+
+[task_queue.sampler_aggregator.config.args]
+seed = "$(seed:0)"
+training_steps = "$(training_steps:500)"
+training_batch_size = "$(training_batch_size:10_000)"
+use_gpu = true
+cuda_id = 0
+save_path = 'integrations/madnis_checkpoints/$(run_name:"gg_hhh_1_L_madnis")/seed_$(seed:0)'
+mapping.layer_cfgs = [
+    { kind = "spherical" },
+]
+
+[task_queue.queue_tuning]
+max_batch_size = "$(max_batch_size:32_768)"
+max_generation_size = "$(max_generation_size:262_144)"
+
+[[task_queue]]
+name = "accumulator-sample"
+kind = "set_accumulator"
+accumulator = "gammaloop"
+
+[[task_queue]]
+name = "sample"
+kind = "sample"
+measurement = { quantity = "central_value" }
+stop_condition = { max_samples = "$(sample_samples:10_000_000)" }
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.queue_tuning]
+max_batch_size = "$(max_batch_size:32_768)"
+max_generation_size = "$(max_generation_size:262_144)"
+
+[[task_queue]]
+name = "pdf-2d-x-y"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+discrete = [0, 0]
+offset = [-369.0, -443.0, 278.0]
+u_vector = [10.0, 0.0, 0.0]
+v_vector = [0.0, 10.0, 0.0]
+
+[task_queue.geometry.u_linspace]
+start = -0.5
+stop = 0.5
+count = 128
+
+[task_queue.geometry.v_linspace]
+start = -0.5
+stop = 0.5
+count = 128
+
+[[task_queue]]
+name = "pdf-2d-x-z"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+discrete = [0, 0]
+offset = [-369.0, -443.0, 278.0]
+u_vector = [10.0, 0.0, 0.0]
+v_vector = [0.0, 0.0, 10.0]
+
+[task_queue.geometry.u_linspace]
+start = -0.5
+stop = 0.5
+count = 128
+
+[task_queue.geometry.v_linspace]
+start = -0.5
+stop = 0.5
+count = 128
+
+[[task_queue]]
+name = "pdf-2d-y-z"
+kind = "pdf_adaptation_image"
+sampler_aggregator = { from_name = "madnis-train" }
+
+[task_queue.geometry]
+discrete = [0, 0]
+offset = [-369.0, -443.0, 278.0]
+u_vector = [0.0, 10.0, 0.0]
+v_vector = [0.0, 0.0, 10.0]
+
+[task_queue.geometry.u_linspace]
+start = -0.5
+stop = 0.5
+count = 128
+
+[task_queue.geometry.v_linspace]
+start = -0.5
+stop = 0.5
+count = 128

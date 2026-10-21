@@ -1,6 +1,6 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./gammaboard_states/epem_a_ttxh/NLO/all_separate_integrand/state"
+folder = "./gammaboard_states/epem_a_ttxh/NLO/state"
 
 [[command_blocks]]
 name = "generate_diagrams"
@@ -72,7 +72,6 @@ commands = [
     "run set_model_parameters",
     "run set_differential_quantities",
     "run set_differential_observables",
-    "set process -p epem_a_ttxh -i NLO_GL30 kv general.m_uv=10.0",
     "save state -o"
 ]
 
@@ -155,6 +154,13 @@ commands = [
   """,
 ]
 
+[[command_blocks]]
+name = "generate"
+commands = ["run generate_diagrams generate_integrands"]
+
+[[command_blocks]]
+name = "all"
+commands = ["run generate integrate_all"]
 
 [default_runtime_settings.kinematics]
 e_cm = 1000.0
@@ -231,10 +237,14 @@ disable_threshold_subtraction = false
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channel_weight = "ose"
-# For importance-sampling over channels, use the quantity below
-lmb_channels = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+default_channel_selection = ["auto:optimized_lmb"]
+sampling_channel_weight = "ose"
+alpha = 3.0
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
 
 [default_runtime_settings.integrator.observables_output]
 format = ["hwu","json"]

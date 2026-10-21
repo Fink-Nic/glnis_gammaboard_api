@@ -2,6 +2,13 @@ Bootstrap: docker
 From: nixos/nix:2.24.11
 Stage: build
 
+%arguments
+    BUILD_CORES=4
+
+%setup
+    # Writable builds require bind destinations to exist before %post starts.
+    mkdir -p "${APPTAINER_ROOTFS:?}/build-cache"
+
 # Build from the local checkout, not from Git. Run `apptainer build` from this
 # directory so these relative paths resolve to the project files.
 %files
@@ -15,21 +22,61 @@ Stage: build
 %post
     set -eux
 
+    # Root-mapped user namespaces cannot switch to the nixbld users provided
+    # by the base image. Run builds as the current container user instead.
     mkdir -p /etc/nix
     cat > /etc/nix/nix.conf <<'EOF'
 experimental-features = nix-command flakes
 sandbox = false
 filter-syscalls = false
 accept-flake-config = true
+max-jobs = 1
+cores = {{ BUILD_CORES }}
+build-users-group =
+extra-ignored-acls = system.gpfs_nfs4_acl
 EOF
 
     export NIX_CONFIG='experimental-features = nix-command flakes
 sandbox = false
 filter-syscalls = false
-accept-flake-config = true'
+accept-flake-config = true
+max-jobs = 1
+cores = {{ BUILD_CORES }}
+build-users-group =
+extra-ignored-acls = system.gpfs_nfs4_acl'
+
+    # The Slurm job binds its private cache here. Cache each completed build so
+    # retries can reuse expensive CUDA libraries even if a later build fails.
+    if [ -d /build-cache ]; then
+        if [ -f /build-cache/nix-cache-info ]; then
+            export NIX_CONFIG="${NIX_CONFIG}
+extra-substituters = file:///build-cache/?trusted=1&priority=10"
+        fi
+        cat > /etc/nix/save-build-cache.sh <<'EOF'
+#!/bin/sh
+set -eu
+set -f
+# Nix supplies space-separated store paths, which cannot contain whitespace.
+exec nix copy --to 'file:///build-cache/?compression=zstd&compression-level=1' $OUT_PATHS
+EOF
+        chmod +x /etc/nix/save-build-cache.sh
+        export NIX_CONFIG="${NIX_CONFIG}
+post-build-hook = /etc/nix/save-build-cache.sh"
+    fi
 
     cd /build-src/glnis_gammaboard_api
-    runtime_path="$(nix build .#runtime --no-link --print-out-paths)"
+    export HOME=/build-home
+    export XDG_CACHE_HOME=/build-home/.cache
+    export TMPDIR=/build-tmp
+    mkdir -p "$HOME" "$TMPDIR"
+    build_tools="$(nix build '.#container-build-tools^bin' --no-link --print-out-paths)"
+    # Use a non-root UID in a nested user namespace. All files owned by this
+    # build's root become owned by UID 1000 there, without changing host owners.
+    # GNU tar then skips restoring CUDA archives' original owners.
+    echo 'glnis-build:x:1000:1000:Container build:/build-home:/bin/sh' >> /etc/passwd
+    echo 'glnis-build:x:1000:' >> /etc/group
+    runtime_path="$("$build_tools/bin/unshare" --user --map-user=1000 --map-group=1000 \
+        nix build .#runtime --no-link --print-out-paths --print-build-logs)"
 
     mkdir -p /closure/nix/store /closure/opt
     nix-store --query --requisites "${runtime_path}" > /tmp/glnis-runtime-closure
@@ -44,9 +91,12 @@ Bootstrap: docker
 From: debian:bookworm-slim
 Stage: final
 
+%setup
+    mkdir -p "${APPTAINER_ROOTFS:?}/build-cache"
+
 %files from build
     /closure/nix /nix
-    /closure/opt /opt
+    /closure/opt/glnis-runtime /opt/glnis-runtime
 
 %post
     set -eux
@@ -77,17 +127,19 @@ EOF
     export OMP_NUM_THREADS="${OMP_NUM_THREADS:-64}"
     export PYTHONUNBUFFERED=1
     export UV_PYTHON_DOWNLOADS=never
-    export SYMBOLICA_OEM_LICENSE="${SYMBOLICA_OEM_LICENSE:-SYMBOLICA_OEM_GAMMALOOP}"
 
 %runscript
     exec /usr/local/bin/glnis_gammaboard_sampler "$@"
 
 %test
-    python - <<'PY'
+    python -c '
 import gammaboard_process
 import glnis
+from glnis import _rust
 import madnis
 import madnis_sampler
 import run_sampler
+assert _rust.health_check() == "glnis-gammaboard-api rust extension ok"
+assert callable(run_sampler.main)
 print("glnis gammaboard sampler runtime ok")
-PY
+'
