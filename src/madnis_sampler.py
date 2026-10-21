@@ -1,8 +1,12 @@
 # type: ignore
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, List, Literal, Tuple
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
+from copy import deepcopy
+import io
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Literal, Tuple, get_args, get_origin, get_type_hints
+from types import UnionType
 
 import numpy as np
 import torch
@@ -11,6 +15,36 @@ from madnis.integrator import Integrand, Integrator, losses
 from madnis.integrator import SampleBatch as MadnisSampleBatch
 from numpy.typing import NDArray
 from torch._tensor import Tensor
+
+
+def _validate_config(config: Any, path: str = "sampler") -> None:
+    """Validate dataclass settings without coercing TOML strings or booleans."""
+    for name, annotation in get_type_hints(type(config)).items():
+        value = getattr(config, name)
+        key = f"{path}.{name}"
+        origin = get_origin(annotation)
+        if origin is UnionType:
+            if value is None and type(None) in get_args(annotation):
+                continue
+            annotation = next(item for item in get_args(annotation) if item is not type(None))
+            origin = get_origin(annotation)
+        if origin is Literal:
+            if value not in get_args(annotation):
+                raise ValueError(f"{key} must be one of {get_args(annotation)!r}")
+        elif annotation is int:
+            minimum = 0 if name in {"seed", "training_steps", "cuda_id"} else 1
+            if type(value) is not int or value < minimum:
+                raise ValueError(f"{key} must be an integer >= {minimum}")
+        elif annotation is float:
+            if type(value) not in (int, float) or not np.isfinite(value) or value <= 0:
+                raise ValueError(f"{key} must be a finite number > 0")
+        elif annotation in (bool, str):
+            if type(value) is not annotation:
+                raise ValueError(f"{key} must be {annotation.__name__}")
+        elif is_dataclass(annotation):
+            if not isinstance(value, annotation):
+                raise ValueError(f"{key} must be a {annotation.__name__}")
+            _validate_config(value, key)
 
 
 @dataclass
@@ -84,6 +118,7 @@ class MadnisConfig:
     """
 
     seed: int = 42
+    kind: Literal["default", "sgn_strat_naive", "sgn_strat_full"] = "default"
     training_steps: int = 100
     training_batch_size: int = 1000
     max_batch_size: int = 100_000
@@ -94,42 +129,45 @@ class MadnisConfig:
     use_scheduler: bool = True
     scheduler_type: Literal["cosineannealing"] = "cosineannealing"
     loss_type: Literal[
-        "variance", "variance_softclip", "kl_divergence", "kl_divergence_softclip"
+        "variance", "variance_softclip", "kl_divergence", "kl_divergence_softclip", "rkl_divergence",
     ] = "kl_divergence"
     discrete_dims_position: Literal["first", "last"] = "first"
     condition_integrand_first: bool = True
+    freeze_discrete_model: bool = False
     discrete_model: Literal["transformer", "made"] = "transformer"
     flow_config: FlowConfig = field(default_factory=FlowConfig)
     transformer_config: TransformerConfig = field(default_factory=TransformerConfig)
     made_config: MadeConfig = field(default_factory=MadeConfig)
     gb_loglevel: Literal["trace", "debug", "info", "warn", "error"] = "trace"
 
+    def __post_init__(self) -> None:
+        _validate_config(self)
+        if self.transformer_config.embedding_dim % self.transformer_config.heads:
+            raise ValueError("sampler.transformer_config.embedding_dim must be divisible by heads")
+
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> MadnisConfig:
-        flow_config = FlowConfig(**config_dict.get("flow_config", {}))
-        transformer_config = TransformerConfig(
-            **config_dict.get("transformer_config", {})
-        )
-        made_config = MadeConfig(**config_dict.get("made_config", {}))
-        return cls(
-            seed=config_dict.get("seed", 42),
-            training_steps=config_dict.get("training_steps", 100),
-            training_batch_size=config_dict.get("training_batch_size", 1000),
-            max_batch_size=config_dict.get("max_batch_size", 100_000),
-            use_gpu=config_dict.get("use_gpu", True),
-            cuda_id=config_dict.get("cuda_id", 1),
-            learning_rate=config_dict.get("learning_rate", 1e-3),
-            use_scheduler=config_dict.get("use_scheduler", True),
-            save_path=config_dict.get("save_path", None),
-            scheduler_type=config_dict.get("scheduler_type", "cosineannealing"),
-            loss_type=config_dict.get("loss_type", "kl_divergence"),
-            discrete_dims_position=config_dict.get("discrete_dims_position", "first"),
-            condition_integrand_first=config_dict.get("condition_integrand_first", True),
-            discrete_model=config_dict.get("discrete_model", "transformer"),
-            flow_config=flow_config,
-            transformer_config=transformer_config,
-            made_config=made_config,
-        )
+        if not isinstance(config_dict, dict):
+            raise ValueError("sampler must be a configuration table")
+        unknown = set(config_dict) - {item.name for item in fields(cls)}
+        if unknown:
+            raise ValueError(f"Unknown sampler settings: {', '.join(f'sampler.{key}' for key in sorted(unknown))}")
+        values = dict(config_dict)
+        for name, config_type in (
+            ("flow_config", FlowConfig),
+            ("transformer_config", TransformerConfig),
+            ("made_config", MadeConfig),
+        ):
+            nested = values.get(name, {})
+            if isinstance(nested, config_type):
+                continue
+            if not isinstance(nested, dict):
+                raise ValueError(f"sampler.{name} must be a configuration table")
+            unknown = set(nested) - {item.name for item in fields(config_type)}
+            if unknown:
+                raise ValueError(f"Unknown sampler settings: {', '.join(f'sampler.{name}.{key}' for key in sorted(unknown))}")
+            values[name] = config_type(**nested)
+        return cls(**values)
 
 
 @dataclass
@@ -234,6 +272,8 @@ def parse_gammaloop_metadata(
 
 
 class MadnisSampler(gb.Sampler):
+    CHECKPOINT_KIND = "default"
+
     def __init__(
         self,
         *,
@@ -255,6 +295,7 @@ class MadnisSampler(gb.Sampler):
         ] = "kl_divergence",
         discrete_dims_position: Literal["first", "last"] = "first",
         condition_integrand_first: bool = True,
+        freeze_discrete_model: bool = False, 
         discrete_model: Literal["transformer", "made"] = "transformer",
         flow_config: dict[str, Any] | FlowConfig | None = None,
         transformer_config: dict[str, Any] | TransformerConfig | None = None,
@@ -268,6 +309,7 @@ class MadnisSampler(gb.Sampler):
         mapping: dict[str, Any] | None = None,
         graph_properties: dict[str, Any] | None = None,
         gb_loglevel: Literal["trace", "debug", "info", "warn", "error"] = "trace",
+        _build_integrator: bool = True,
     ):
         torch.set_default_dtype(torch.float64)
 
@@ -285,6 +327,7 @@ class MadnisSampler(gb.Sampler):
             loss_type=loss_type,
             discrete_dims_position=discrete_dims_position,
             condition_integrand_first=condition_integrand_first,
+            freeze_discrete_model=freeze_discrete_model,
             discrete_model=discrete_model,
             flow_config=(
                 flow_config
@@ -306,7 +349,14 @@ class MadnisSampler(gb.Sampler):
 
         self.discrete_cardinalities: List[int] = discrete_cardinalities
         self.continuous_dims: int = continuous_dims
+        self._input_discrete_cardinalities = list(discrete_cardinalities)
+        self._input_continuous_dims = continuous_dims
+        self._checkpoint_initialization = deepcopy(dict(
+            parser=parser, mapping=mapping, graph_properties=graph_properties,
+            evaluator_metadata=evaluator_metadata,
+        ))
         self.evaluator_metadata: dict[str, Any] = evaluator_metadata or {}
+        self.gammaloop_metadata = parse_gammaloop_metadata(self.evaluator_metadata)
         if mapping is not None:
             try:
                 from glnis.core.parser import MetaDataParser
@@ -370,22 +420,68 @@ class MadnisSampler(gb.Sampler):
 
         if torch_cpu_rng_state is not None:
             if torch_gpu_rng_state is not None and self.device.type == "cuda":
-                torch.cuda.set_rng_state(torch_gpu_rng_state)
+                torch.cuda.set_rng_state(torch_gpu_rng_state, device=self.device)
             torch.set_rng_state(torch_cpu_rng_state)
         else:
             torch.manual_seed(self.cfg.seed)
             torch.cuda.manual_seed(self.cfg.seed)
-        if madnis_blob is not None:
-            import io
-
+        if not _build_integrator:
+            self.madnis = None
+        elif madnis_blob is not None:
             buffer = io.BytesIO(madnis_blob)
             self.madnis: Integrator = torch.load(
-                buffer, map_location=self.device, weights_only=False
+                buffer, map_location="cpu", weights_only=False
             )
+            if self.device.type != "cpu":
+                # Model tensors and optimizer moments belong on the training
+                # device, but Adam's non-capturable step counters stay on CPU.
+                # Optimizer.load_state_dict applies that per-value policy.
+                optimizer = self.madnis.optimizer
+                optimizer_state = optimizer.state_dict()
+                parameter_names = {id(parameter): name for name, parameter in self.madnis.named_parameters()}
+                group_names = [[parameter_names[id(parameter)] for parameter in group["params"]]
+                               for group in optimizer.param_groups]
+                self.madnis.to(self.device)
+                parameters = dict(self.madnis.named_parameters())
+                for group, names in zip(optimizer.param_groups, group_names):
+                    group["params"] = [parameters[name] for name in names]
+                optimizer.load_state_dict(optimizer_state)
         else:
             self.madnis: Integrator = self._get_madnis_integrator()
 
+        if self.cfg.freeze_discrete_model and self.madnis is not None:
+            if hasattr(self.madnis.flow, "discrete_flow") and self.madnis.flow.discrete_flow is not None:
+                for param in self.madnis.flow.discrete_flow.parameters():
+                    param.requires_grad = False
+            else:
+                gb.log("Warning: freeze_discrete_model is True but no discrete flow found.", level="warn")
+
         gb.log(f"MadNIS Sampler initialized with {self.continuous_dims} continuous dims and {self.num_discrete_dims} discrete dims (cardinalities: {self.discrete_cardinalities})", level=self.cfg.gb_loglevel)
+
+
+    @classmethod
+    def from_config(
+            cls,
+            continuous_dims: int,
+            discrete_cardinalities: list[int],
+            cfg: MadnisConfig,
+            **values,
+        ) -> "MadnisSampler":
+
+        match cfg.kind:
+            case "default":
+                cls = MadnisSampler
+            case "sgn_strat_naive":
+                cls = MadnisSamplerNaiveSgnStrat
+            case "sgn_strat_full":
+                cls = MadnisSamplerFullSgnStrat
+
+        return cls(
+            continuous_dims=continuous_dims,
+            discrete_cardinalities=discrete_cardinalities,
+            cfg=cfg,
+            **values,
+        )
 
 
     @classmethod
@@ -398,157 +494,179 @@ class MadnisSampler(gb.Sampler):
         init_args: dict[str, Any] | None = None,
         evaluator_metadata: dict[str, Any] | None = None,
     ) -> MadnisSampler:
+        """Restore models, unfinished feedback, and RNG state from one checkpoint.
 
+        New checkpoints retain their configuration; old checkpoints still use
+        init_args. Device/output settings can be overridden, while model and
+        optimizer state are restored from the checkpoint.
+        Dimensions retain the public, pre-stratification/pre-mapping convention.
+        """
         save_path = snapshot.get("save_path")
         if save_path is None:
-            raise ValueError(
-                "Snapshot is missing 'save_path' key required for loading the Integrator state."
-            )
+            raise ValueError("Snapshot is missing 'save_path' key required for loading the Integrator state.")
         try:
-            with open(save_path, "rb") as f:
-                state: Dict[str, Any] = torch.load(f, map_location="cpu", weights_only=False)
+            with open(save_path, "rb") as stream:
+                state = torch.load(stream, map_location="cpu", weights_only=False)
+            version = state.get("checkpoint_version", 1)
+            if version not in (1, 2):
+                raise ValueError(f"Unsupported sampler checkpoint version {version}")
 
-            init_args = dict({} if init_args is None else init_args)
-            parser = init_args.pop("parser", None)
-            mapping = init_args.pop("mapping", None)
-            graph_properties = snapshot.get("graph_properties")
-            if graph_properties is None:
-                graph_properties = init_args.get("graph_properties")
+            overrides = dict(init_args or {})
+            initialization = deepcopy(state.get("initialization", {}))
+            for name in ("parser", "mapping", "graph_properties", "evaluator_metadata"):
+                if name in overrides:
+                    initialization[name] = overrides.pop(name)
+            if snapshot.get("graph_properties") is not None:
+                initialization["graph_properties"] = snapshot["graph_properties"]
+            if evaluator_metadata is not None:
+                initialization["evaluator_metadata"] = evaluator_metadata
 
-            instance = cls(
+            settings = deepcopy(state.get("config", {}))
+            settings.setdefault("kind", state.get("kind", snapshot.get("kind", cls.CHECKPOINT_KIND)))
+            settings["save_path"] = str(save_path)
+            for name, value in overrides.items():
+                if isinstance(value, dict) and isinstance(settings.get(name), dict):
+                    settings[name] = {**settings[name], **value}
+                else:
+                    settings[name] = value
+            cfg = MadnisConfig.from_dict(settings)
+            if state.get("kind", cfg.kind) != cfg.kind:
+                raise ValueError("Cannot restore a checkpoint using a different sampler kind")
+            # Legacy payloads already contain training_status; it was never part
+            # of the JSON snapshot returned to GammaBoard.
+            instance = cls._from_checkpoint_state(
+                state, continuous_dims=continuous_dims,
                 discrete_cardinalities=discrete_cardinalities,
-                continuous_dims=int(continuous_dims),
-                cfg=MadnisConfig.from_dict(init_args),
-                training_status=snapshot.get("training_status"),
-                torch_cpu_rng_state=state.get("torch_cpu_rng_state"),
-                torch_gpu_rng_state=state.get("torch_gpu_rng_state"),
-                madnis_blob=state.get("madnis_blob"),
-                evaluator_metadata=evaluator_metadata,
-                parser=parser,
-                mapping=mapping,
-                graph_properties=graph_properties,
+                cfg=cfg, initialization=initialization,
             )
-            instance.madnis.integrand = instance._get_madnis_integrand()
-            ch_remap = (
-                None
-                if instance.madnis.group_channels
-                and not instance.madnis.group_channels_uniform
-                else instance.madnis.integrand.remap_channels
-            )
-            instance.madnis.loss = instance._get_loss()
-            if hasattr(instance.madnis.flow, "channel_remap_function"):
-                instance.madnis.flow.channel_remap_function = ch_remap
-            if (
-                hasattr(instance.madnis.flow, "continuous_flow")
-                and instance.madnis.flow.continuous_flow is not None
-            ):
-                instance.madnis.flow.continuous_flow.channel_remap_function = ch_remap
-            if (
-                hasattr(instance.madnis.flow, "discrete_flow")
-                and instance.madnis.flow.discrete_flow is not None
-            ):
-                instance.madnis.flow.discrete_flow.prior_prob_function = (
-                    instance._madnis_discrete_prior_prob_function
-                )
-                if hasattr(
-                    instance.madnis.flow.discrete_flow, "channel_remap_function"
-                ):
-                    instance.madnis.flow.discrete_flow.channel_remap_function = ch_remap
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to load MadNIS Integrator state from file '{save_path}': {e}"
-            )
+            # Constructors seed the shared generators. Restore them only after
+            # every model (including both sign children) has been reconstructed.
+            cpu_state = state.get("torch_cpu_rng_state")
+            if cpu_state is not None:
+                torch.set_rng_state(cpu_state)
+            gpu_states = state.get("torch_gpu_rng_states", {})
+            for device in instance._checkpoint_devices():
+                rng_state = gpu_states.get(device.index)
+                if rng_state is None and not gpu_states:
+                    rng_state = state.get("torch_gpu_rng_state")
+                if rng_state is not None:
+                    torch.cuda.set_rng_state(rng_state, device=device)
+            return instance
+        except Exception as error:
+            raise RuntimeError(f"Failed to load MadNIS Integrator state from file '{save_path}': {error}") from error
 
+    @classmethod
+    def _from_checkpoint_state(
+        cls, state: dict[str, Any], *, continuous_dims: int | None = None,
+        discrete_cardinalities: list[int] | None = None,
+        cfg: MadnisConfig | None = None, initialization: dict[str, Any] | None = None,
+    ) -> MadnisSampler:
+        cfg = cfg or MadnisConfig.from_dict(state["config"])
+        arguments = deepcopy(state.get("initialization", {})) if initialization is None else initialization
+        arguments = dict(arguments)
+        arguments["training_status"] = state.get("training_status")
+        if cfg.kind == "sgn_strat_full":
+            arguments["_checkpoint_children"] = state["children"]
+            arguments["_pending_strata"] = state["pending_strata"]
+        else:
+            arguments["madnis_blob"] = state["madnis_blob"]
+        instance = cls.from_config(
+            continuous_dims=state["continuous_dims"] if continuous_dims is None else continuous_dims,
+            discrete_cardinalities=state["discrete_cardinalities"] if discrete_cardinalities is None else discrete_cardinalities,
+            cfg=cfg,
+            **arguments,
+        )
+        if instance.training_status.training_batch_size != cfg.training_batch_size:
+            raise ValueError("Checkpoint training batch size does not match the restored configuration")
+        if cfg.kind != "sgn_strat_full":
+            instance._bind_integrator_callbacks()
         return instance
 
-    def snapshot(self) -> Dict[str, Any]:
-        if self.madnis is None:
-            raise RuntimeError(
-                "MadnisSampler not properly initialized with an Integrator instance."
-            )
-
-        if self.cfg.save_path is None:
-            return dict(Warning="No save path provided. No snapshot was created.")
-
-        tmp_integrand = self.madnis.integrand
-        tmp_loss = self.madnis.loss
-        tmp_ch_remap = (
-            None
-            if self.madnis.group_channels and not self.madnis.group_channels_uniform
-            else tmp_integrand.remap_channels
+    def _bind_integrator_callbacks(self) -> None:
+        """Bind deserialized model callbacks to this sampler, never its old owner."""
+        self.madnis.integrand = self._get_madnis_integrand()
+        self.madnis.loss = self._get_loss()
+        channel_remap = (
+            None if self.madnis.group_channels and not self.madnis.group_channels_uniform
+            else self.madnis.integrand.remap_channels
         )
-        tmp_save_path = self.cfg.save_path + ".tmp"
+        flow = self.madnis.flow
+        for component in (flow, getattr(flow, "continuous_flow", None), getattr(flow, "discrete_flow", None)):
+            if component is None:
+                continue
+            if hasattr(component, "channel_remap_function"):
+                component.channel_remap_function = channel_remap
+            if hasattr(component, "prior_prob_function"):
+                component.prior_prob_function = self._madnis_discrete_prior_prob_function
+
+    def _integrator_blob(self) -> bytes:
+        """Serialize the model and optimizer while excluding bound callbacks."""
+        if self.madnis is None:
+            raise RuntimeError("MadnisSampler not properly initialized with an Integrator instance")
+        attributes = [(self.madnis, "integrand"), (self.madnis, "loss")]
+        flow = self.madnis.flow
+        for component in (flow, getattr(flow, "continuous_flow", None), getattr(flow, "discrete_flow", None)):
+            if component is not None:
+                attributes.extend((component, name) for name in ("prior_prob_function", "channel_remap_function")
+                                  if hasattr(component, name))
+        saved = []
         try:
-            self.madnis.integrand = None
-            self.madnis.loss = None
-            self.madnis.flow.prior_prob_function = None
-            if hasattr(self.madnis.flow, "channel_remap_function"):
-                self.madnis.flow.channel_remap_function = None
-            if (
-                hasattr(self.madnis.flow, "continuous_flow")
-                and self.madnis.flow.continuous_flow is not None
-            ):
-                self.madnis.flow.continuous_flow.channel_remap_function = None
-            if (
-                hasattr(self.madnis.flow, "discrete_flow")
-                and self.madnis.flow.discrete_flow is not None
-            ):
-                self.madnis.flow.discrete_flow.prior_prob_function = None
-                if hasattr(self.madnis.flow.discrete_flow, "channel_remap_function"):
-                    self.madnis.flow.discrete_flow.channel_remap_function = None
-
-            import io
-            from pathlib import Path
-
-            Path(self.cfg.save_path).parent.mkdir(parents=True, exist_ok=True)
+            for owner, name in attributes:
+                saved.append((owner, name, getattr(owner, name)))
+                setattr(owner, name, None)
             buffer = io.BytesIO()
             torch.save(self.madnis, buffer)
-            with open(tmp_save_path, "wb") as f:
-                torch.save(
-                    dict(
-                        training_status=self.training_status,
-                        torch_cpu_rng_state=torch.get_rng_state(),
-                        torch_gpu_rng_state=torch.cuda.get_rng_state()
-                        if self.device.type == "cuda"
-                        else None,
-                        madnis_blob=buffer.getvalue(),
-                    ),
-                    f,
-                )
-            Path(tmp_save_path).rename(self.cfg.save_path)
-
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to save MadNIS Integrator state to file '{self.cfg.save_path}': {e}"
-            )
+            return buffer.getvalue()
         finally:
-            Path(tmp_save_path).unlink(missing_ok=True)
-            self.madnis.integrand = tmp_integrand
-            self.madnis.loss = tmp_loss
-            self.madnis.flow.prior_prob_function = (
-                self._madnis_discrete_prior_prob_function
-            )
-            if hasattr(self.madnis.flow, "channel_remap_function"):
-                self.madnis.flow.channel_remap_function = tmp_ch_remap
-            if (
-                hasattr(self.madnis.flow, "continuous_flow")
-                and self.madnis.flow.continuous_flow is not None
-            ):
-                self.madnis.flow.continuous_flow.channel_remap_function = tmp_ch_remap
-            if (
-                hasattr(self.madnis.flow, "discrete_flow")
-                and self.madnis.flow.discrete_flow is not None
-            ):
-                self.madnis.flow.discrete_flow.prior_prob_function = (
-                    self._madnis_discrete_prior_prob_function
-                )
-                if hasattr(self.madnis.flow.discrete_flow, "channel_remap_function"):
-                    self.madnis.flow.discrete_flow.channel_remap_function = tmp_ch_remap
-        snapshot: Dict[str, int | str | float] = dict(
-            save_path=self.cfg.save_path,
-            graph_properties=self.mapping.graph_properties.as_init_dict() if self.mapping is not None else None,
+            for owner, name, value in reversed(saved):
+                setattr(owner, name, value)
+
+    def _checkpoint_common_state(self) -> dict[str, Any]:
+        configuration = asdict(self.cfg)
+        configuration["kind"] = self.CHECKPOINT_KIND
+        initialization = deepcopy(self._checkpoint_initialization)
+        if self.mapping is not None:
+            initialization["graph_properties"] = self.mapping.graph_properties.as_init_dict()
+        return dict(
+            kind=self.CHECKPOINT_KIND,
+            config=configuration,
+            continuous_dims=self._input_continuous_dims,
+            discrete_cardinalities=list(self._input_discrete_cardinalities),
+            initialization=initialization,
+            training_status=self.training_status,
         )
-        return snapshot
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        return {**self._checkpoint_common_state(), "madnis_blob": self._integrator_blob()}
+
+    def _checkpoint_devices(self) -> set[torch.device]:
+        return {self.device} if self.device.type == "cuda" else set()
+
+    def snapshot(self) -> Dict[str, Any]:
+        """Atomically save a self-contained checkpoint and return JSON metadata."""
+        if self.cfg.save_path is None:
+            return dict(Warning="No save path provided. No snapshot was created.")
+        destination = Path(self.cfg.save_path)
+        temporary = destination.with_name(destination.name + ".tmp")
+        try:
+            rng = dict(
+                torch_cpu_rng_state=torch.get_rng_state(),
+                torch_gpu_rng_states={device.index: torch.cuda.get_rng_state(device)
+                                      for device in self._checkpoint_devices()},
+            )
+            state = dict(self._checkpoint_state(), checkpoint_version=2, **rng)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with temporary.open("wb") as stream:
+                torch.save(state, stream)
+            temporary.replace(destination)
+        except Exception as error:
+            raise RuntimeError(f"Failed to save MadNIS Integrator state to file '{destination}': {error}") from error
+        finally:
+            temporary.unlink(missing_ok=True)
+        return dict(
+            save_path=str(destination), kind=self.CHECKPOINT_KIND, checkpoint_version=2,
+            graph_properties=state["initialization"].get("graph_properties"),
+        )
 
     def generate(self, remaining_sample_budget: int | None) -> Any:
         training_remaining = self.training_samples_remaining()
@@ -664,7 +782,22 @@ class MadnisSampler(gb.Sampler):
                         .reshape(-1)
                     )
             n_eval += n
+        
         return prob
+
+    def get_strat_cardinalities(self) -> list[int] | None:
+        """Return the shape of stratified channels. Assumed to be at the front of the discrete dimensions. Return None if stratified sampling is not supported."""
+        return None
+
+    def strat_channel_transform(self, values: NDArray, strata: NDArray) -> NDArray:
+        """
+        Transform the integrand values to account for stratified sampling.
+        To be called on the aggregator side if stratified sampling is used. 
+        """
+        raise NotImplementedError(
+            "Stratified sampling is not implemented for the default MadNIS sampler."
+        )
+
 
     def _get_device(self) -> torch.device:
         if torch.cuda.is_available() and self.cfg.use_gpu:
@@ -698,6 +831,8 @@ class MadnisSampler(gb.Sampler):
         return get_loss(self.cfg.loss_type.lower())
 
     def _train_step(self) -> None:
+        # print(f"Ingested zeros: {np.sum(np.isclose(self.training_status.ingested_weights, 0.0))} / {len(self.training_status.ingested_weights)}")
+
         madnis_samples = MadnisSampleBatch(
             x=self.training_status.generated_samples,
             y=None,
@@ -823,3 +958,260 @@ class MadnisSampler(gb.Sampler):
             learning_rate=self.cfg.learning_rate,
             flow_kwargs=asdict(self.cfg.flow_config),
         )
+
+
+class MadnisSamplerNaiveSgnStrat(MadnisSampler):
+    CHECKPOINT_KIND = "sgn_strat_naive"
+
+    def __init__(
+        self,
+        discrete_cardinalities: list[int],
+        **kwargs
+    ):
+        discrete_cardinalities = [2] + discrete_cardinalities
+        super().__init__(
+            discrete_cardinalities=discrete_cardinalities,
+            **kwargs,
+        )
+        if not self.cfg.condition_integrand_first:
+            raise ValueError(
+                "MadnisSamplerNaiveSgnStrat requires condition_integrand_first=True"
+            )
+
+    def generate(self, remaining_sample_budget: int | None) -> Any:
+        batch = super().generate(remaining_sample_budget)
+        if isinstance(batch, gb.GenerationStatus):
+            return batch
+        strata = batch.xs_discrete[:, 0]
+        batch.xs_discrete = batch.xs_discrete[:, 1:]
+        return batch, strata
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        state = super()._checkpoint_state()
+        # The public constructor prepends the sign coordinate itself.
+        state["discrete_cardinalities"] = state["discrete_cardinalities"][1:]
+        return state
+
+    def get_strat_cardinalities(self) -> list[int] | None:
+        """
+        Return the cardinalities of the stratified channels.
+        """
+        return [2]
+
+    def strat_channel_transform(self, values: NDArray, strata: NDArray) -> NDArray:
+        """
+        Transform the values based on the stratification.
+        To be called on the aggregator side if stratified sampling is used. 
+        """
+        values[strata == 0] = np.clip(values[strata == 0], a_min=0, a_max=None)
+        values[strata == 1] = np.clip(values[strata == 1], a_min=None, a_max=0)
+        return values
+
+    # def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray) -> NDArray | None:
+    #     result = super().pdf(xs_discrete, xs_continuous)
+    #     if result is not None:
+    #         # An additional factor of 2 enters through the discrete prior, which we need to cancel
+    #         result *= 2.0
+    #     return result
+
+class MadnisSamplerFullSgnStrat(MadnisSampler):
+    CHECKPOINT_KIND = "sgn_strat_full"
+
+    def __init__(
+        self,
+        *args,
+        _checkpoint_children: list[dict[str, Any]] | None = None,
+        _pending_strata: NDArray | None = None,
+        **kwargs
+    ):
+        super().__init__(
+            *args,
+            _build_integrator=False,
+            **kwargs
+        )
+        if not self.cfg.condition_integrand_first:
+            raise ValueError(
+                "MadnisSamplerFullSgnStrat requires condition_integrand_first=True"
+            )
+        if self.cfg.training_batch_size % 2 != 0:
+            raise ValueError(
+                "MadnisSamplerFullSgnStrat requires training_batch_size to be even"
+            )
+        if self.cfg.max_batch_size % 2 != 0:
+            raise ValueError(
+                "MadnisSamplerFullSgnStrat requires max_batch_size to be even"
+            )
+        del self.madnis
+        if _checkpoint_children is None:
+            children = []
+            for index in range(2):
+                child_config = asdict(self.cfg)
+                child_config.update(
+                    kind="default", training_batch_size=self.cfg.training_batch_size // 2,
+                    max_batch_size=self.cfg.max_batch_size // 2,
+                    seed=self.cfg.seed + index, cuda_id=self.cfg.cuda_id + index,
+                )
+                children.append(MadnisSampler(
+                    discrete_cardinalities=self.discrete_cardinalities,
+                    continuous_dims=self.continuous_dims,
+                    cfg=MadnisConfig.from_dict(child_config),
+                ))
+        else:
+            if len(_checkpoint_children) != 2:
+                raise ValueError("Full sign-stratified checkpoints must contain two child samplers")
+            children = []
+            for index, child_state in enumerate(_checkpoint_children):
+                child_config = dict(child_state["config"])
+                child_config.update(
+                    use_gpu=self.cfg.use_gpu, cuda_id=self.cfg.cuda_id + index,
+                    training_steps=self.cfg.training_steps,
+                    training_batch_size=self.cfg.training_batch_size // 2,
+                    max_batch_size=self.cfg.max_batch_size // 2,
+                    save_path=self.cfg.save_path,
+                )
+                children.append(MadnisSampler._from_checkpoint_state(
+                    child_state, cfg=MadnisConfig.from_dict(child_config),
+                ))
+        self.madnis_1, self.madnis_2 = children
+        self.pending_strata = np.array([] if _pending_strata is None else _pending_strata, dtype=np.int64, copy=True)
+        if self.pending_strata.ndim != 1 or np.any((self.pending_strata < 0) | (self.pending_strata > 1)):
+            raise ValueError("Checkpoint pending_strata must contain one-dimensional sign channel indices")
+        if len(self.pending_strata) != self.training_status.num_generated - self.training_status.num_ingested:
+            raise ValueError("Checkpoint pending strata do not match outstanding training feedback")
+        self.discrete_cardinalities = [2] + self.discrete_cardinalities
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        return dict(
+            self._checkpoint_common_state(),
+            children=[self.madnis_1._checkpoint_state(), self.madnis_2._checkpoint_state()],
+            pending_strata=self.pending_strata.copy(),
+        )
+
+    def _checkpoint_devices(self) -> set[torch.device]:
+        return super()._checkpoint_devices() | self.madnis_1._checkpoint_devices() | self.madnis_2._checkpoint_devices()
+
+    def generate(self, remaining_sample_budget: int | None) -> Any:
+        training_remaining_1 = self.madnis_1.training_samples_remaining()
+        training_remaining_2 = self.madnis_2.training_samples_remaining()
+        training_remaining = self.training_samples_remaining()
+        if training_remaining == 0:
+            return gb.GenerationStatus.WAITING
+        if training_remaining is not None:
+            # A child may finish its window before its sibling. Until the
+            # parent completes this step, don't draw from that child's next
+            # training window (or from its inference distribution).
+            if self.madnis_1.training_status.step > self.training_status.step:
+                training_remaining_1 = 0
+            if self.madnis_2.training_status.step > self.training_status.step:
+                training_remaining_2 = 0
+        nr_samples = remaining_sample_budget if remaining_sample_budget is not None else self.cfg.max_batch_size
+        if training_remaining is not None:
+            nr_samples = min(nr_samples, training_remaining)
+        nr_samples_1 = min(nr_samples, training_remaining_1 if training_remaining_1 is not None else self.madnis_1.cfg.max_batch_size)
+        nr_samples_2 = min(nr_samples, training_remaining_2 if training_remaining_2 is not None else self.madnis_2.cfg.max_batch_size)
+        nr_samples_2 = min(nr_samples_2, nr_samples - nr_samples_1)
+        batches = []
+        if nr_samples_1 > 0:
+            batches.append(self.madnis_1.generate(nr_samples_1))
+        if nr_samples_2 > 0:
+            batches.append(self.madnis_2.generate(nr_samples_2))
+        discrete = np.vstack([batch.xs_discrete for batch in batches])
+        continuous = np.vstack([batch.xs_continuous for batch in batches])
+        weights = np.hstack([batch.weights for batch in batches]) * 2.0
+        strata = np.hstack([np.zeros(nr_samples_1, dtype=np.int64), np.ones(nr_samples_2, dtype=np.int64)])
+
+        if training_remaining is not None:
+            x_all = np.hstack([discrete[:, self._sampled_discrete_indices], continuous])
+            prob = 1 / weights
+            self.training_status.add_generation_data(
+                torch.as_tensor(x_all, dtype=self.training_status.generated_samples.dtype, device=self.training_status.generated_samples.device), 
+                torch.as_tensor(prob, dtype=self.training_status.generated_probs.dtype, device=self.training_status.generated_probs.device)
+                )
+            self._add_generation_strata(strata)
+        return gb.SampleBatch(xs_discrete=discrete, xs_continuous=continuous, weights=weights, training_remaining=training_remaining), strata
+    
+    def feedback(self, values: NDArray) -> None:
+        if self.training_status.step >= self.cfg.training_steps:
+            gb.log(f"Training target of {self.cfg.training_steps * self.cfg.training_batch_size} samples already reached. Ignoring additional training values.", level="warn")
+            return
+        values = np.asarray(values)
+        self.training_status.add_feedback_data(values)
+        feedback_strata = self._get_feedback_strata(len(values))
+        values_1 = values[feedback_strata == 0]
+        values_2 = values[feedback_strata == 1]
+        if len(values_1) > 0:
+            self.madnis_1.feedback(values_1)
+        if len(values_2) > 0:
+            self.madnis_2.feedback(values_2)
+
+        if self.training_status.test_ready_for_training():
+            self._train_step()
+        
+
+    def training_samples_remaining(self) -> int | None:
+        # Parent counters describe the current composite window even when one
+        # child has already advanced to its next window after partial feedback.
+        return super().training_samples_remaining()
+
+    def get_strat_cardinalities(self) -> list[int] | None:
+        """
+        Return the cardinalities of the stratified channels.
+        """
+        return [2]
+
+    def strat_channel_transform(self, values: NDArray, strata: NDArray) -> NDArray:
+        """
+        Transform the values based on the stratification.
+        To be called on the aggregator side if stratified sampling is used. 
+        """
+        values[strata == 0] = np.clip(values[strata == 0], a_min=0, a_max=None)
+        values[strata == 1] = np.clip(values[strata == 1], a_min=None, a_max=0)
+        return values
+
+    def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray) -> NDArray | None:
+        """
+        Return per-sample PDF values if supported.
+
+        Return a float64 array with shape (nr_samples,) or None to signal that
+        the sampler does not support/doesn't provide a PDF for the given batch.
+        """
+        strata, xs_discrete = np.split(xs_discrete, [1], axis=1)
+        strata = strata.flatten()
+        result = np.empty((len(xs_discrete),), dtype=np.float64)
+        n_samples_1 = np.sum(strata == 0)
+        n_samples_2 = np.sum(strata == 1)
+        if n_samples_1 > 0:
+            pdf_1 = self.madnis_1.pdf(xs_discrete[strata == 0], None if xs_continuous is None else xs_continuous[strata == 0])
+        else:
+            pdf_1 = np.empty((0,), dtype=np.float64)
+        if n_samples_2 > 0:
+            pdf_2 = self.madnis_2.pdf(xs_discrete[strata == 1], None if xs_continuous is None else xs_continuous[strata == 1])
+        else:
+            pdf_2 = np.empty((0,), dtype=np.float64)
+        result[strata == 0] = pdf_1
+        result[strata == 1] = pdf_2
+
+        # The parent sampler's PDF is the average of the two children, since each child is responsible for half of the samples.
+        return result / 2.0
+
+    def _train_step(self) -> None:
+        last_loss_1 = self.madnis_1.training_status.last_loss
+        last_loss_2 = self.madnis_2.training_status.last_loss
+        if last_loss_1 is None or last_loss_2 is None:
+            last_loss = None
+        else:
+            last_loss = (last_loss_1 + last_loss_2) / 2
+        self.training_status.add_loss(last_loss)
+
+    def _add_generation_strata(self, strata: NDArray) -> None:
+        self.pending_strata = np.hstack([self.pending_strata, strata])
+
+    def _get_feedback_strata(self, n_feedback: int) -> NDArray:
+        if len(self.pending_strata) < n_feedback:
+            raise ValueError(
+                f"Not enough pending strata to provide feedback for {n_feedback} samples."
+            )
+        feedback_strata = self.pending_strata[:n_feedback]
+        self.pending_strata = self.pending_strata[n_feedback:]
+        return feedback_strata
+    

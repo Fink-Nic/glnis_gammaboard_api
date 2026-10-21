@@ -1,0 +1,26 @@
+# Small CPU run; omit generation_batch_size to use sampler.max_batch_size.
+[sampler]
+seed = 42
+training_steps = 10
+training_batch_size = 128
+max_batch_size = 64
+use_gpu = false
+
+[sampler.flow_config]
+layers = 2
+units = 16
+bins = 4
+
+[integrand]
+kind = "ghostbumps"
+centers = [[0.75, 0.75], [0.25, 0.25]]
+sigma = 0.15
+
+[aggregator]
+mode = "train_then_infer"
+inference_samples = 2048
+training_phase = "real"
+evaluation_workers = 2
+evaluation_batch_size = 32
+max_in_flight_batches = 4
+log_every = 10

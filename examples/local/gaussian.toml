@@ -1,0 +1,42 @@
+# Integrate a normalized Gaussian on R^3 using the existing spherical mapping.
+[sampler]
+seed = 42
+training_steps = 100
+training_batch_size = 128
+max_batch_size = 64
+use_gpu = false
+
+[sampler.flow_config]
+layers = 2
+units = 16
+bins = 4
+
+[sampler.mapping]
+input_space = "HCUBE"
+layer_cfgs = [{ kind = "spherical", conformal_scale = 1.0 }]
+
+# Graph data belongs to the coordinate mapping, not to the Gaussian integrand.
+[sampler.graph_properties]
+edge_masses = [0.0]
+edge_momentum_shifts = [[0.0, 0.0, 0.0]]
+graph_signature = [[1]]
+lmb_edges = [[0]]
+generation_lmb_edges = [0]
+e_cm = 0.0
+
+[integrand]
+kind = "gaussian"
+continuous_dims = 3
+sigma = 1.0
+offset = [0.0, 0.0, 0.0]
+
+[integrand.target]
+real_mean = 1.0
+
+[aggregator]
+mode = "train_then_infer"
+inference_samples = 204800
+evaluation_workers = 2
+evaluation_batch_size = 32
+max_in_flight_batches = 4
+log_every = 10

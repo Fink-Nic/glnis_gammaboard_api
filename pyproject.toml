@@ -22,6 +22,9 @@ dependencies = [
 
 [project.scripts]
 glnis-gammaboard-sampler = "run_sampler:main"
+glnis-integrate = "glnis.scripts.run:main"
+glnis-compare-samplers = "glnis.scripts.sampler_comparison:main"
+glnis-slice-plot = "glnis.scripts.slice_plots:main"
 
 [tool.maturin]
 manifest-path = "Cargo.toml"

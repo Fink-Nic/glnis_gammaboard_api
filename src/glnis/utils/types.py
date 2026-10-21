@@ -214,6 +214,7 @@ class LayerData:
         momenta=4,
         continuous=5,
         discrete=6,
+        strata=7,
     )
 
     def __init__(
@@ -222,6 +223,7 @@ class LayerData:
         n_mom: int = 0,
         n_cont: int = 0,
         n_disc: int = 0,
+        n_strata: int = 0,
         _existing_data: NDArray | None = None,
         _existing_structure: NDArray | None = None,
         _existing_active_structure: NDArray | None = None,
@@ -256,6 +258,7 @@ class LayerData:
             self._structure[LayerData.POSITIONS["momenta"]] = n_mom
             self._structure[LayerData.POSITIONS["continuous"]] = n_cont
             self._structure[LayerData.POSITIONS["discrete"]] = n_disc
+            self._structure[LayerData.POSITIONS["strata"]] = n_strata
             self._data = np.zeros(
                 (self.n_points, self._structure.sum()), dtype=self.dtype
             )
@@ -294,12 +297,13 @@ class LayerData:
             next_success = np.logical_and(next_success, np.isfinite(v).all(axis=1))
 
         new_failures_mask = np.logical_and(self.success, ~next_success)
-        self.success = next_success
+        # A later successful stage cannot recover a sample that failed earlier.
+        self.success = np.logical_and(self.success, next_success)
 
         if new_failures_mask.any():
             caused_failures = self._data[new_failures_mask]
             if identifier in self.failures:
-                self.failures[identifier + "_"] = caused_failures
+                self.failures[identifier] = np.vstack((self.failures[identifier], caused_failures))
             else:
                 self.failures[identifier] = caused_failures
 
@@ -341,6 +345,7 @@ class LayerData:
             self.update("as_chunks")
 
         data_chunks: Iterable[NDArray] = chunks(self._data, n_chunks)
+        offset = 0
         for chunk_id, data_chunk in enumerate(data_chunks):
             chunk = LayerData(
                 _existing_data=data_chunk,
@@ -348,11 +353,13 @@ class LayerData:
                 _existing_active_structure=self._active_structure,
             )
             chunk._t_init = self._t_init
+            chunk.success = self.success[offset:offset + len(data_chunk)].copy()
+            offset += len(data_chunk)
             # We add the metadata to the first chunk, and duplicate the processing time n_cores times
             if chunk_id == 0:
-                chunk.failures = self.failures
+                chunk.failures = {key: value.copy() for key, value in self.failures.items()}
             if chunk_id < n_cores:
-                chunk._processing_times = self._processing_times
+                chunk._processing_times = self._processing_times.copy()
 
             yield chunk
 
@@ -407,11 +414,13 @@ class LayerData:
         if value is None:
             self._set_data("f_real", None)
             self._set_data("f_imag", None)
+            return
         if np.iscomplexobj(value):
             self._set_data("f_real", value.real)
             self._set_data("f_imag", value.imag)
         else:
             self._set_data("f_real", value)
+            self._set_data("f_imag", np.zeros_like(value))
 
     @property
     def continuous(self: "LayerData"):
@@ -428,6 +437,14 @@ class LayerData:
     @discrete.setter
     def discrete(self: "LayerData", value: LayerResult):
         self._set_data("discrete", value)
+
+    @property
+    def strata(self: "LayerData"):
+        return self._get_data("strata").astype(np.uint64)
+
+    @strata.setter
+    def strata(self: "LayerData", value: LayerResult):
+        self._set_data("strata", value)
 
     def _to_layer_data(self: "LayerData", value: LayerResult) -> NDArray:
         """
@@ -452,6 +469,11 @@ class LayerData:
                     "LayerData objects accept only numpy ndarray, list or None."
                 )
 
+        if self.n_points == 0:
+            if output.size:
+                raise ValueError("Cannot assign nonempty data to an empty LayerData.")
+            columns = int(np.prod(output.shape[1:])) if output.ndim > 1 else 1
+            return output.reshape(0, columns)
         return output.reshape(self.n_points, -1)
 
     def _update_processing_times(
@@ -520,10 +542,7 @@ class SinglePhaseResult:
 
     @property
     def tvar(self: "SinglePhaseResult") -> float:
-        if self._n == 0:
-            return 0.0
-        time_per_sample = self._total_time / self._n
-        return self.rsd**2 * time_per_sample
+        return self.error**2 * self._total_time
 
     def combine_with(self: "SinglePhaseResult", other: "SinglePhaseResult") -> None:
         total_points = self._n + other._n
@@ -551,11 +570,11 @@ class SinglePhaseResult:
             if total_points > 0
             else 0
         )
-        # Achieves combined.error**2 = self.error**2 + other.error**2
+        # Achieves "combined.variance = self.variance + other.variance"
         self._m2 = (
             (
-                (self._m2 / (self._n - 1) / self._n if self._n > 1 else 0.0)
-                + (other._m2 / (other._n - 1) / other._n if other._n > 1 else 0.0)
+                (self._n / total_points)**2 * self.error**2
+                + (other._n / total_points)**2 * other.error**2
             )
             * (total_points - 1)
             * total_points
@@ -719,98 +738,3 @@ class Result:
             abs_real_tvar=self.abs_real.tvar,
             abs_imag_tvar=self.abs_imag.tvar,
         )
-
-
-@dataclass
-class IntegrationResult:
-    """
-    Legacy class, only used as a container now. Should not be used, since the new `Result` class
-    has proper implementation of running error calculation, and is more robust to updates.
-    """
-
-    n_points: int = 0
-    real_mean: float = 0
-    real_error: float = 0
-    imag_mean: float = 0
-    imag_error: float = 0
-    abs_real_mean: float = 0
-    abs_real_error: float = 0
-    abs_imag_mean: float = 0
-    abs_imag_error: float = 0
-    real_rsd: float = 0
-    imag_rsd: float = 0
-    abs_real_rsd: float = 0
-    abs_imag_rsd: float = 0
-    real_tvar: float = 0
-    imag_tvar: float = 0
-    abs_real_tvar: float = 0
-    abs_imag_tvar: float = 0
-    total_time: float = 0
-
-    def __post_init__(self: "IntegrationResult"):
-        """Calculates derived observables such as RSD and time per sample."""
-        time_per_sample = 0
-        # No harm in recalculating these
-        if self.n_points > 0:
-            time_per_sample = self.total_time / self.n_points
-            if self.real_mean:
-                self.real_rsd = self._rsd(
-                    self.real_mean, self.real_error, self.n_points
-                )
-            if self.imag_mean:
-                self.imag_rsd = self._rsd(
-                    self.imag_mean, self.imag_error, self.n_points
-                )
-            if self.abs_real_mean:
-                self.abs_real_rsd = self._rsd(
-                    self.abs_real_mean, self.abs_real_error, self.n_points
-                )
-            if self.abs_imag_mean:
-                self.abs_imag_rsd = self._rsd(
-                    self.abs_imag_mean, self.abs_imag_error, self.n_points
-                )
-
-        # Don't want to overwrite these in case total_time is not provided
-        if time_per_sample > 0:
-            self.real_tvar = self.real_rsd**2 * time_per_sample
-            self.imag_tvar = self.imag_rsd**2 * time_per_sample
-            self.abs_real_tvar = self.abs_real_rsd**2 * time_per_sample
-            self.abs_imag_tvar = self.abs_imag_rsd**2 * time_per_sample
-
-    def combine_with(self: "IntegrationResult", other: "IntegrationResult") -> None:
-        def cc(s_c: float, o_c: float) -> float:
-            return self._combine_mean(self.n_points, other.n_points, s_c, o_c)
-
-        def ce(s_e: float, o_e: float) -> float:
-            return self._combine_error(self.n_points, other.n_points, s_e, o_e)
-
-        self.real_mean = cc(self.real_mean, other.real_mean)
-        self.imag_mean = cc(self.imag_mean, other.imag_mean)
-        self.abs_real_mean = cc(self.abs_real_mean, other.abs_real_mean)
-        self.abs_imag_mean = cc(self.abs_imag_mean, other.abs_imag_mean)
-        self.real_error = ce(self.real_error, other.real_error)
-        self.imag_error = ce(self.imag_error, other.imag_error)
-        self.abs_real_error = ce(self.abs_real_error, other.abs_real_error)
-        self.abs_imag_error = ce(self.abs_imag_error, other.abs_imag_error)
-
-        self.n_points += other.n_points
-        self.total_time += other.total_time
-        self.__post_init__()  # Recalculate derived observables
-
-    def str_report(self: "IntegrationResult") -> str:
-        return f"""Real: {self.real_mean: .5f}  ± {self.real_error: .5f}, Imag: {
-            self.imag_mean: .5f}  ± {self.imag_error: .5f} """
-
-    @staticmethod
-    def _rsd(mean: float, err: float, n_points: int) -> float:
-        if mean == 0:
-            return 0
-        return err / np.abs(mean) * np.sqrt(n_points)
-
-    @staticmethod
-    def _combine_mean(s_n: float, o_n: float, s_c: float, o_c: float) -> float:
-        return (s_n * s_c + o_n * o_c) / (s_n + o_n)
-
-    @staticmethod
-    def _combine_error(s_n: float, o_n: float, s_e: float, o_e: float) -> float:
-        return np.sqrt(s_n**2 * s_e**2 + o_n**2 * o_e**2) / (s_n + o_n)
