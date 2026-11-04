@@ -314,8 +314,39 @@ and installed `glnis-slice-plot` command expose the same runner.
 
 ## Runtime Options
 
-Supply your own Symbolica license in the environment used to launch GammaBoard
-or the sampler, including for editable development and Apptainer:
+The default package is pure Python and needs no Rust toolchain, Symbolica
+license, or GammaLoop installation. It includes the numerical integrands,
+samplers, comparison/slice plotting tools, and mappings configured with explicit
+`graph_properties`. GammaLoop evaluator metadata by itself does not require the
+optional feature; resolved graph properties saved in checkpoints remain usable
+in a core environment.
+
+Reading GammaLoop states and extracting symbolic graph properties require the
+`gammaloop` extra and the native companion in `native/gammaloop`. Momtrop is not
+installed by either profile; its existing commented-out adapter is not enabled.
+
+For a basic editable installation with Python 3.13:
+
+```bash
+uv venv --python python3.13 .venv
+uv pip install --python .venv/bin/python -e '.[test]'
+```
+
+Omit `[test]` if pytest is not needed. For GammaLoop support, install both local
+projects in the same command, using a Rust toolchain and the native libraries
+(the full Nix shell below supplies these):
+
+```bash
+uv pip install --python .venv/bin/python -e ./native/gammaloop -e '.[gammaloop,test]'
+```
+
+The extra depends on the matching `glnis-gammaloop-native` distribution. Until
+that distribution is available from your package index, install the local
+companion explicitly as above. Core wheels and source distributions contain
+only the Python package; the companion is built separately with Maturin.
+
+Supply your Symbolica license in the environment used for GammaLoop operations,
+including editable development and the full Apptainer image:
 
 ```bash
 export SYMBOLICA_LICENSE='your-license-key'
@@ -325,20 +356,24 @@ export SYMBOLICA_LICENSE='your-license-key'
 
 Python is pinned to the same Nixpkgs revision as GammaBoard: Python 3.13.12 with
 the matching PyTorch/CUDA 12 stack. Update both repositories' pins together.
-Rust uses a separate Fenix toolchain because Symbolica 3.0.1 requires Rust 1.96
-or newer. Rerun `glnis-dev` after changing the pin to refresh an editable venv.
+The optional native build uses a separate Fenix toolchain because Rust
+Symbolica 3.0.1 requires Rust 1.96 or newer. Rerun `glnis-dev` with the same
+profile after changing the pin to refresh an editable venv.
 
-Build the project environment:
+Choose the runtime profile:
 
 ```bash
-nix build .#runtime
+nix build .#runtime            # core (also the default package)
+nix build .#runtime-gammaloop  # includes the native companion and Symbolica
 ```
 
-This builds a locked runtime with the Rust dependency artifacts cached separately
-from the Python package. `nix run` also
-launches the sampler, and `nix build .#wheel` builds the Nix-native Python wheel.
+`nix run` launches the core sampler; `nix run .#gammaloop` enables GammaLoop.
+`nix build .#wheel` builds the pure Python wheel and `nix build .#wheel-gammaloop`
+builds the native companion wheel. Native dependency artifacts are cached
+separately from the Python package.
 
-Use this GammaBoard process command:
+After building the required runtime into `result`, use this GammaBoard process
+command. The physics templates require `runtime-gammaloop`:
 
 ```toml
 command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
@@ -353,7 +388,8 @@ resource options, build monitoring, and using the image with GammaBoard.
 
 Apptainer/SIF is the portable runtime path for HPC systems that do not provide
 Nix. The definition uses Nix only inside the image build container to reproduce
-`nix build .#runtime`; the final SIF exposes normal executables and does not
+`nix build .#runtime-gammaloop`; this image explicitly includes the optional
+physics dependencies. The final SIF exposes normal executables and does not
 require Nix on the host.
 
 Build from this directory so the `%files` entries in `apptainer.def` resolve to
@@ -372,7 +408,7 @@ cwd = "$resources/.."
 
 ### Editable development
 
-Enter the development shell and install the checkout in editable mode:
+For core development:
 
 ```bash
 nix develop
@@ -380,25 +416,33 @@ glnis-dev
 source .venv/bin/activate
 ```
 
-The shell provides Python 3.13, Rust, and native dependencies without building
-the runtime. `glnis-dev [venv-directory]` creates or updates the venv and records
+The default shell provides Python 3.13 and the Torch/Triton runtime tools;
+it does not include Rust or the GammaLoop dependencies. For GammaLoop development:
+
+```bash
+nix develop .#gammaloop
+glnis-dev --gammaloop
+source .venv/bin/activate
+```
+
+`glnis-dev [--gammaloop] [venv-directory]` creates or updates the venv and records
 the selected native library/compiler paths so its sampler can also run outside
-the shell. Python edits take effect immediately. Rerun `glnis-dev` after Rust or
-dependency changes; Cargo reuses the local `target` directory. Editable builds
+the shell. From the core shell, `glnis-dev --gammaloop` enters the full shell
+automatically. Python edits take effect immediately. Rerun with `--gammaloop`
+after Rust changes; Cargo reuses `native/gammaloop/target`. Editable native builds
 use the development profile; packaged Nix builds use the release profile.
+
+Use separate venv directories to keep both profiles: installing the core into an
+existing full venv does not uninstall its optional dependencies. Older checkouts
+may also contain an ignored `src/glnis/_rust*.so`; this can shadow the new Python
+compatibility facade when importing `glnis._rust` directly. State parsing uses
+the companion's `glnis_gammaloop_native._rust` namespace directly.
 
 After updating `flake.lock`, rerun `glnis-dev`. It also refreshes the venv's base
 interpreter in place when the Nix Python changes, keeping Python, glibc, and the
 Rust extension compatible while preserving installed packages.
 
-An ordinary editable install is also supported inside the shell, or on a Linux
-host with Python 3.13, Rust, a C/C++ compiler, and the required native libraries:
-
-```bash
-uv venv --python python3.13 .venv
-uv pip install --python .venv/bin/python -e .
-```
-
+The ordinary editable installation commands above also work inside the shells.
 On Nix hosts, use `glnis-dev` when the venv must run outside `nix develop`.
 
 Use this GammaBoard process command:
@@ -417,22 +461,22 @@ save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
 
 ### Updating dependencies
 
-Change a Rust dependency version or Git revision in `Cargo.toml`, then update the
-lockfile using Cargo, for example:
+Change a Rust dependency version or Git revision in
+`native/gammaloop/Cargo.toml`, then update its lockfile using Cargo, for example:
 
 ```bash
-nix develop
-cargo update -p gammalooprs
-glnis-dev                 # incremental editable build
+nix develop .#gammaloop
+cargo update --manifest-path native/gammaloop/Cargo.toml -p gammalooprs
+glnis-dev --gammaloop      # incremental editable build
 # Or build the deployable runtime:
-nix build .#runtime
+nix build .#runtime-gammaloop
 ```
 
-Commit `Cargo.toml` and `Cargo.lock` together. Maturin and Nix both build with
-`--locked`. The GammaLoop revision is also used for its embedded assets, with no
-separate source hash to maintain. Cargo uses this project's lockfile, not the
-lockfile inside a Git dependency. GammaLoop `2e22d46` uses Rust Symbolica and
-Numerica 3.0.1, as recorded in `Cargo.lock`.
+Commit `native/gammaloop/Cargo.toml` and `native/gammaloop/Cargo.lock` together.
+Maturin and Nix both build with `--locked`. The GammaLoop revision is also used
+for its embedded assets, with no separate source hash to maintain. Cargo uses
+the companion's lockfile, not the lockfile inside a Git dependency. GammaLoop
+`2e22d46` uses Rust Symbolica and Numerica 3.0.1, as recorded in that lockfile.
 
 Use `nix flake update <input-name>` to update a Nix input and commit `flake.lock`.
 The editable Python dependencies use the sources declared in `pyproject.toml`;
@@ -444,6 +488,29 @@ files published on PyPI.
 
 Changing the Rust dependency set can rebuild Nix's dependency derivation. Local
 editable builds retain Cargo's incremental cache across dependency updates.
+
+Keep the core project version, companion project version, and pinned companion
+requirement in the `gammaloop` extra in sync when making a release.
+
+### Optional-backend checks
+
+Core checks exercise imports, numerical mappings, missing-feature diagnostics,
+and wheel/source packaging without the optional dependencies:
+
+```bash
+python -m pytest tests/test_optional_backends.py tests/test_optional_packaging.py
+```
+
+Native tests skip an absent companion in a core environment. In a full
+environment, require it explicitly so a missing installation fails the tests:
+
+```bash
+GLNIS_REQUIRE_GAMMALOOP=1 python -m pytest tests/test_rust_extension.py tests/test_rust_state_parser.py
+```
+
+The state integration tests still need their external state fixtures; see their
+module documentation for paths. Import failures inside an installed backend
+are reported rather than treated as an absent optional feature.
 
 
 ## Use With GammaBoard
@@ -457,7 +524,8 @@ GammaBoard checkout, for example:
 
 Campaigns resolve their child template relative to the campaign file. Keep the
 base `madnis_gammaloop_train_sample.toml` beside the campaign when copying files.
-The templates launch the built Nix runtime by default.
+The templates launch the built Nix runtime by default; build
+`nix build .#runtime-gammaloop` before using the physics templates.
 
 Training feedback follows `SampleBatch.training_remaining`; these templates do
 not need `requires_training_values`. Keep the training task's `max_samples`

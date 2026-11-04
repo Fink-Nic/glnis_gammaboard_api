@@ -6,6 +6,8 @@ from typing import Any, Dict, Iterable, List
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
+import torch
+from torch._tensor import Tensor
 
 from glnis.utils.helpers import chunks
 
@@ -282,14 +284,14 @@ class LayerData:
         return wrapper_timer
 
     @_timer
-    def update(self, identifier: str = "unspecified") -> None:
+    def update(self, kind: str = "unspecified") -> None:
         """
         Updates state according to data in _pending_data. Will update the processing time of the
-        processing step 'identifier' based on the elapsed time since last update. Will also mask
+        processing step 'kind' based on the elapsed time since last update. Will also mask
         non-finite values and update failures accordingly.
         """
         if len(self._pending_data) == 0:
-            self._update_processing_times(identifier)
+            self._update_processing_times(kind)
             return
 
         next_success = np.ones(self.n_points, dtype=np.bool)
@@ -302,10 +304,10 @@ class LayerData:
 
         if new_failures_mask.any():
             caused_failures = self._data[new_failures_mask]
-            if identifier in self.failures:
-                self.failures[identifier] = np.vstack((self.failures[identifier], caused_failures))
+            if kind in self.failures:
+                self.failures[kind] = np.vstack((self.failures[kind], caused_failures))
             else:
-                self.failures[identifier] = caused_failures
+                self.failures[kind] = caused_failures
 
         # Converting from iter to list allows us to remove items during loop
         for name in list(self._pending_data.keys()):
@@ -319,7 +321,7 @@ class LayerData:
         self._data[~self.success] = 0
 
         # Update processing times according to time since last update
-        self._update_processing_times(identifier)
+        self._update_processing_times(kind)
 
     def get_processing_times(self) -> Dict[str, float]:
         if len(self._pending_data) > 0:
@@ -477,13 +479,13 @@ class LayerData:
         return output.reshape(self.n_points, -1)
 
     def _update_processing_times(
-        self: "LayerData", identifier: str = "unspecified"
+        self: "LayerData", kind: str = "unspecified"
     ) -> None:
         processing_time = perf_counter() - self._timestamp
-        if identifier in self._processing_times:
-            self._processing_times[identifier] += processing_time
+        if kind in self._processing_times:
+            self._processing_times[kind] += processing_time
         else:
-            self._processing_times[identifier] = processing_time
+            self._processing_times[kind] = processing_time
         self._timestamp = perf_counter()
 
     @_timer
@@ -738,3 +740,82 @@ class Result:
             abs_real_tvar=self.abs_real.tvar,
             abs_imag_tvar=self.abs_imag.tvar,
         )
+
+
+@dataclass
+class RectangularTrainingStatus:
+    sample_dim: int
+    training_batch_size: int
+    num_generated: int = 0
+    num_ingested: int = 0
+    total_trained_samples: int = 0
+    produced_batches: int = 0
+    produced_samples: int = 0
+    step: int = 0
+    last_loss: float | None = None
+    loss_history: List[float | None] = field(default_factory=list)
+    generated_samples: Tensor = None
+    generated_probs: Tensor = None
+    ingested_weights: Tensor = None
+    result : SinglePhaseResult = field(default_factory=SinglePhaseResult)
+    abs_result : SinglePhaseResult = field(default_factory=SinglePhaseResult)
+
+    def __post_init__(self):
+        if self.generated_samples is None:
+            self.generated_samples = torch.empty(
+                (self.training_batch_size, self.sample_dim), dtype=torch.float64
+            )
+        if self.generated_probs is None:
+            self.generated_probs = torch.empty(
+                (self.training_batch_size,), dtype=torch.float64
+            )
+        if self.ingested_weights is None:
+            self.ingested_weights = torch.empty(
+                (self.training_batch_size,), dtype=torch.float64
+            )
+
+    def to_device(self, device: torch.device) -> None:
+        self.generated_samples = self.generated_samples.to(device)
+        self.generated_probs = self.generated_probs.to(device)
+        self.ingested_weights = self.ingested_weights.to(device)
+
+    def add_generation_data(self, samples: Tensor, probs: Tensor) -> None:
+        assert samples.shape[0] == probs.shape[0], "Number of samples and sampling weights must match."
+        n_samples = samples.shape[0]
+        if n_samples == self.training_batch_size:
+            self.generated_samples = samples
+            self.generated_probs = probs
+        else:
+            self.generated_probs[self.num_generated:self.num_generated + n_samples] = probs
+            self.generated_samples[self.num_generated:self.num_generated + n_samples, :] = samples
+        self.num_generated += n_samples
+        self.produced_batches += 1
+
+    def add_feedback_data(self, weights: NDArray) -> None:
+        weights = torch.as_tensor(weights, dtype=torch.float64, device=self.ingested_weights.device)
+        n_weights = weights.shape[0]
+        if n_weights == self.training_batch_size:
+            self.ingested_weights = weights
+        else:
+            self.ingested_weights[self.num_ingested:self.num_ingested + n_weights] = weights
+        self.num_ingested += n_weights
+
+        if self.test_ready_for_training() and n_weights > 0:
+            values = self.ingested_weights.cpu().numpy(force=True) / self.generated_probs.cpu().numpy(force=True)
+            self.result.combine_with(SinglePhaseResult.from_values(
+                values=values,
+            ))
+            self.abs_result.combine_with(SinglePhaseResult.from_values(
+                values=values,
+            ))
+
+    def test_ready_for_training(self) -> bool:
+        return self.num_generated == self.training_batch_size and self.num_ingested == self.training_batch_size
+
+    def add_loss(self, loss: float) -> None:
+        self.loss_history.append(loss)
+        self.last_loss = loss
+        self.step += 1
+        self.num_generated = 0
+        self.num_ingested = 0
+        self.total_trained_samples += self.training_batch_size

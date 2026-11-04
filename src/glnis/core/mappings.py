@@ -48,7 +48,7 @@ class Mapping(ABC):
     """
 
     N_SPATIAL_DIMS = 3
-    IDENTIFIER = "ABCMapping"
+    KIND = "ABCMapping"
     TRANSFORMS_SPACE = True
     CONSUMES_NEXT_N_PARAMS = 0
 
@@ -87,7 +87,7 @@ class Mapping(ABC):
             parameterised continuous output, jacobians
         """
         raise NotImplementedError(
-            f"Mapping '{self.IDENTIFIER}' has not implemented the unit hypercube transform."
+            f"Mapping '{self.KIND}' has not implemented the unit hypercube transform."
         )
 
     def _map_from_momentum(self, momentum: NDArray, discrete: NDArray) -> MappingOutput:
@@ -99,7 +99,7 @@ class Mapping(ABC):
             parameterised continuous output, jacobians
         """
         raise NotImplementedError(
-            f"Mapping '{self.IDENTIFIER}' has not implemented the momentum space transform."
+            f"Mapping '{self.KIND}' has not implemented the momentum space transform."
         )
 
     def _prior_prob_function(self, discrete: NDArray) -> NDArray:
@@ -141,15 +141,15 @@ class Mapping(ABC):
         registry = {}
 
         for subclass in cls.all_subclasses():
-            identifier = subclass.IDENTIFIER
+            kind = subclass.KIND
 
-            if identifier in registry:
+            if kind in registry:
                 raise ValueError(
-                    f"Duplicate Mapping class IDENTIFIER {identifier!r}: "
-                    f"{registry[identifier].__name__} and {subclass.__name__}"
+                    f"Duplicate Mapping class KIND {kind!r}: "
+                    f"{registry[kind].__name__} and {subclass.__name__}"
                 )
 
-            registry[identifier] = subclass
+            registry[kind] = subclass
 
         return registry
 
@@ -286,7 +286,7 @@ class LayeredMapping:
             layer_input.jac *= jac
             layer_input.continuous = np.hstack([cont, pass_cont])
             layer_input.discrete = pass_disc
-            layer_input.update(mapping.IDENTIFIER)
+            layer_input.update(mapping.KIND)
 
         output_jac = np.zeros((layer_input.n_points,), dtype=layer_input.dtype)
         output_jac[layer_input.success] = layer_input.jac.flatten()
@@ -321,7 +321,7 @@ class LayeredMapping:
 #     Wrapper for the momtrop sampler (arxiv.org/abs/2504.09613) rust implementation.
 #     """
 
-#     IDENTIFIER = "momtrop"
+#     KIND = "momtrop"
 
 #     def __init__(
 #         self,
@@ -493,7 +493,7 @@ class LayeredMapping:
 
 
 class SphericalMapping(Mapping):
-    IDENTIFIER = "spherical"
+    KIND = "spherical"
 
     def __init__(self, conformal_scale: float = 1.0, **kwargs):
         super().__init__(**kwargs)
@@ -598,7 +598,7 @@ class SphericalMapping(Mapping):
 
 
 class MadspaceMapping(Mapping):
-    IDENTIFIER = "madspace"
+    KIND = "madspace"
 
     def __init__(
         self,
@@ -693,7 +693,7 @@ class MadspaceMapping(Mapping):
 
 
 class KaapoParameterisation(Mapping):
-    IDENTIFIER = "kaapo"
+    KIND = "kaapo"
 
     def __init__(
         self,
@@ -790,7 +790,7 @@ class KaapoParameterisation(Mapping):
 
 
 class RKaapoParameterisation(Mapping):
-    IDENTIFIER = "reduced kaapo"
+    KIND = "reduced kaapo"
 
     def __init__(
         self,
@@ -904,7 +904,7 @@ class RKaapoParameterisation(Mapping):
 
 
 class SParameterisation(Mapping):
-    IDENTIFIER = "s"
+    KIND = "s"
 
     def __init__(self, exponent: float = 2.0, **kwargs):
         """
@@ -942,7 +942,7 @@ class SParameterisation(Mapping):
 
 
 class IdentityParameterisation(Mapping):
-    IDENTIFIER = "identity"
+    KIND = "identity"
 
     def __init__(
         self,
@@ -977,15 +977,15 @@ class IdentityParameterisation(Mapping):
 
 
 class MCLayer(Mapping, ABC):
-    IDENTIFIER = "multichanneling"
+    KIND = "multichanneling"
 
     def __init__(self, mapping_kwargs: Dict[str, Any] | None = None, **kwargs):
         self.gp = kwargs["graph_properties"]
         mapping_cfg = MappingConfig.from_dict(mapping_kwargs or {"kind": "spherical"})
         self.mapping = Mapping.from_kind(mapping_cfg.kind, self.gp, **mapping_cfg.kwargs)
         super().__init__(**kwargs)
-        self.IDENTIFIER = (
-            f"multichanneling: {self.IDENTIFIER} using {self.mapping.IDENTIFIER}"
+        self.KIND = (
+            f"multichanneling: {self.KIND} using {self.mapping.KIND}"
         )
 
     def _map_from_hcube(self, continuous: NDArray, discrete: NDArray) -> MappingOutput:
@@ -1019,7 +1019,7 @@ class MCLayer(Mapping, ABC):
 
 
 class OSEMCLayer(MCLayer):
-    IDENTIFIER = "ose"
+    KIND = "ose"
 
     def __init__(self, ose_exponent: float = 1.0, **kwargs):
         super().__init__(**kwargs)
@@ -1066,7 +1066,7 @@ class OSEMCLayer(MCLayer):
 
 
 class FermiMCLayer(MCLayer):
-    IDENTIFIER = "fermi"
+    KIND = "fermi"
 
     def __init__(
         self,
@@ -1150,7 +1150,7 @@ class FermiMCLayer(MCLayer):
 
 
 class JacMCLayer(MCLayer):
-    IDENTIFIER = "jac"
+    KIND = "jac"
 
     def __init__(
         self,

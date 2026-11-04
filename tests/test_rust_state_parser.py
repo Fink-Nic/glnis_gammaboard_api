@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 from pprint import pformat
+from glnis._optional import MissingGammaLoopDependency, gammaloop_native
 from glnis.core.parser import MetaDataParser
 from dataclasses import asdict
 
@@ -64,12 +65,19 @@ def _print_summary(json_or_dict: str|dict) -> None:
 
 
 def _parse_and_print(state_folder: Path, process_id: int, integrand_name: str) -> None:
-    from glnis._rust import parse_state_simplified
-
-    _print_summary(parse_state_simplified(state_folder, process_id, integrand_name))
+    _print_summary(gammaloop_native().parse_state_simplified(
+        state_folder, process_id, integrand_name
+    ))
 
 
 def test_rust_state_parser():
+    try:
+        gammaloop_native()
+    except MissingGammaLoopDependency as error:
+        if os.environ.get("GLNIS_REQUIRE_GAMMALOOP") == "1":
+            raise
+        pytest.skip(str(error))
+
     try:
         state_folder, process_id, integrand_name = _resolve_inputs(None, None, None)
     except ValueError as err:

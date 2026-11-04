@@ -6,11 +6,11 @@ import glnis_runtime_bootstrap
 glnis_runtime_bootstrap.bootstrap()
 
 from gammaboard_process import run_sampler  # noqa: E402
-from madnis_sampler import MadnisSampler  # noqa: E402
+from madnis_sampler import GammaBoardSampler  # noqa: E402
 
 
 def main() -> None:
-    run_sampler(MadnisSampler)
+    run_sampler(GammaBoardSampler)
 
 
 if __name__ == "__main__":

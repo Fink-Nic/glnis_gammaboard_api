@@ -3,15 +3,106 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 import tomllib
 from typing import Any, Literal, TYPE_CHECKING
+from abc import abstractmethod
 
 if TYPE_CHECKING:
     from glnis.core.sampler_aggregator import SamplerAggregator
 
 
+
+class BuildFromKind:
+    """
+    A base class for objects that can be built from a configuration table with a kind string.
+    Without a kind string, the default kind `DEFAULT_KIND` is used. Subclasses should define a class attribute `KIND`.
+    """
+
+    KIND: str = "BuildFromKindBase"  # type: ignore
+    DEFAULT_KIND: str = "BuildFromKindBase"  # type: ignore
+
+    # def __init__(self, cfg: BuildFromKindConfig, **kwargs) -> None:
+    #     """
+    #     Initialize an object from a configuration table.
+    #     """
+    #     self.cfg = cfg
+    #     for key, value in kwargs.items():
+    #         setattr(self, key, value)
+
+    @classmethod
+    def all_subclasses(cls):
+        for subclass in cls.__subclasses__():
+            yield subclass
+            yield from subclass.all_subclasses()
+
+    @classmethod
+    def kind_registry(cls) -> dict[str, type[BuildFromKind]]:
+        """
+        Return a mapping from kind strings to classes that can be built from those kinds.
+        """
+        registry = {}
+        
+        for subclass in cls.all_subclasses():
+            kind = subclass.kind()
+
+            if kind in registry:
+                raise ValueError(
+                    f"Duplicate Mapping class KIND {kind!r}: "
+                    f"{registry[kind].__name__} and {subclass.__name__}"
+                )
+
+            registry[kind] = subclass
+
+        return registry
+
+    @classmethod
+    def subclass_for_kind(cls, kind: str) -> type[BuildFromKind]:
+        """
+        Return the subclass that corresponds to the given kind string.
+        """
+        registry = cls.kind_registry()
+        try:
+            return registry[kind]
+        except KeyError:
+            raise ValueError(f"Unknown kind: {kind!r}") from None
+
+    @classmethod
+    def from_kind(cls, kind: str | None = None, **kwargs) -> BuildFromKind:
+        """
+        Build an object from a kind string and additional keyword arguments.
+        """
+        if kind is None:
+            kind = cls.DEFAULT_KIND
+        if not isinstance(kind, str):
+            raise ValueError("kind must be a string")
+        subclass = cls.subclass_for_kind(kind)
+        return subclass(**kwargs)
+
+    @classmethod
+    def from_kwargs(cls, **kwargs) -> BuildFromKind:
+        """
+        Build an object from keyword arguments that include a kind string.
+        """
+        kind = kwargs.pop("kind", None)
+        return cls.from_kind(kind, **kwargs)
+
+
+@dataclass
+class Config:
+
+    @classmethod 
+    def from_kwargs(cls, **kwargs):
+        return cls(**kwargs)
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Return a dictionary representation of this configuration.
+        """
+        return asdict(self)
+
+    
 def _table(value: Any, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{path} must be a configuration table")
@@ -238,7 +329,7 @@ class RunConfig:
         return cls.from_dict(values)
 
     def build(self) -> SamplerAggregator:
-        from madnis_sampler import MadnisConfig, MadnisSampler
+        from madnis_sampler import MadnisConfig, LegacyMadnisSampler
         from glnis.core.integrand import Integrand
         from glnis.core.sampler_aggregator import SamplerAggregator
 
@@ -250,7 +341,7 @@ class RunConfig:
         config_names = {item.name for item in fields(MadnisConfig)}
         settings = MadnisConfig.from_dict({key: values.pop(key) for key in config_names})
         try:
-            sampler = MadnisSampler.from_config(
+            sampler = LegacyMadnisSampler.from_config(
                 continuous_dims=integrand.continuous_dims,
                 discrete_cardinalities=list(integrand.discrete_cardinalities),
                 cfg=settings,

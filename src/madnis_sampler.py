@@ -11,10 +11,14 @@ from types import UnionType
 import numpy as np
 import torch
 import gammaboard_process as gb
-from madnis.integrator import Integrand, Integrator, losses
+from madnis.integrator import Integrand, Integrator
 from madnis.integrator import SampleBatch as MadnisSampleBatch
 from numpy.typing import NDArray
 from torch._tensor import Tensor
+
+from glnis.utils.types import RectangularTrainingStatus
+from glnis.core.nn.orchestrator import RectangularOrchestrator
+from glnis.core.config import Config
 
 
 def _validate_config(config: Any, path: str = "sampler") -> None:
@@ -171,74 +175,6 @@ class MadnisConfig:
 
 
 @dataclass
-class TrainingStatus:
-    sample_dim: int
-    training_batch_size: int
-    num_generated: int = 0
-    num_ingested: int = 0
-    total_trained_samples: int = 0
-    produced_batches: int = 0
-    produced_samples: int = 0
-    step: int = 0
-    last_loss: float | None = None
-    loss_history: List[float | None] = field(default_factory=list)
-    generated_samples: Tensor = None
-    generated_probs: Tensor = None
-    ingested_weights: Tensor = None
-
-    def __post_init__(self):
-        if self.generated_samples is None:
-            self.generated_samples = torch.empty(
-                (self.training_batch_size, self.sample_dim), dtype=torch.float64
-            )
-        if self.generated_probs is None:
-            self.generated_probs = torch.empty(
-                (self.training_batch_size,), dtype=torch.float64
-            )
-        if self.ingested_weights is None:
-            self.ingested_weights = torch.empty(
-                (self.training_batch_size,), dtype=torch.float64
-            )
-
-    def to_device(self, device: torch.device) -> None:
-        self.generated_samples = self.generated_samples.to(device)
-        self.generated_probs = self.generated_probs.to(device)
-        self.ingested_weights = self.ingested_weights.to(device)
-
-    def add_generation_data(self, samples: Tensor, probs: Tensor) -> None:
-        assert samples.shape[0] == probs.shape[0], "Number of samples and sampling weights must match."
-        n_samples = samples.shape[0]
-        if n_samples == self.training_batch_size:
-            self.generated_samples = samples
-            self.generated_probs = probs
-        else:
-            self.generated_probs[self.num_generated:self.num_generated + n_samples] = probs
-            self.generated_samples[self.num_generated:self.num_generated + n_samples, :] = samples
-        self.num_generated += n_samples
-        self.produced_batches += 1
-
-    def add_feedback_data(self, weights: NDArray) -> None:
-        weights = torch.as_tensor(weights, dtype=torch.float64, device=self.ingested_weights.device)
-        n_weights = weights.shape[0]
-        if n_weights == self.training_batch_size:
-            self.ingested_weights = weights
-        else:
-            self.ingested_weights[self.num_ingested:self.num_ingested + n_weights] = weights
-        self.num_ingested += n_weights
-
-    def test_ready_for_training(self) -> bool:
-        return self.num_generated == self.training_batch_size and self.num_ingested == self.training_batch_size
-
-    def add_loss(self, loss: float) -> None:
-        self.loss_history.append(loss)
-        self.last_loss = loss
-        self.step += 1
-        self.num_generated = 0
-        self.num_ingested = 0
-        self.total_trained_samples += self.training_batch_size
-
-
-@dataclass
 class GammaLoopEvaluatorMetadata:
     state_folder: str
     process_id: int
@@ -271,7 +207,7 @@ def parse_gammaloop_metadata(
     return GammaLoopEvaluatorMetadata.from_dict(evaluator_metadata)
 
 
-class MadnisSampler(gb.Sampler):
+class LegacyMadnisSampler(gb.Sampler):
     CHECKPOINT_KIND = "default"
 
     def __init__(
@@ -300,7 +236,7 @@ class MadnisSampler(gb.Sampler):
         flow_config: dict[str, Any] | FlowConfig | None = None,
         transformer_config: dict[str, Any] | TransformerConfig | None = None,
         made_config: dict[str, Any] | MadeConfig | None = None,
-        training_status: TrainingStatus | None = None,
+        training_status: RectangularTrainingStatus | None = None,
         torch_cpu_rng_state: Tensor | None = None,
         torch_gpu_rng_state: Tensor | None = None,
         madnis_blob: bytes | None = None,
@@ -358,12 +294,7 @@ class MadnisSampler(gb.Sampler):
         self.evaluator_metadata: dict[str, Any] = evaluator_metadata or {}
         self.gammaloop_metadata = parse_gammaloop_metadata(self.evaluator_metadata)
         if mapping is not None:
-            try:
-                from glnis.core.parser import MetaDataParser
-            except ImportError:
-                raise ImportError(
-                    "Momentum space evaluation is only supported in the 'glnis_gammaboard_api' package."
-                )
+            from glnis.core.parser import MetaDataParser
             Parser = MetaDataParser(
                 config=parser,
                 metadata=self.evaluator_metadata,
@@ -415,7 +346,7 @@ class MadnisSampler(gb.Sampler):
             raise ValueError("continuous_dims must be > 0")
 
         self.device = self._get_device()
-        self.training_status = training_status or TrainingStatus(self.continuous_dims + self.num_discrete_dims, self.cfg.training_batch_size)
+        self.training_status = training_status or RectangularTrainingStatus(self.continuous_dims + self.num_discrete_dims, self.cfg.training_batch_size)
         self.training_status.to_device(self.device)
 
         if torch_cpu_rng_state is not None:
@@ -837,7 +768,7 @@ class MadnisSampler(gb.Sampler):
             x=self.training_status.generated_samples,
             y=None,
             q_sample=self.training_status.generated_probs,
-            func_vals=self.training_status.ingested_weights * self.training_status.generated_probs,
+            func_vals=self.training_status.ingested_weights,
             channels=None,
         )
         last_loss = self.madnis._optimization_step(madnis_samples)[0]
@@ -959,259 +890,243 @@ class MadnisSampler(gb.Sampler):
             flow_kwargs=asdict(self.cfg.flow_config),
         )
 
+@dataclass
+class GammaBoardSamplerConfig(Config):
+    sampler: dict[str, Any] | None = None
+    orchestrator: dict[str, Any] | None = None
+    evaluator_metadata: dict[str, Any] | None = None
+    parser: dict[str, Any] | None = None
+    mapping: dict[str, Any] | None = None
+    graph_properties: dict[str, Any] | None = None
 
-class MadnisSamplerNaiveSgnStrat(MadnisSampler):
-    CHECKPOINT_KIND = "sgn_strat_naive"
+@dataclass
+class GammaBoardSamplerSnapshot:
+    kind: str = "default"
+    config: dict[str, Any] = field(default_factory=dict)
+    orchestrator_snapshot: dict[str, Any] = field(default_factory=dict)
 
-    def __init__(
-        self,
-        discrete_cardinalities: list[int],
-        **kwargs
-    ):
-        discrete_cardinalities = [2] + discrete_cardinalities
-        super().__init__(
-            discrete_cardinalities=discrete_cardinalities,
-            **kwargs,
-        )
-        if not self.cfg.condition_integrand_first:
-            raise ValueError(
-                "MadnisSamplerNaiveSgnStrat requires condition_integrand_first=True"
-            )
-
-    def generate(self, remaining_sample_budget: int | None) -> Any:
-        batch = super().generate(remaining_sample_budget)
-        if isinstance(batch, gb.GenerationStatus):
-            return batch
-        strata = batch.xs_discrete[:, 0]
-        batch.xs_discrete = batch.xs_discrete[:, 1:]
-        return batch, strata
-
-    def _checkpoint_state(self) -> dict[str, Any]:
-        state = super()._checkpoint_state()
-        # The public constructor prepends the sign coordinate itself.
-        state["discrete_cardinalities"] = state["discrete_cardinalities"][1:]
-        return state
-
-    def get_strat_cardinalities(self) -> list[int] | None:
-        """
-        Return the cardinalities of the stratified channels.
-        """
-        return [2]
-
-    def strat_channel_transform(self, values: NDArray, strata: NDArray) -> NDArray:
-        """
-        Transform the values based on the stratification.
-        To be called on the aggregator side if stratified sampling is used. 
-        """
-        values[strata == 0] = np.clip(values[strata == 0], a_min=0, a_max=None)
-        values[strata == 1] = np.clip(values[strata == 1], a_min=None, a_max=0)
-        return values
-
-    # def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray) -> NDArray | None:
-    #     result = super().pdf(xs_discrete, xs_continuous)
-    #     if result is not None:
-    #         # An additional factor of 2 enters through the discrete prior, which we need to cancel
-    #         result *= 2.0
-    #     return result
-
-class MadnisSamplerFullSgnStrat(MadnisSampler):
-    CHECKPOINT_KIND = "sgn_strat_full"
+class GammaBoardSampler(gb.Sampler):
+    KIND = "default"
 
     def __init__(
         self,
-        *args,
-        _checkpoint_children: list[dict[str, Any]] | None = None,
-        _pending_strata: NDArray | None = None,
-        **kwargs
+        *,
+        domain: gb.Domain,
+        evaluator_metadata: dict[str, Any] | None = None,
+        sampler: dict[str, Any] | None = None,
+        orchestrator: dict[str, Any] | None = None,
+        parser: dict[str, Any] | None = None,
+        mapping: dict[str, Any] | None = None,
+        graph_properties: dict[str, Any] | None = None,
+        cfg: GammaBoardSamplerConfig | None = None,
+        snapshot: GammaBoardSamplerSnapshot | None = None,
     ):
-        super().__init__(
-            *args,
-            _build_integrator=False,
-            **kwargs
+        # For the foreseeable future restricted to rectangular domains
+        self.domain: gb.RectangularDomain = domain
+        self.discrete_cardinalities, self.continuous_dims = self.domain.require_rectangular_shape()
+
+        self.cfg: GammaBoardSamplerConfig = cfg or GammaBoardSamplerConfig(
+            sampler=sampler, orchestrator=orchestrator, parser=parser,
+            mapping=mapping, graph_properties=graph_properties,
+            evaluator_metadata=evaluator_metadata,
         )
-        if not self.cfg.condition_integrand_first:
-            raise ValueError(
-                "MadnisSamplerFullSgnStrat requires condition_integrand_first=True"
+
+        self._input_discrete_cardinalities = list(self.discrete_cardinalities)
+        self._input_continuous_dims = self.continuous_dims
+        if self.cfg.mapping is not None:
+            from glnis.core.parser import MetaDataParser
+            Parser = MetaDataParser(
+                config=self.cfg.parser,
+                metadata=self.cfg.evaluator_metadata,
+                graph_properties=self.cfg.graph_properties,
             )
-        if self.cfg.training_batch_size % 2 != 0:
-            raise ValueError(
-                "MadnisSamplerFullSgnStrat requires training_batch_size to be even"
-            )
-        if self.cfg.max_batch_size % 2 != 0:
-            raise ValueError(
-                "MadnisSamplerFullSgnStrat requires max_batch_size to be even"
-            )
-        del self.madnis
-        if _checkpoint_children is None:
-            children = []
-            for index in range(2):
-                child_config = asdict(self.cfg)
-                child_config.update(
-                    kind="default", training_batch_size=self.cfg.training_batch_size // 2,
-                    max_batch_size=self.cfg.max_batch_size // 2,
-                    seed=self.cfg.seed + index, cuda_id=self.cfg.cuda_id + index,
-                )
-                children.append(MadnisSampler(
-                    discrete_cardinalities=self.discrete_cardinalities,
-                    continuous_dims=self.continuous_dims,
-                    cfg=MadnisConfig.from_dict(child_config),
-                ))
+            self.mapping = Parser.get_layered_mapping_instance(mapping)
         else:
-            if len(_checkpoint_children) != 2:
-                raise ValueError("Full sign-stratified checkpoints must contain two child samplers")
-            children = []
-            for index, child_state in enumerate(_checkpoint_children):
-                child_config = dict(child_state["config"])
-                child_config.update(
-                    use_gpu=self.cfg.use_gpu, cuda_id=self.cfg.cuda_id + index,
-                    training_steps=self.cfg.training_steps,
-                    training_batch_size=self.cfg.training_batch_size // 2,
-                    max_batch_size=self.cfg.max_batch_size // 2,
-                    save_path=self.cfg.save_path,
-                )
-                children.append(MadnisSampler._from_checkpoint_state(
-                    child_state, cfg=MadnisConfig.from_dict(child_config),
-                ))
-        self.madnis_1, self.madnis_2 = children
-        self.pending_strata = np.array([] if _pending_strata is None else _pending_strata, dtype=np.int64, copy=True)
-        if self.pending_strata.ndim != 1 or np.any((self.pending_strata < 0) | (self.pending_strata > 1)):
-            raise ValueError("Checkpoint pending_strata must contain one-dimensional sign channel indices")
-        if len(self.pending_strata) != self.training_status.num_generated - self.training_status.num_ingested:
-            raise ValueError("Checkpoint pending strata do not match outstanding training feedback")
-        self.discrete_cardinalities = [2] + self.discrete_cardinalities
+            self.mapping = None
 
-    def _checkpoint_state(self) -> dict[str, Any]:
-        return dict(
-            self._checkpoint_common_state(),
-            children=[self.madnis_1._checkpoint_state(), self.madnis_2._checkpoint_state()],
-            pending_strata=self.pending_strata.copy(),
+        if self.mapping is not None:
+            self.num_discrete_dims = len(self.mapping.discrete_cardinalities) + len(
+                self.discrete_cardinalities
+            )
+            self.continuous_dims = (
+                self.mapping.continuous_dims_in or self.continuous_dims
+            )
+            self._all_discrete_cardinalities = (
+                self.mapping.discrete_cardinalities + self.discrete_cardinalities
+            )
+        else:
+            self.num_discrete_dims = len(self.discrete_cardinalities)
+            self._all_discrete_cardinalities = self.discrete_cardinalities
+        self._sampled_discrete_indices = np.flatnonzero(
+            np.asarray(self._all_discrete_cardinalities) > 1
+        )
+        self._sampled_discrete_cardinalities = [
+            self._all_discrete_cardinalities[i] for i in self._sampled_discrete_indices
+        ]
+        self.num_discrete_dims = len(self._all_discrete_cardinalities)
+
+        if snapshot is not None:
+            self.orchestrator = RectangularOrchestrator.from_snapshot(
+                snapshot=snapshot.orchestrator_snapshot,
+                domain=self.domain,
+            )
+        else:
+
+            self.orchestrator = RectangularOrchestrator(
+                domain=self.domain,
+                sampler_config=self.cfg.sampler,
+                orchestrator_config=self.cfg.orchestrator,
+            )
+
+        gb.log(f"MadNIS Sampler initialized with {self.continuous_dims} continuous dims and {self.num_discrete_dims} discrete dims (cardinalities: {self._sampled_discrete_cardinalities})", level="info")
+
+
+    @classmethod
+    def from_snapshot(
+        cls,
+        *,
+        snapshot: Any,
+        domain: gb.Domain,
+        init_args: dict[str, Any],
+        evaluator_metadata: Any = None,
+    ) -> Self:
+        """Restore models, unfinished feedback, and RNG state from one checkpoint.
+
+        New checkpoints retain their configuration; old checkpoints still use
+        init_args. Device/output settings can be overridden, while model and
+        optimizer state are restored from the checkpoint.
+        Dimensions retain the public, pre-stratification/pre-mapping convention.
+        """
+        snapshot = GammaBoardSamplerSnapshot(**snapshot)
+        return cls(
+            domain=domain,
+            evaluator_metadata=evaluator_metadata,
+            cfg=GammaBoardSamplerConfig(**snapshot.config),
+            snapshot=snapshot,
         )
 
-    def _checkpoint_devices(self) -> set[torch.device]:
-        return super()._checkpoint_devices() | self.madnis_1._checkpoint_devices() | self.madnis_2._checkpoint_devices()
+    def snapshot(self) -> Any:
+        """Return non-null JSON-safe sampler state; use {} for empty state."""
+        """Atomically save a self-contained checkpoint and return JSON metadata."""
+        return asdict(GammaBoardSamplerSnapshot(
+            kind=GammaBoardSamplerSnapshot.KIND,
+            config=self.cfg.to_dict(),
+            save_path=self.cfg.save_path,
+            orchestrator_snapshot=self.orchestrator.snapshot().to_dict(),
+        ))
 
-    def generate(self, remaining_sample_budget: int | None) -> Any:
-        training_remaining_1 = self.madnis_1.training_samples_remaining()
-        training_remaining_2 = self.madnis_2.training_samples_remaining()
+    def generate(self, max_samples: int) -> SampleBatch | GenerationStatus:
+        """Return a SampleBatch with 1..max_samples samples, WAITING or FINISHED.
+
+        max_samples is a positive per-draw limit supplied by queue tuning and
+        capped by the remaining task budget and campaign allowance. It can change
+        between calls. Set the batch's
+        training_remaining to the ungenerated training window size to request
+        one feedback value per sample. Evaluator splitting is runtime-owned.
+        """
         training_remaining = self.training_samples_remaining()
         if training_remaining == 0:
             return gb.GenerationStatus.WAITING
         if training_remaining is not None:
-            # A child may finish its window before its sibling. Until the
-            # parent completes this step, don't draw from that child's next
-            # training window (or from its inference distribution).
-            if self.madnis_1.training_status.step > self.training_status.step:
-                training_remaining_1 = 0
-            if self.madnis_2.training_status.step > self.training_status.step:
-                training_remaining_2 = 0
-        nr_samples = remaining_sample_budget if remaining_sample_budget is not None else self.cfg.max_batch_size
-        if training_remaining is not None:
-            nr_samples = min(nr_samples, training_remaining)
-        nr_samples_1 = min(nr_samples, training_remaining_1 if training_remaining_1 is not None else self.madnis_1.cfg.max_batch_size)
-        nr_samples_2 = min(nr_samples, training_remaining_2 if training_remaining_2 is not None else self.madnis_2.cfg.max_batch_size)
-        nr_samples_2 = min(nr_samples_2, nr_samples - nr_samples_1)
-        batches = []
-        if nr_samples_1 > 0:
-            batches.append(self.madnis_1.generate(nr_samples_1))
-        if nr_samples_2 > 0:
-            batches.append(self.madnis_2.generate(nr_samples_2))
-        discrete = np.vstack([batch.xs_discrete for batch in batches])
-        continuous = np.vstack([batch.xs_continuous for batch in batches])
-        weights = np.hstack([batch.weights for batch in batches]) * 2.0
-        strata = np.hstack([np.zeros(nr_samples_1, dtype=np.int64), np.ones(nr_samples_2, dtype=np.int64)])
+            if max_samples is not None:
+                max_samples = min(max_samples, training_remaining)
+            else:
+                max_samples = training_remaining
+        nr_samples = max_samples if max_samples is not None else self.cfg.max_batch_size
+        gb.log(f"Producing {nr_samples} samples with MadNIS sampler ({self.training_status.step=}, {self.training_status.produced_samples=}, {self.training_status.total_trained_samples})", level=self.cfg.gb_loglevel)
+        continuous = np.empty((nr_samples, self.continuous_dims), dtype=np.float64)
+        discrete = np.empty((nr_samples, self.num_discrete_dims), dtype=np.uint64)
+        wgt = np.empty((nr_samples), dtype=np.float64)
 
-        if training_remaining is not None:
-            x_all = np.hstack([discrete[:, self._sampled_discrete_indices], continuous])
-            prob = 1 / weights
-            self.training_status.add_generation_data(
-                torch.as_tensor(x_all, dtype=self.training_status.generated_samples.dtype, device=self.training_status.generated_samples.device), 
-                torch.as_tensor(prob, dtype=self.training_status.generated_probs.dtype, device=self.training_status.generated_probs.device)
+        n_eval = 0
+        while n_eval < nr_samples:
+            n = min(self.cfg.max_batch_size, nr_samples - n_eval)
+            with torch.no_grad():
+                x_all, prob = self.madnis.sample(
+                    n,
+                    return_prob=True,
                 )
-            self._add_generation_strata(strata)
-        return gb.SampleBatch(xs_discrete=discrete, xs_continuous=continuous, weights=weights, training_remaining=training_remaining), strata
-    
-    def feedback(self, values: NDArray) -> None:
-        if self.training_status.step >= self.cfg.training_steps:
-            gb.log(f"Training target of {self.cfg.training_steps * self.cfg.training_batch_size} samples already reached. Ignoring additional training values.", level="warn")
-            return
-        values = np.asarray(values)
-        self.training_status.add_feedback_data(values)
-        feedback_strata = self._get_feedback_strata(len(values))
-        values_1 = values[feedback_strata == 0]
-        values_2 = values[feedback_strata == 1]
-        if len(values_1) > 0:
-            self.madnis_1.feedback(values_1)
-        if len(values_2) > 0:
-            self.madnis_2.feedback(values_2)
 
-        if self.training_status.test_ready_for_training():
-            self._train_step()
-        
+            if training_remaining is not None:
+                self.training_status.add_generation_data(x_all, prob)
 
-    def training_samples_remaining(self) -> int | None:
-        # Parent counters describe the current composite window even when one
-        # child has already advanced to its next window after partial feedback.
-        return super().training_samples_remaining()
-
-    def get_strat_cardinalities(self) -> list[int] | None:
-        """
-        Return the cardinalities of the stratified channels.
-        """
-        return [2]
-
-    def strat_channel_transform(self, values: NDArray, strata: NDArray) -> NDArray:
-        """
-        Transform the values based on the stratification.
-        To be called on the aggregator side if stratified sampling is used. 
-        """
-        values[strata == 0] = np.clip(values[strata == 0], a_min=0, a_max=None)
-        values[strata == 1] = np.clip(values[strata == 1], a_min=None, a_max=0)
-        return values
-
-    def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray) -> NDArray | None:
-        """
-        Return per-sample PDF values if supported.
-
-        Return a float64 array with shape (nr_samples,) or None to signal that
-        the sampler does not support/doesn't provide a PDF for the given batch.
-        """
-        strata, xs_discrete = np.split(xs_discrete, [1], axis=1)
-        strata = strata.flatten()
-        result = np.empty((len(xs_discrete),), dtype=np.float64)
-        n_samples_1 = np.sum(strata == 0)
-        n_samples_2 = np.sum(strata == 1)
-        if n_samples_1 > 0:
-            pdf_1 = self.madnis_1.pdf(xs_discrete[strata == 0], None if xs_continuous is None else xs_continuous[strata == 0])
-        else:
-            pdf_1 = np.empty((0,), dtype=np.float64)
-        if n_samples_2 > 0:
-            pdf_2 = self.madnis_2.pdf(xs_discrete[strata == 1], None if xs_continuous is None else xs_continuous[strata == 1])
-        else:
-            pdf_2 = np.empty((0,), dtype=np.float64)
-        result[strata == 0] = pdf_1
-        result[strata == 1] = pdf_2
-
-        # The parent sampler's PDF is the average of the two children, since each child is responsible for half of the samples.
-        return result / 2.0
-
-    def _train_step(self) -> None:
-        last_loss_1 = self.madnis_1.training_status.last_loss
-        last_loss_2 = self.madnis_2.training_status.last_loss
-        if last_loss_1 is None or last_loss_2 is None:
-            last_loss = None
-        else:
-            last_loss = (last_loss_1 + last_loss_2) / 2
-        self.training_status.add_loss(last_loss)
-
-    def _add_generation_strata(self, strata: NDArray) -> None:
-        self.pending_strata = np.hstack([self.pending_strata, strata])
-
-    def _get_feedback_strata(self, n_feedback: int) -> NDArray:
-        if len(self.pending_strata) < n_feedback:
-            raise ValueError(
-                f"Not enough pending strata to provide feedback for {n_feedback} samples."
+            discrete[n_eval: n_eval + n, :], continuous[n_eval: n_eval + n, :] = (
+                self._madnis_output_to_disc_cont(x_all)
             )
-        feedback_strata = self.pending_strata[:n_feedback]
-        self.pending_strata = self.pending_strata[n_feedback:]
-        return feedback_strata
-    
+            wgt[n_eval: n_eval + n] = 1 / prob.numpy(force=True)
+            n_eval += n
+
+        discrete, continuous, wgt = self._apply_mapping(discrete, continuous, wgt)
+
+        return gb.SampleBatch(xs_discrete=discrete, xs_continuous=continuous, weights=wgt, training_remaining=training_remaining)
+
+    def feedback(self, feedback: gb.Feedback) -> None:
+        """Consume one complete draw; feedback.values is already masked by GammaBoard."""
+        self.orchestrator.feedback(feedback)
+
+    @classmethod
+    def from_stage(
+        cls,
+        *,
+        source_state: Any,
+        source_args: dict[str, Any],
+        init_args: dict[str, Any],
+        domain: gb.Domain,
+        evaluator_metadata: Any = None,
+    ) -> Self:
+        """Transfer a trained proposal into a fresh stage; no pending feedback/counters.
+
+        Exact restoration is from_snapshot. Stratified inference assumes independent
+        draws from a frozen proposal and exact normalized discrete_mass probabilities.
+        No capability declaration certifies those statistical assumptions.
+        """
+        raise NotImplementedError("sampler does not support stage handoff")
+
+    def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray) -> Any:
+        return self.orchestrator.pdf(xs_discrete, xs_continuous)
+
+    def discrete_mass(self, subspaces: list[dict[int, int]]) -> Any:
+        gb.log(f"Called discrete_mass with subspaces {subspaces}.", level="info")
+
+
+        disc_list = [self._subspace_to_discrete(subspace).reshape(1, -1) for subspace in subspaces]
+        result = self.orchestrator.discrete_mass(disc_list)
+
+        gb.log(f"Discrete mass called with subspaces {disc_list}.", level="info")
+        gb.log(f"Discrete mass results: {result}.", level="info")
+        return result
+
+    def _subspace_to_discrete(self, subspace: dict[int, int]) -> NDArray:
+        """Convert a subspace dictionary to a discrete array for the sampler.
+
+        The subspace dictionary maps discrete dimension indices to their fixed
+        values. The returned array has shape (num_discrete_dims,) and contains
+        the fixed values at the specified indices, with -1 for unspecified dimensions.
+        """
+        n_dims = len(subspace)
+        discrete_array = np.full((n_dims,), -1, dtype=np.int64)
+        for dim_index, value in subspace.items():
+            if dim_index < 0 or dim_index >= n_dims:
+                raise ValueError(f"Discrete dimension index {dim_index} is out of bounds for {n_dims} dimensions, or subspace is not in the shape of a prefix.")
+            discrete_array[dim_index] = value
+        return discrete_array
+
+
+    def _apply_mapping(self, discrete: NDArray, continuous: NDArray, weights: NDArray, inverse: bool = False) -> Tuple[NDArray, NDArray]:
+        if self.mapping is not None:
+            if self.cfg.condition_integrand_first:
+                discrete_integrand, discrete = np.split(discrete, [len(self.discrete_cardinalities)], axis=1)
+            else:
+                discrete, discrete_integrand = np.split(discrete, [self.mapping.num_discrete_dims], axis=1)
+            if inverse:
+                return (discrete_integrand, *self.mapping.backward(discrete, continuous, weights))
+            return (discrete_integrand, *self.mapping.forward(discrete, continuous, weights))
+        return discrete, continuous, weights
+
+
+    def diagnostics(self) -> dict[str, Any]:
+        return {}
+
+    def persisted_output(self) -> Any:
+        """Return optional JSON task output; this is separate from recovery state."""
+        return None

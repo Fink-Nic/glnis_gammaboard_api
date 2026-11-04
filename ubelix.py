@@ -19,7 +19,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent
 BUILD_INPUTS = (
     "apptainer.def", "flake.nix", "flake.lock", "pyproject.toml",
-    "Cargo.toml", "Cargo.lock", "src",
+    "README.md", "MANIFEST.in", "src", "native",
 )
 
 
@@ -76,7 +76,7 @@ def snapshot_source(destination: Path) -> str:
         target = destination / name
         if source.is_dir():
             shutil.copytree(source, target, ignore=shutil.ignore_patterns(
-                "__pycache__", "*.pyc", "*.pyo", "*.so",
+                "__pycache__", "*.pyc", "*.pyo", "*.so", "target", "*.egg-info",
             ))
         else:
             shutil.copy2(source, target)

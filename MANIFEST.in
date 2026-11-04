@@ -1,0 +1,4 @@
+prune native
+prune src/rust
+exclude src/sitecustomize.py
+global-exclude *.so *.pyd *.dll *.dylib *.a *.rlib *.pyc *.pyo

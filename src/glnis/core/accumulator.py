@@ -457,11 +457,11 @@ class ProcessingTimes(AccumulatorModule):
 
     def combine_with(self: 'ProcessingTimes', other: 'ProcessingTimes') -> None:
         self.n_points += other.n_points
-        for identifier, time in other.processing_times.items():
-            if identifier in self.processing_times:
-                self.processing_times[identifier] += time
+        for kind, time in other.processing_times.items():
+            if kind in self.processing_times:
+                self.processing_times[kind] += time
             else:
-                self.processing_times[identifier] = time
+                self.processing_times[kind] = time
 
     def str_report(self) -> str:
         self.finalise()
@@ -479,17 +479,17 @@ class ProcessingTimes(AccumulatorModule):
             integrand=self.time_integrand,
             processing=self.time_processing
         ) if not self.detailed else self.processing_times
-        for identifier, time in processing_times.items():
-            if identifier == 'total_time':
+        for kind, time in processing_times.items():
+            if kind == 'total_time':
                 continue
             perc_time = 100. * time / self.time_total if self.time_total else 0.0
             t = time / self.n_points if self.n_points > 0 else 0.0
             if perc_time > 50.:
                 subroutine_times.append(
-                    f"{Colour.DARKCYAN}{identifier}{Colour.END}: {Colour.RED}{time_fmter(t)}{Colour.END} {Colour.RED}{int(perc_time)}%{Colour.END}")
+                    f"{Colour.DARKCYAN}{kind}{Colour.END}: {Colour.RED}{time_fmter(t)}{Colour.END} {Colour.RED}{int(perc_time)}%{Colour.END}")
             else:
                 subroutine_times.append(
-                    f"{Colour.DARKCYAN}{identifier}{Colour.END}: {time_fmter(t)} {int(perc_time)}%")
+                    f"{Colour.DARKCYAN}{kind}{Colour.END}: {time_fmter(t)} {int(perc_time)}%")
         report.append(" | ".join(subroutine_times))
 
         return "\n".join(line for line in report)
@@ -533,11 +533,11 @@ class FailuresMonitor(AccumulatorModule):
     def combine_with(self: 'FailuresMonitor', other: 'FailuresMonitor') -> None:
         self.n_points += other.n_points
         self.n_success += other.n_success
-        for identifier, failures in other.failures.items():
-            if identifier in self.failures:
-                self.failures[identifier] = np.vstack([self.failures[identifier], failures])
+        for kind, failures in other.failures.items():
+            if kind in self.failures:
+                self.failures[kind] = np.vstack([self.failures[kind], failures])
             else:
-                self.failures[identifier] = failures.copy()
+                self.failures[kind] = failures.copy()
 
     def str_report(self) -> str:
         if self.n_points == self.n_success:
@@ -547,10 +547,10 @@ class FailuresMonitor(AccumulatorModule):
         report = [
             f"{Colour.RED}WARNING: Failed {n_failures} points!{Colour.END}"]
         n_displayed = 0
-        for identifier, failures in self.failures.items():
+        for kind, failures in self.failures.items():
             n_curr_id = min(failures.shape[0], self.max_display-n_displayed)
             for idx in range(n_curr_id):
-                report.append(f"    At '{identifier}': {failures[idx]}")
+                report.append(f"    At '{kind}': {failures[idx]}")
             n_displayed += n_curr_id
             if n_displayed >= self.max_display:
                 break

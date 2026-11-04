@@ -1,10 +1,14 @@
 # type: ignore
+from __future__ import annotations
+
 import json
-from typing import Dict, List, Set
+from typing import TYPE_CHECKING, Dict, List, Set
 
-import pydot
-from symbolica import E, Expression, S
+if TYPE_CHECKING:
+    import pydot
+    from symbolica import Expression
 
+from glnis._optional import gammaloop_native, require_gammaloop_dependency
 from glnis.core.mappings import LayeredMapping
 from glnis.utils.types import GraphProperties, ParserConfig
 
@@ -37,9 +41,7 @@ class MetaDataParser:
                 "Graph properties must be supplied via 'graph_properties' config key if not using GammaLoop evaluator."
             )
 
-        from glnis._rust import parse_state_simplified
-
-        integrand_data = json.loads(parse_state_simplified(
+        integrand_data = json.loads(gammaloop_native().parse_state_simplified(
             self.metadata.state_folder, self.metadata.process_id, self.metadata.integrand_name))
         Dot = DotParser(integrand_data["dot_file"], integrand_data["model"], dot_from_string=True)
 
@@ -172,6 +174,7 @@ class DotParser:
         dot_from_string: bool = False,
         model_from_string: bool = True,
     ):
+        pydot = require_gammaloop_dependency("pydot", "Reading GammaLoop DOT graphs")
         if dot_from_string:
             self.graph_file = pydot.graph_from_dot_data(dot_file)
         else:
@@ -229,6 +232,10 @@ class DotParser:
         graph_id: int,
         ext_momenta: List[List[float]],
     ) -> GraphProperties:
+        symbolica = require_gammaloop_dependency(
+            "symbolica", "Extracting symbolic GammaLoop graph properties"
+        )
+        E, S = symbolica.E, symbolica.S
 
         # External momenta
         n_ext_mom = len(ext_momenta)

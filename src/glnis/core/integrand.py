@@ -45,7 +45,7 @@ class Integrand(ABC):
     measure: the integral sums over their possible values.
     """
 
-    IDENTIFIER = "integrand"
+    KIND = "integrand"
 
     def __init__(
         self,
@@ -157,7 +157,7 @@ class GaussianIntegrand(Integrand):
     part of the Gaussian unless the sampler maps to all real space.
     """
 
-    IDENTIFIER = "gaussian integrand"
+    KIND = "gaussian integrand"
 
     def __init__(
         self,
@@ -208,7 +208,7 @@ class GaussianIntegrand(Integrand):
 class SineIntegrand(Integrand):
     """Mean of integer-frequency sines on the unit cube, plus an offset."""
 
-    IDENTIFIER = "sine integrand"
+    KIND = "sine integrand"
 
     def __init__(
         self,
@@ -234,7 +234,7 @@ class SineIntegrand(Integrand):
 class GhostBumpsIntegrand(Integrand):
     """Sum of unnormalized Gaussian bumps; defaults reproduce two 2D bumps."""
 
-    IDENTIFIER = "ghostbumps integrand"
+    KIND = "ghostbumps integrand"
 
     def __init__(
         self,
