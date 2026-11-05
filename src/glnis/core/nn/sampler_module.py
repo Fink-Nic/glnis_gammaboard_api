@@ -69,7 +69,7 @@ class SamplerModule(ABC, nn.Module, BuildFromKind):
         self.domain = domain
 
     @classmethod
-    def from_snapshot(cls, snapshot: bytes) -> RectangularModule:
+    def from_snapshot(cls, snapshot: bytes):
         buffer = io.BytesIO(snapshot)
         return torch.load(buffer, map_location="cpu", weights_only=False)
 
@@ -101,6 +101,22 @@ class SamplerModule(ABC, nn.Module, BuildFromKind):
         pass
 
     @abstractmethod
+    def prob(self, xs: Tensor, c: Tensor | None = None) -> Tensor:
+        """
+        Evaluate the model in reverse and return the probability density of each point in output space.
+        Use during training with gradients enabled.
+
+        Args:
+            xs: Previously generated output of the model.
+            c: Optional conditioning tensor.
+
+        Returns:
+            The probability dnesity function values at the given points, including gradients.
+        
+        """
+        pass
+
+    @abstractmethod
     def discrete_mass(self, subspace: NDArray, c: NDArray | None = None) -> NDArray | None:
         """Evaluate the discrete mass of the model over specified subspaces.
 
@@ -111,6 +127,13 @@ class SamplerModule(ABC, nn.Module, BuildFromKind):
         Returns:
             The discrete mass values for the specified subspace, or None if not applicable.
 
+        """
+        pass
+
+    @abstractmethod
+    def to_disc_cont(self, xs: Tensor) -> tuple[NDArray, NDArray]:
+        """
+        Transforms the sampled output Tensor to (xs_discrete, xs_continuous) NDArrays of expected shape.
         """
         pass
 
@@ -369,6 +392,9 @@ class MadnisSamplerModule(RectangularSamplerModule):
                 return probs.numpy(force=True).ravel()
         except:
             return None
+
+    def prob(xs: Tensor, c: Tensor | None = None) -> Tensor:
+        return self.flow.prob(xs, c)
 
     def discrete_mass(self, subspace: NDArray, c: NDArray | None = None) -> NDArray | None:
         subspace = torch.as_tensor(subspace, device=self.dummy.device, dtype=torch.int64)

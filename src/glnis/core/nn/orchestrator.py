@@ -14,10 +14,12 @@ from glnis.core.nn.sampler_module import RectangularSamplerModule
 from glnis.core.nn.losses import get_loss
 from glnis.core.config import BuildFromKind, Config
 
+
 @dataclass
 class OrchestratorConfig(Config):
     save_path: str | None = None
     sampler_kwargs: dict = field(default_factory=dict)
+
 
 @dataclass
 class OrchestratorSnapshot:
@@ -26,6 +28,7 @@ class OrchestratorSnapshot:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
 
 @dataclass
 class RectangularOrchestratorConfig(OrchestratorConfig):
@@ -43,12 +46,13 @@ class RectangularOrchestratorConfig(OrchestratorConfig):
     loss_kwargs: dict = field(default_factory=dict)
     sampler_kwargs: dict = field(default_factory=dict)
 
+
 @dataclass
 class RectangularOrchestratorSnapshotData:
     cfg: RectangularOrchestratorConfig
     training_status: RectangularTrainingStatus
     module_snapshot: bytes
-    optimizer_state: dict 
+    optimizer_state: dict
     scheduler_state: dict | None = None
     torch_cpu_rng_state: Tensor | None = None
     torch_gpu_rng_state: Tensor | None = None
@@ -59,7 +63,7 @@ class Orchestrator(ABC, BuildFromKind):
     DEFAULT_KIND = "rectangular"
 
     @abstractmethod
-    def generate(self, batch_size: int) -> SampleBatch | GenerationStatus:
+    def generate(self, max_samples: int) -> SampleBatch | GenerationStatus:
         pass
 
     @abstractmethod
@@ -79,7 +83,7 @@ class Orchestrator(ABC, BuildFromKind):
     ) -> Self:
         subclass = cls.subclass_for_kind(snapshot.kind)
         return subclass._from_snapshot(domain, snapshot)
-    
+
     @classmethod
     @abstractmethod
     def _from_snapshot(cls, domain: Domain, snapshot: Any) -> None:
@@ -94,7 +98,7 @@ class RectangularOrchestrator(Orchestrator):
         self,
         domain: RectangularDomain,
         dims_c: int = 0,
-        cfg : RectangularOrchestratorConfig | None = None,
+        cfg: RectangularOrchestratorConfig | None = None,
         snapshot: RectangularOrchestratorSnapshotData | None = None,
         **kwargs,
     ):
@@ -112,29 +116,31 @@ class RectangularOrchestrator(Orchestrator):
                 torch.cuda.set_rng_state_all(snapshot.torch_gpu_rng_state)
             self.training_status = snapshot.training_status or RectangularTrainingStatus(
                 self.domain.continuous_dims + self.num_discrete_dims, self.cfg.training_batch_size
-                )
+            )
             self.optimizer = torch.optim.Adam(self.module.parameters(), lr=self.cfg.learning_rate)
             if snapshot.optimizer_state is not None:
                 self.optimizer.load_state_dict(snapshot.optimizer_state)
-            self.scheduler = self._get_scheduler(self.cfg.training_steps, self.cfg.scheduler_type) if self.cfg.use_scheduler else None
+            self.scheduler = self._get_scheduler(
+                self.cfg.training_steps, self.cfg.scheduler_type) if self.cfg.use_scheduler else None
             if snapshot.scheduler_state is not None and self.scheduler is not None:
                 self.scheduler.load_state_dict(snapshot.scheduler_state)
         else:
             self.cfg = cfg if cfg is not None else self.config_from_kind(**kwargs)
-            self.module = RectangularSamplerModule.from_kwargs(
+            self.module: RectangularSamplerModule = RectangularSamplerModule.from_kwargs(
                 domain=self.domain,
                 dims_c=dims_c,
                 **self.cfg.sampler_kwargs,
             )
             self.training_status = RectangularTrainingStatus(
                 self.domain.continuous_dims + self.num_discrete_dims, self.cfg.training_batch_size
-                )
+            )
             if self.cfg.seed is not None:
                 torch.manual_seed(self.cfg.seed)
             torch.set_default_dtype(torch.float64 if self.cfg.use_f64 else torch.float32)
             torch.set_default_device(self.device)
             self.optimizer = torch.optim.Adam(self.module.parameters(), lr=self.cfg.learning_rate)
-            self.scheduler = self._get_scheduler(self.cfg.training_steps, self.cfg.scheduler_type) if self.cfg.use_scheduler else None
+            self.scheduler = self._get_scheduler(
+                self.cfg.training_steps, self.cfg.scheduler_type) if self.cfg.use_scheduler else None
 
         self.training_status.to_device(self.device)
         self.loss_function = get_loss(cfg.loss_type, cfg.loss_kwargs)lse get_loss("kl_divergence", {})
@@ -143,14 +149,14 @@ class RectangularOrchestrator(Orchestrator):
     def snapshot(self) -> OrchestratorSnapshot:
         if self.cfg.save_path is None:
             raise ValueError("save_path must be specified in the configuration to save a snapshot.") from None
-        
+
         snapshot = OrchestratorSnapshot(
             kind=self.KIND,
             save_path=self.cfg.save_path,
         )
         destination = Path(self.cfg.save_path)
         temporary = destination.with_name(destination.name + ".tmp")
-        try: 
+        try:
             snapshot_data = RectangularOrchestratorSnapshotData(
                 training_status=self.training_status,
                 module_snapshot=self.module.snapshot(),
@@ -189,12 +195,39 @@ class RectangularOrchestrator(Orchestrator):
         except Exception as error:
             raise RuntimeError(f"Failed to load MadNIS Integrator state from file '{source_path}': {error}") from error
 
-    def generate(self, batch_size: int) -> SampleBatch | GenerationStatus:
-        if batch_size <= 0:
-            raise ValueError("batch_size must be a positive integer")
-        if batch_size > self.cfg.max_batch_size:
-            raise ValueError(f"batch_size {batch_size} exceeds max_batch_size {self.cfg.max_batch_size}")
-        return self.module.generate(batch_size, self.training_status)
+    def generate(self, max_samples: int) -> SampleBatch | GenerationStatus:
+        training_remaining = self.training_samples_remaining()
+        if training_remaining == 0:
+            return gb.GenerationStatus.WAITING
+        if training_remaining is not None:
+            nr_samples = min(max_samples, training_remaining)
+        else:
+            nr_samples = min(max_samples, self.cfg.max_batch_size)
+
+        continuous = np.empty((nr_samples, self.domain.continuous_dims), dtype=np.float64)
+        discrete = np.empty((nr_samples, self.num_discrete_dims), dtype=np.int64)
+        wgt = np.empty((nr_samples), dtype=np.float64)
+
+        n_eval = 0
+        while n_eval < nr_samples:
+            n = min(self.cfg.max_batch_size, nr_samples - n_eval)
+            with torch.no_grad():
+                x_all, prob = self.module.sample(
+                    n,
+                    return_prob=True,
+                    device=self.device,
+                    dtype=torch.float64,
+                )
+
+            if training_remaining is not None:
+                self.training_status.add_generation_data(x_all, prob)
+
+            discrete[n_eval: n_eval + n, :], continuous[n_eval: n_eval + n, :] = self.module.to_disc_cont(x_all)
+
+            wgt[n_eval: n_eval + n] = 1 / prob.numpy(force=True)
+            n_eval += n
+
+        discrete, continuous, wgt = self._apply_mapping(discrete, continuous, wgt)
 
     def optimization_step(self) -> None:
         self.optimizer.zero_grad()
@@ -214,7 +247,8 @@ class RectangularOrchestrator(Orchestrator):
 
     def feedback(self, values: NDArray) -> None:
         if self.training_status.step >= self.cfg.training_steps:
-            gb.log(f"Training target of {self.cfg.training_steps * self.cfg.training_batch_size} samples already reached. Ignoring additional training values.", level="warn")
+            gb.log(
+                f"Training target of {self.cfg.training_steps * self.cfg.training_batch_size} samples already reached. Ignoring additional training values.", level="warn")
             return
         values = np.asarray(values)
         self.training_status.add_feedback_data(values)
@@ -235,7 +269,7 @@ class RectangularOrchestrator(Orchestrator):
                 torch.cuda.set_device(cuda_id)
                 return torch.device(f"cuda:{cuda_id}")
         return torch.device("cpu")
-    
+
     def _get_scheduler(
         self, T_max: int, scheduler_type: str | None
     ) -> torch.optim.lr_scheduler.CosineAnnealingLR | None:

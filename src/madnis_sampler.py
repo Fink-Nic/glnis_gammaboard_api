@@ -1015,7 +1015,7 @@ class GammaBoardSampler(gb.Sampler):
             orchestrator_snapshot=self.orchestrator.snapshot().to_dict(),
         ))
 
-    def generate(self, max_samples: int) -> SampleBatch | GenerationStatus:
+    def generate(self, max_samples: int) -> gb.SampleBatch | GenerationStatus:
         """Return a SampleBatch with 1..max_samples samples, WAITING or FINISHED.
 
         max_samples is a positive per-draw limit supplied by queue tuning and
@@ -1024,41 +1024,22 @@ class GammaBoardSampler(gb.Sampler):
         training_remaining to the ungenerated training window size to request
         one feedback value per sample. Evaluator splitting is runtime-owned.
         """
-        training_remaining = self.training_samples_remaining()
-        if training_remaining == 0:
-            return gb.GenerationStatus.WAITING
-        if training_remaining is not None:
-            if max_samples is not None:
-                max_samples = min(max_samples, training_remaining)
-            else:
-                max_samples = training_remaining
-        nr_samples = max_samples if max_samples is not None else self.cfg.max_batch_size
-        gb.log(f"Producing {nr_samples} samples with MadNIS sampler ({self.training_status.step=}, {self.training_status.produced_samples=}, {self.training_status.total_trained_samples})", level=self.cfg.gb_loglevel)
-        continuous = np.empty((nr_samples, self.continuous_dims), dtype=np.float64)
-        discrete = np.empty((nr_samples, self.num_discrete_dims), dtype=np.uint64)
-        wgt = np.empty((nr_samples), dtype=np.float64)
+        res = self.orchestrator.generate(max_samples: int)
+        if not isinstance(res, gb.SampleBatch):
+            return res
+        if not self._sampled_discrete_indices.prod() == 0:
+            return res
 
-        n_eval = 0
-        while n_eval < nr_samples:
-            n = min(self.cfg.max_batch_size, nr_samples - n_eval)
-            with torch.no_grad():
-                x_all, prob = self.madnis.sample(
-                    n,
-                    return_prob=True,
-                )
-
-            if training_remaining is not None:
-                self.training_status.add_generation_data(x_all, prob)
-
-            discrete[n_eval: n_eval + n, :], continuous[n_eval: n_eval + n, :] = (
-                self._madnis_output_to_disc_cont(x_all)
-            )
-            wgt[n_eval: n_eval + n] = 1 / prob.numpy(force=True)
-            n_eval += n
-
-        discrete, continuous, wgt = self._apply_mapping(discrete, continuous, wgt)
-
-        return gb.SampleBatch(xs_discrete=discrete, xs_continuous=continuous, weights=wgt, training_remaining=training_remaining)
+        unmasked_discrete = np.zeros_like(
+            res.discrete, 
+            shape=(len(res.weights)))
+        unmasked_discrete[self._sampled_discrete_indices]
+        res.xs_discrete, , res.xs_continuous, res.weights = self._apply_mapping(
+            unmasked_discrete,
+            sampler_output.xs_continuous, 
+            sampler_output.weights,
+        )
+        return res
 
     def feedback(self, feedback: gb.Feedback) -> None:
         """Consume one complete draw; feedback.values is already masked by GammaBoard."""
@@ -1083,7 +1064,10 @@ class GammaBoardSampler(gb.Sampler):
         raise NotImplementedError("sampler does not support stage handoff")
 
     def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray) -> Any:
-        return self.orchestrator.pdf(xs_discrete, xs_continuous)
+        n_samples = len(xs_discrete)
+        _, mapped_continuous, jac = self._apply_mapping(xs_discrete, xs_continuous, inverse=True)
+
+        return jac * self.orchestrator.pdf(xs_discrete, mapped_continuous)
 
     def discrete_mass(self, subspaces: list[dict[int, int]]) -> Any:
         gb.log(f"Called discrete_mass with subspaces {subspaces}.", level="info")
@@ -1111,8 +1095,20 @@ class GammaBoardSampler(gb.Sampler):
             discrete_array[dim_index] = value
         return discrete_array
 
+    def _to_orchestrator_input(self, xs_discrete: NDArray, xs_continuous: NDArray, weights: NDArray | None = None) -> Tuple[NDArray, NDArray]:
+        if weights is None:
+            weights = np.ones_like(continuous, shape=(continuous.shape[0], 1))
 
-    def _apply_mapping(self, discrete: NDArray, continuous: NDArray, weights: NDArray, inverse: bool = False) -> Tuple[NDArray, NDArray]:
+        mapped_discrete, mapped_continuous, jac = self._apply_mapping(discrete, continuous)
+        discrete = discrete[self._sampled_discrete_indices]
+
+
+    def _apply_mapping(self, xs_discrete: NDArray, xs_continuous: NDArray, weights: NDArray | None = None, inverse: bool = False) -> Tuple[NDArray, NDArray]:
+        """
+        Applies 
+        """
+        if weights is None:
+            weights = np.ones_like(continuous, shape=(continuous.shape[0], 1))
         if self.mapping is not None:
             if self.cfg.condition_integrand_first:
                 discrete_integrand, discrete = np.split(discrete, [len(self.discrete_cardinalities)], axis=1)
