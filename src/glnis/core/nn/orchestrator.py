@@ -1,13 +1,16 @@
 # type:ignore
 
 import torch
+import numpy as np
 
 from typing import Literal, Any
+from numpy.typing import NDArray
+from torch._tensor import Tensor
 from dataclasses import dataclass, field, asdict
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from gammaboard_process import Domain, RectangularDomain, FeedBack, SampleBatch, GenerationStatus
+from gammaboard_process import Domain, RectangularDomain, Feedback, SampleBatch, GenerationStatus
 
 from glnis.utils.types import RectangularTrainingStatus
 from glnis.core.nn.sampler_module import RectangularSamplerModule
@@ -67,7 +70,7 @@ class Orchestrator(ABC, BuildFromKind):
         pass
 
     @abstractmethod
-    def feedback(self, feedback: FeedBack) -> None:
+    def feedback(self, feedback: Feedback) -> None:
         pass
 
     @abstractmethod
@@ -80,8 +83,10 @@ class Orchestrator(ABC, BuildFromKind):
         *,
         snapshot: Any,
         domain: Domain,
-    ) -> Self:
-        subclass = cls.subclass_for_kind(snapshot.kind)
+    ):
+        snapshot = OrchestratorSnapshot(**snapshot) if not isinstance(snapshot, OrchestratorSnapshot) else snapshot
+        # subclass = cls.subclass_for_kind(snapshot.kind)
+        subclass = RectangularOrchestrator if snapshot.kind == "rectangular" else cls.subclass_for_kind(snapshot.kind)
         return subclass._from_snapshot(domain, snapshot)
 
     @classmethod
@@ -105,10 +110,18 @@ class RectangularOrchestrator(Orchestrator):
         self.domain = domain
         self.num_discrete_dims = len(domain.discrete_cardinalities)
         self.dims_c = dims_c
-        self.device = self._get_device()
 
         if snapshot is not None:
             self.cfg = snapshot.cfg
+        else:
+            self.cfg = cfg if cfg is not None else RectangularOrchestratorConfig.from_kwargs(**kwargs)
+
+        self.device = self._get_device()
+        torch.set_default_dtype(torch.float64 if self.cfg.use_f64 else torch.float32)
+        torch.set_default_device(self.device)
+
+        if snapshot is not None:
+            self.device = self._get_device()
             self.module = RectangularSamplerModule.from_snapshot(snapshot.module_snapshot)
             if snapshot.torch_cpu_rng_state is not None:
                 torch.set_rng_state(snapshot.torch_cpu_rng_state)
@@ -121,11 +134,10 @@ class RectangularOrchestrator(Orchestrator):
             if snapshot.optimizer_state is not None:
                 self.optimizer.load_state_dict(snapshot.optimizer_state)
             self.scheduler = self._get_scheduler(
-                self.cfg.training_steps, self.cfg.scheduler_type) if self.cfg.use_scheduler else None
+                self.cfg.training_steps, self.cfg.scheduler_type, self.optimizer,) if self.cfg.use_scheduler else None
             if snapshot.scheduler_state is not None and self.scheduler is not None:
                 self.scheduler.load_state_dict(snapshot.scheduler_state)
         else:
-            self.cfg = cfg if cfg is not None else self.config_from_kind(**kwargs)
             self.module: RectangularSamplerModule = RectangularSamplerModule.from_kwargs(
                 domain=self.domain,
                 dims_c=dims_c,
@@ -136,14 +148,12 @@ class RectangularOrchestrator(Orchestrator):
             )
             if self.cfg.seed is not None:
                 torch.manual_seed(self.cfg.seed)
-            torch.set_default_dtype(torch.float64 if self.cfg.use_f64 else torch.float32)
-            torch.set_default_device(self.device)
             self.optimizer = torch.optim.Adam(self.module.parameters(), lr=self.cfg.learning_rate)
             self.scheduler = self._get_scheduler(
-                self.cfg.training_steps, self.cfg.scheduler_type) if self.cfg.use_scheduler else None
-
+                self.cfg.training_steps, self.cfg.scheduler_type, self.optimizer,) if self.cfg.use_scheduler else None
+        
         self.training_status.to_device(self.device)
-        self.loss_function = get_loss(cfg.loss_type, cfg.loss_kwargs)lse get_loss("kl_divergence", {})
+        self.loss_function = get_loss(self.cfg.loss_type, self.cfg.loss_kwargs)
         self.module.to(self.device, dtype=torch.float64 if self.cfg.use_f64 else torch.float32)
 
     def snapshot(self) -> OrchestratorSnapshot:
@@ -158,6 +168,7 @@ class RectangularOrchestrator(Orchestrator):
         temporary = destination.with_name(destination.name + ".tmp")
         try:
             snapshot_data = RectangularOrchestratorSnapshotData(
+                cfg=self.cfg,
                 training_status=self.training_status,
                 module_snapshot=self.module.snapshot(),
                 optimizer_state=self.optimizer.state_dict(),
@@ -176,7 +187,7 @@ class RectangularOrchestrator(Orchestrator):
         return snapshot
 
     @classmethod
-    def _from_snapshot(cls, domain: RectangularDomain, snapshot: OrchestratorSnapshot | dict) -> Self:
+    def _from_snapshot(cls, domain: RectangularDomain, snapshot: OrchestratorSnapshot | dict):
         if not isinstance(snapshot, OrchestratorSnapshot):
             snapshot = OrchestratorSnapshot(**snapshot)
         if snapshot.kind != cls.KIND:
@@ -196,9 +207,9 @@ class RectangularOrchestrator(Orchestrator):
             raise RuntimeError(f"Failed to load MadNIS Integrator state from file '{source_path}': {error}") from error
 
     def generate(self, max_samples: int) -> SampleBatch | GenerationStatus:
-        training_remaining = self.training_samples_remaining()
+        training_remaining = self._training_samples_remaining()
         if training_remaining == 0:
-            return gb.GenerationStatus.WAITING
+            return GenerationStatus.WAITING
         if training_remaining is not None:
             nr_samples = min(max_samples, training_remaining)
         else:
@@ -215,8 +226,6 @@ class RectangularOrchestrator(Orchestrator):
                 x_all, prob = self.module.sample(
                     n,
                     return_prob=True,
-                    device=self.device,
-                    dtype=torch.float64,
                 )
 
             if training_remaining is not None:
@@ -227,7 +236,12 @@ class RectangularOrchestrator(Orchestrator):
             wgt[n_eval: n_eval + n] = 1 / prob.numpy(force=True)
             n_eval += n
 
-        discrete, continuous, wgt = self._apply_mapping(discrete, continuous, wgt)
+        return SampleBatch(
+            xs_continuous=continuous,
+            xs_discrete=discrete,
+            weights=wgt,
+            training_remaining=training_remaining
+        )
 
     def optimization_step(self) -> None:
         self.optimizer.zero_grad()
@@ -240,23 +254,29 @@ class RectangularOrchestrator(Orchestrator):
             loss.backward()
             self.optimizer.step()
             last_loss = loss.item()
-            if self.module.scheduler is not None:
-                self.module.scheduler.step()
+            if self.scheduler is not None:
+                self.scheduler.step()
 
-        self.training_status.add_loss(last_loss)
+        self.training_status.finish_step(last_loss)
 
-    def feedback(self, values: NDArray) -> None:
+    def feedback(self, feedback: Feedback) -> None:
         if self.training_status.step >= self.cfg.training_steps:
             gb.log(
                 f"Training target of {self.cfg.training_steps * self.cfg.training_batch_size} samples already reached. Ignoring additional training values.", level="warn")
             return
-        values = np.asarray(values)
+        values = np.asarray(feedback.values)
         self.training_status.add_feedback_data(values)
 
         if self.training_status.test_ready_for_training():
-            self._train_step()
+            self.optimization_step()
 
-    def training_samples_remaining(self) -> int | None:
+    def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray, c: NDArray | None = None) -> NDArray:
+        return self.module.pdf(xs_discrete, xs_continuous, c)
+
+    def discrete_mass(self, subspace: NDArray, c: NDArray | None = None) -> float | None:
+        return self.module.discrete_mass(subspace, c)
+
+    def _training_samples_remaining(self) -> int | None:
         if self.training_status.step < self.cfg.training_steps:
             return max(self.cfg.training_batch_size - self.training_status.num_generated, 0)
         return None
@@ -271,7 +291,7 @@ class RectangularOrchestrator(Orchestrator):
         return torch.device("cpu")
 
     def _get_scheduler(
-        self, T_max: int, scheduler_type: str | None
+        self, T_max: int, scheduler_type: str | None, optimizer
     ) -> torch.optim.lr_scheduler.CosineAnnealingLR | None:
         if scheduler_type is None:
             return None
@@ -279,6 +299,7 @@ class RectangularOrchestrator(Orchestrator):
             case "cosineannealing":
                 def scheduler(optimizer):
                     return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max)
-                return scheduler
             case _:
                 return None
+
+        return scheduler(optimizer)

@@ -121,9 +121,6 @@ class MadnisConfig:
             See ``MadeConfig`` dataclass for details
     """
 
-    seed: int = 42
-    kind: Literal["default", "sgn_strat_naive", "sgn_strat_full"] = "default"
-    training_steps: int = 100
     training_batch_size: int = 1000
     max_batch_size: int = 100_000
     save_path: str | None = None
@@ -675,6 +672,7 @@ class LegacyMadnisSampler(gb.Sampler):
         if xs_continuous is None:
             xs_continuous = np.zeros((n_samples, 0), dtype=xs_discrete.dtype)
 
+        # 
         _, continuous, prob = self._apply_mapping(xs_discrete, xs_continuous, np.ones(n_samples, dtype=np.float64), inverse=True)
         sampled_discrete = xs_discrete[:, self._sampled_discrete_indices]
         prob = prob.flatten()
@@ -774,7 +772,7 @@ class LegacyMadnisSampler(gb.Sampler):
         last_loss = self.madnis._optimization_step(madnis_samples)[0]
         if not np.isfinite(last_loss):
             last_loss = None
-        self.training_status.add_loss(last_loss)
+        self.training_status.step(last_loss)
 
     def _madnis_discrete_prior_prob_function(
         self, indices: Tensor, dim: int = 0
@@ -892,6 +890,7 @@ class LegacyMadnisSampler(gb.Sampler):
 
 @dataclass
 class GammaBoardSamplerConfig(Config):
+    save_path: str | None = None
     sampler: dict[str, Any] | None = None
     orchestrator: dict[str, Any] | None = None
     evaluator_metadata: dict[str, Any] | None = None
@@ -912,6 +911,7 @@ class GammaBoardSampler(gb.Sampler):
         self,
         *,
         domain: gb.Domain,
+        save_path: str | None = None,
         evaluator_metadata: dict[str, Any] | None = None,
         sampler: dict[str, Any] | None = None,
         orchestrator: dict[str, Any] | None = None,
@@ -926,6 +926,7 @@ class GammaBoardSampler(gb.Sampler):
         self.discrete_cardinalities, self.continuous_dims = self.domain.require_rectangular_shape()
 
         self.cfg: GammaBoardSamplerConfig = cfg or GammaBoardSamplerConfig(
+            save_path=save_path,
             sampler=sampler, orchestrator=orchestrator, parser=parser,
             mapping=mapping, graph_properties=graph_properties,
             evaluator_metadata=evaluator_metadata,
@@ -960,25 +961,25 @@ class GammaBoardSampler(gb.Sampler):
         self._sampled_discrete_indices = np.flatnonzero(
             np.asarray(self._all_discrete_cardinalities) > 1
         )
-        self._sampled_discrete_cardinalities = [
-            self._all_discrete_cardinalities[i] for i in self._sampled_discrete_indices
-        ]
         self.num_discrete_dims = len(self._all_discrete_cardinalities)
+
+        orchestrator_domain = gb.RectangularDomain(
+            discrete_cardinalities=tuple(self._all_discrete_cardinalities[i] for i in self._sampled_discrete_indices),
+            continuous_dims=self.continuous_dims,
+        )
 
         if snapshot is not None:
             self.orchestrator = RectangularOrchestrator.from_snapshot(
                 snapshot=snapshot.orchestrator_snapshot,
-                domain=self.domain,
+                domain=orchestrator_domain,
             )
         else:
-
             self.orchestrator = RectangularOrchestrator(
-                domain=self.domain,
-                sampler_config=self.cfg.sampler,
-                orchestrator_config=self.cfg.orchestrator,
+                domain=orchestrator_domain,
+                sampler_kwargs=self.cfg.sampler,
+                save_path=self.cfg.save_path,
+                **(self.cfg.orchestrator or {}),
             )
-
-        gb.log(f"MadNIS Sampler initialized with {self.continuous_dims} continuous dims and {self.num_discrete_dims} discrete dims (cardinalities: {self._sampled_discrete_cardinalities})", level="info")
 
 
     @classmethod
@@ -1009,9 +1010,8 @@ class GammaBoardSampler(gb.Sampler):
         """Return non-null JSON-safe sampler state; use {} for empty state."""
         """Atomically save a self-contained checkpoint and return JSON metadata."""
         return asdict(GammaBoardSamplerSnapshot(
-            kind=GammaBoardSamplerSnapshot.KIND,
+            kind=self.KIND,
             config=self.cfg.to_dict(),
-            save_path=self.cfg.save_path,
             orchestrator_snapshot=self.orchestrator.snapshot().to_dict(),
         ))
 
@@ -1024,20 +1024,21 @@ class GammaBoardSampler(gb.Sampler):
         training_remaining to the ungenerated training window size to request
         one feedback value per sample. Evaluator splitting is runtime-owned.
         """
-        res = self.orchestrator.generate(max_samples: int)
+        res = self.orchestrator.generate(max_samples)
         if not isinstance(res, gb.SampleBatch):
             return res
         if not self._sampled_discrete_indices.prod() == 0:
             return res
 
         unmasked_discrete = np.zeros_like(
-            res.discrete, 
-            shape=(len(res.weights)))
-        unmasked_discrete[self._sampled_discrete_indices]
-        res.xs_discrete, , res.xs_continuous, res.weights = self._apply_mapping(
+            res.xs_discrete, 
+            shape=(len(res.weights), self.num_discrete_dims),
+            dtype=np.uint64,)
+        unmasked_discrete[:, self._sampled_discrete_indices] = res.xs_discrete
+        res.xs_discrete, res.xs_continuous, res.weights = self._apply_mapping(
             unmasked_discrete,
-            sampler_output.xs_continuous, 
-            sampler_output.weights,
+            res.xs_continuous, 
+            res.weights,
         )
         return res
 
@@ -1069,12 +1070,12 @@ class GammaBoardSampler(gb.Sampler):
 
         return jac * self.orchestrator.pdf(xs_discrete, mapped_continuous)
 
-    def discrete_mass(self, subspaces: list[dict[int, int]]) -> Any:
+    def discrete_mass(self, subspaces: list[dict[int, int]]) -> list[float]:
         gb.log(f"Called discrete_mass with subspaces {subspaces}.", level="info")
 
 
         disc_list = [self._subspace_to_discrete(subspace).reshape(1, -1) for subspace in subspaces]
-        result = self.orchestrator.discrete_mass(disc_list)
+        result = [self.orchestrator.discrete_mass(disc) for disc in disc_list]
 
         gb.log(f"Discrete mass called with subspaces {disc_list}.", level="info")
         gb.log(f"Discrete mass results: {result}.", level="info")
@@ -1093,7 +1094,7 @@ class GammaBoardSampler(gb.Sampler):
             if dim_index < 0 or dim_index >= n_dims:
                 raise ValueError(f"Discrete dimension index {dim_index} is out of bounds for {n_dims} dimensions, or subspace is not in the shape of a prefix.")
             discrete_array[dim_index] = value
-        return discrete_array
+        return discrete_array.reshape(1, -1)
 
     def _to_orchestrator_input(self, xs_discrete: NDArray, xs_continuous: NDArray, weights: NDArray | None = None) -> Tuple[NDArray, NDArray]:
         if weights is None:
@@ -1117,7 +1118,7 @@ class GammaBoardSampler(gb.Sampler):
             if inverse:
                 return (discrete_integrand, *self.mapping.backward(discrete, continuous, weights))
             return (discrete_integrand, *self.mapping.forward(discrete, continuous, weights))
-        return discrete, continuous, weights
+        return xs_discrete, xs_continuous, weights
 
 
     def diagnostics(self) -> dict[str, Any]:

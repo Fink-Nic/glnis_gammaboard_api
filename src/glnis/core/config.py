@@ -45,7 +45,7 @@ class BuildFromKind:
         registry = {}
         
         for subclass in cls.all_subclasses():
-            kind = subclass.kind()
+            kind = subclass.KIND
 
             if kind in registry:
                 raise ValueError(
@@ -91,14 +91,20 @@ class BuildFromKind:
 
 @dataclass
 class Config:
+    """
+    A base class for configuration objects.
+    """
 
     @classmethod 
     def from_kwargs(cls, **kwargs):
+        """
+        Build a configuration object from keyword arguments. To be overwritten is special logic must be applied.
+        """
         return cls(**kwargs)
 
     def to_dict(self) -> dict[str, Any]:
         """
-        Return a dictionary representation of this configuration.
+        Return a dictionary representation of this configuration. 
         """
         return asdict(self)
 

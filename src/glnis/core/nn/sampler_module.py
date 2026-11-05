@@ -1,7 +1,7 @@
 # type: ignore
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, get_args, get_origin, get_type_hints
+from typing import Any, Literal, get_args, get_origin, get_type_hints
 from types import UnionType
 from numpy.typing import NDArray
 from torch._tensor import Tensor
@@ -18,7 +18,7 @@ from torch.optim.lr_scheduler import LRScheduler
 
 from gammaboard_process import Domain
 from madnis.nn import Flow, MixedFlow, DiscreteMADE, DiscreteTransformer
-from glnis.core.config import BuildFromKind, BuildFromKindConfig
+from glnis.core.config import BuildFromKind, Config
 
 
 def _validate_config(config: Any, path: str = "sampler") -> None:
@@ -58,7 +58,7 @@ class SamplerModule(ABC, nn.Module, BuildFromKind):
     A base class for sampler modules.
     """
     KIND = "SamplerModuleBase"
-    DEFAULT_KIND = "madnis"
+    DEFAULT_KIND = "madnis rectangular"
     
 
     def __init__(
@@ -165,7 +165,7 @@ class RectangularSamplerModule(SamplerModule):
 
 
 @dataclass
-class FlowConfig:
+class FlowConfig(Config):
     """
     Config for the Normalizing Flow module which generates the continuous samples.
     """
@@ -181,7 +181,7 @@ class FlowConfig:
 
 
 @dataclass
-class TransformerConfig:
+class TransformerConfig(Config):
     """
     Config for the Transformer module which generates the discrete samples.
     """
@@ -194,7 +194,7 @@ class TransformerConfig:
 
 
 @dataclass
-class MadeConfig:
+class MadeConfig(Config):
     """
     Config for the MADE module which generates the discrete samples. Alternative to Transformer (but worse).
     """
@@ -232,13 +232,13 @@ class MadnisConfig(Config):
             raise ValueError("sampler.transformer_config.embedding_dim must be divisible by heads")
 
     @classmethod
-    def from_kwargs(cls, config_dict: dict[str, Any]) -> MadnisConfig:
-        if not isinstance(config_dict, dict):
+    def from_kwargs(cls, **kwargs: dict[str, Any]) -> MadnisConfig:
+        if not isinstance(kwargs, dict):
             raise ValueError("sampler must be a configuration table")
-        unknown = set(config_dict) - {item.name for item in fields(cls)}
+        unknown = set(kwargs) - {item.name for item in fields(cls)}
         if unknown:
             raise ValueError(f"Unknown sampler settings: {', '.join(f'sampler.{key}' for key in sorted(unknown))}")
-        values = dict(config_dict)
+        values = dict(kwargs)
         for name, config_type in (
             ("flow_config", FlowConfig),
             ("transformer_config", TransformerConfig),
@@ -257,15 +257,16 @@ class MadnisConfig(Config):
 
     @property
     def discrete_kwargs(self) -> dict[str, Any]:
-        return asdict(
-            self.transformer_config if self.discrete_model == "transformer"
-            else self.made_config
-        )
+        return self.transformer_config.to_dict() if self.discrete_model == "transformer" else self.made_config.to_dict()
+
+    @property
+    def flow_kwargs(self) -> dict[str, Any]:
+        return self.flow_config.to_dict()
 
 
 class MadnisSamplerModule(RectangularSamplerModule):
-    KIND = "madnis"
-    DEFAULT_KIND = "madnis"
+    KIND = "madnis rectangular"
+    DEFAULT_KIND = "madnis rectangular"
 
     def __init__(
         self,
@@ -275,13 +276,13 @@ class MadnisSamplerModule(RectangularSamplerModule):
         **kwargs
     ):
         super().__init__(domain, dims_c)
-        self.cfg = cfg if config is not None else MadnisConfig.from_kwargs(**kwargs)
+        self.cfg = cfg if cfg is not None else MadnisConfig.from_kwargs(**kwargs)
         
         if len(self.discrete_cardinalities) == 0:
             flow = Flow(
                 dims_in=self.continuous_dims,
                 dims_c=self.dims_c,
-                **flow_kwargs,
+                **self.cfg.flow_kwargs,
             )
         elif self.continuous_dims == 0:
             if self.cfg.discrete_model == "made":
@@ -307,24 +308,10 @@ class MadnisSamplerModule(RectangularSamplerModule):
                 dims_c=self.dims_c,
                 discrete_dims_position=self.cfg.discrete_dims_position,
                 discrete_model=self.cfg.discrete_model,
-                continuous_kwargs=dict(
-                    **self.cfg.flow_config,
-                ),
+                continuous_kwargs=self.cfg.flow_kwargs,
                 discrete_kwargs=self.cfg.discrete_kwargs,
             )
         self.flow = flow
-        parameters = self.flow.parameters()
-        
-        if optimizer is None:
-            self.optimizer = torch.optim.Adam(parameters, learning_rate)
-        elif isinstance(optimizer, Optimizer):
-            self.optimizer = optimizer
-        else:
-            self.optimizer = optimizer(parameters)
-        if scheduler is None or isinstance(scheduler, LRScheduler):
-            self.scheduler = scheduler
-        else:
-            self.scheduler = scheduler(self.optimizer)
 
         # Dummy to determine device and dtype
         self.register_buffer("dummy", torch.zeros((1,)))
@@ -332,10 +319,6 @@ class MadnisSamplerModule(RectangularSamplerModule):
         if self.cfg.freeze_discrete_model and hasattr(self.flow, "discrete_flow"):
             for param in self.flow.discrete_flow.parameters():
                 param.requires_grad = False
-        if device is not None:
-            self.to(device)
-        if dtype is not None:
-            self.to(dtype=dtype)
 
     def sample(self, n_samples: int, c: Tensor | None = None, return_prob: bool = False) -> Tensor:
         """Sample from the flow model.
@@ -362,13 +345,38 @@ class MadnisSamplerModule(RectangularSamplerModule):
                 xs_continuous = xs[:, :-self.flow.dims_in_discrete]
             return xs_discrete.numpy(force=True), xs_continuous.numpy(force=True)
         elif isinstance(self.flow, Flow):
-            return np.empty((xs.shape[0], 0), dtype=np.uint64), xs.numpy(force=True)
+            return np.zeros((xs.shape[0], 0), dtype=np.uint64), xs.numpy(force=True)
         elif isinstance(self.flow, (DiscreteMADE, DiscreteTransformer)):
-            return xs.numpy(force=True), np.empty((xs.shape[0], 0), dtype=np.float64)
+            return xs.numpy(force=True), np.zeros((xs.shape[0], 0), dtype=np.float64)
         else:
             raise ValueError("Unsupported flow type for splitting into discrete and continuous parts.")
 
-    def to_xs_tensor(self, xs_discrete: NDArray, xs_continuous: NDArray) -> Tensor:
+    def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray, c: NDArray | None = None) -> NDArray | None:
+        try:
+            with torch.no_grad():
+                xs_tensor = self._to_xs_tensor(xs_discrete, xs_continuous)
+                probs = self.flow.prob(xs_tensor, c=c)
+                return probs.numpy(force=True).ravel()
+        except:
+            return None
+
+    def prob(self, xs: Tensor, c: Tensor | None = None) -> Tensor:
+        return self.flow.prob(xs, c)
+
+    def discrete_mass(self, subspace: NDArray, c: NDArray | None = None) -> float | None:
+        subspace = torch.as_tensor(subspace, device=self.dummy.device, dtype=torch.int64)
+        if c is not None:
+            c = torch.as_tensor(c, device=self.dummy.device, dtype=self.dummy.dtype)
+        try:
+            with torch.no_grad():
+                if not isinstance(self.flow, MixedFlow):
+                    res = self.flow.prob(subspace, c=c) # In the case of a discrete-only flow
+                res = self.flow.discrete_flow.prob(subspace, c=c)
+        except Exception as e:
+            raise Exception(f"Error in discrete_mass: {e}")
+        return res.item() if res is not None else None
+
+    def _to_xs_tensor(self, xs_discrete: NDArray, xs_continuous: NDArray) -> Tensor:
         """Combine discrete and continuous tensors into a single tensor based on the flow's configuration."""
         if isinstance(self.flow, MixedFlow):
             if self.flow.discrete_dims_first:
@@ -383,25 +391,3 @@ class MadnisSamplerModule(RectangularSamplerModule):
             raise ValueError("Unsupported flow type for combining discrete and continuous parts.")
 
         return torch.as_tensor(xs, device=self.dummy.device, dtype=self.dummy.dtype)
-
-    def pdf(self, xs_discrete: NDArray, xs_continuous: NDArray, c: NDArray | None = None) -> NDArray | None:
-        try:
-            with torch.no_grad():
-                xs_tensor = self.to_xs_tensor(xs_discrete, xs_continuous)
-                probs = self.flow.prob(xs_tensor, c=c)
-                return probs.numpy(force=True).ravel()
-        except:
-            return None
-
-    def prob(xs: Tensor, c: Tensor | None = None) -> Tensor:
-        return self.flow.prob(xs, c)
-
-    def discrete_mass(self, subspace: NDArray, c: NDArray | None = None) -> NDArray | None:
-        subspace = torch.as_tensor(subspace, device=self.dummy.device, dtype=torch.int64)
-        if c is not None:
-            c = torch.as_tensor(c, device=self.dummy.device, dtype=self.dummy.dtype)
-        try:
-            with torch.no_grad():
-                return self.flow.discrete_flow.prob(subspace, c=c).numpy(force=True).ravel()
-        except Exception as e:
-            raise Exception(f"Error in discrete_mass: {e}")

@@ -812,7 +812,7 @@ class RectangularTrainingStatus:
     def test_ready_for_training(self) -> bool:
         return self.num_generated == self.training_batch_size and self.num_ingested == self.training_batch_size
 
-    def add_loss(self, loss: float) -> None:
+    def finish_step(self, loss: float) -> None:
         self.loss_history.append(loss)
         self.last_loss = loss
         self.step += 1
