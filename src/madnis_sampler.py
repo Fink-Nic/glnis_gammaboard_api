@@ -961,7 +961,9 @@ class GammaBoardSampler(gb.Sampler):
         self._sampled_discrete_indices = np.flatnonzero(
             np.asarray(self._all_discrete_cardinalities) > 1
         )
-        self.num_discrete_dims = len(self._all_discrete_cardinalities)
+        self._mask_superfluous_cardinalities: bool = np.any(
+            np.asarray(self._all_discrete_cardinalities) == 1
+        )
 
         orchestrator_domain = gb.RectangularDomain(
             discrete_cardinalities=tuple(self._all_discrete_cardinalities[i] for i in self._sampled_discrete_indices),
@@ -980,6 +982,9 @@ class GammaBoardSampler(gb.Sampler):
                 save_path=self.cfg.save_path,
                 **(self.cfg.orchestrator or {}),
             )
+        # gb.log(f"sampler dimensionality: {self.continuous_dims} continuous, {self._all_discrete_cardinalities} discrete", level="info")
+        # gb.log(f"orchestrator dimensionality: {self.orchestrator.domain.discrete_cardinalities}", level="info")
+        # gb.log(f"masking: {self._mask_superfluous_cardinalities=}, {self._sampled_discrete_indices=}, {self.num_discrete_dims=}", level="info")
 
 
     @classmethod
@@ -1027,7 +1032,7 @@ class GammaBoardSampler(gb.Sampler):
         res = self.orchestrator.generate(max_samples)
         if not isinstance(res, gb.SampleBatch):
             return res
-        if not self._sampled_discrete_indices.prod() == 0:
+        if not self._mask_superfluous_cardinalities:
             return res
 
         unmasked_discrete = np.zeros_like(
@@ -1071,14 +1076,9 @@ class GammaBoardSampler(gb.Sampler):
         return jac * self.orchestrator.pdf(xs_discrete, mapped_continuous)
 
     def discrete_mass(self, subspaces: list[dict[int, int]]) -> list[float]:
-        gb.log(f"Called discrete_mass with subspaces {subspaces}.", level="info")
-
-
         disc_list = [self._subspace_to_discrete(subspace).reshape(1, -1) for subspace in subspaces]
         result = [self.orchestrator.discrete_mass(disc) for disc in disc_list]
 
-        gb.log(f"Discrete mass called with subspaces {disc_list}.", level="info")
-        gb.log(f"Discrete mass results: {result}.", level="info")
         return result
 
     def _subspace_to_discrete(self, subspace: dict[int, int]) -> NDArray:
@@ -1095,14 +1095,6 @@ class GammaBoardSampler(gb.Sampler):
                 raise ValueError(f"Discrete dimension index {dim_index} is out of bounds for {n_dims} dimensions, or subspace is not in the shape of a prefix.")
             discrete_array[dim_index] = value
         return discrete_array.reshape(1, -1)
-
-    def _to_orchestrator_input(self, xs_discrete: NDArray, xs_continuous: NDArray, weights: NDArray | None = None) -> Tuple[NDArray, NDArray]:
-        if weights is None:
-            weights = np.ones_like(continuous, shape=(continuous.shape[0], 1))
-
-        mapped_discrete, mapped_continuous, jac = self._apply_mapping(discrete, continuous)
-        discrete = discrete[self._sampled_discrete_indices]
-
 
     def _apply_mapping(self, xs_discrete: NDArray, xs_continuous: NDArray, weights: NDArray | None = None, inverse: bool = False) -> Tuple[NDArray, NDArray]:
         """

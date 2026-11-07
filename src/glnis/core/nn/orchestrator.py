@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from gammaboard_process import Domain, RectangularDomain, Feedback, SampleBatch, GenerationStatus
+from gammaboard_process import Domain, RectangularDomain, Feedback, SampleBatch, GenerationStatus, log
 
 from glnis.utils.types import RectangularTrainingStatus
 from glnis.core.nn.sampler_module import RectangularSamplerModule
@@ -28,6 +28,7 @@ class OrchestratorConfig(Config):
 class OrchestratorSnapshot:
     kind: str
     save_path: str
+    cfg_kwargs: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -52,7 +53,6 @@ class RectangularOrchestratorConfig(OrchestratorConfig):
 
 @dataclass
 class RectangularOrchestratorSnapshotData:
-    cfg: RectangularOrchestratorConfig
     training_status: RectangularTrainingStatus
     module_snapshot: bytes
     optimizer_state: dict
@@ -86,7 +86,7 @@ class Orchestrator(ABC, BuildFromKind):
     ):
         snapshot = OrchestratorSnapshot(**snapshot) if not isinstance(snapshot, OrchestratorSnapshot) else snapshot
         # subclass = cls.subclass_for_kind(snapshot.kind)
-        subclass = RectangularOrchestrator if snapshot.kind == "rectangular" else cls.subclass_for_kind(snapshot.kind)
+        subclass = Orchestrator.subclass_for_kind(snapshot.kind)
         return subclass._from_snapshot(domain, snapshot)
 
     @classmethod
@@ -104,7 +104,7 @@ class RectangularOrchestrator(Orchestrator):
         domain: RectangularDomain,
         dims_c: int = 0,
         cfg: RectangularOrchestratorConfig | None = None,
-        snapshot: RectangularOrchestratorSnapshotData | None = None,
+        snapshot: OrchestratorSnapshot | None = None,
         **kwargs,
     ):
         self.domain = domain
@@ -112,7 +112,7 @@ class RectangularOrchestrator(Orchestrator):
         self.dims_c = dims_c
 
         if snapshot is not None:
-            self.cfg = snapshot.cfg
+            self.cfg = RectangularOrchestratorConfig.from_kwargs(**snapshot.cfg_kwargs)
         else:
             self.cfg = cfg if cfg is not None else RectangularOrchestratorConfig.from_kwargs(**kwargs)
 
@@ -122,21 +122,37 @@ class RectangularOrchestrator(Orchestrator):
 
         if snapshot is not None:
             self.device = self._get_device()
-            self.module = RectangularSamplerModule.from_snapshot(snapshot.module_snapshot)
-            if snapshot.torch_cpu_rng_state is not None:
-                torch.set_rng_state(snapshot.torch_cpu_rng_state)
-            if snapshot.torch_gpu_rng_state is not None and self.device.type == "cuda":
-                torch.cuda.set_rng_state_all(snapshot.torch_gpu_rng_state)
-            self.training_status = snapshot.training_status or RectangularTrainingStatus(
-                self.domain.continuous_dims + self.num_discrete_dims, self.cfg.training_batch_size
-            )
-            self.optimizer = torch.optim.Adam(self.module.parameters(), lr=self.cfg.learning_rate)
-            if snapshot.optimizer_state is not None:
-                self.optimizer.load_state_dict(snapshot.optimizer_state)
-            self.scheduler = self._get_scheduler(
-                self.cfg.training_steps, self.cfg.scheduler_type, self.optimizer,) if self.cfg.use_scheduler else None
-            if snapshot.scheduler_state is not None and self.scheduler is not None:
-                self.scheduler.load_state_dict(snapshot.scheduler_state)
+            source_path = Path(snapshot.save_path)
+            if not source_path.exists():
+                raise FileNotFoundError(f"snapshot file '{source_path}' does not exist")
+            try:
+                with source_path.open("rb") as stream:
+                    snapshot_data: RectangularOrchestratorSnapshotData = torch.load(stream, weights_only=False, map_location=self.device)
+                if not isinstance(snapshot_data, RectangularOrchestratorSnapshotData):
+                    raise ValueError("snapshot data must be an instance of RectangularOrchestratorSnapshotData")
+                
+                self.module = RectangularSamplerModule.from_snapshot(snapshot_data.module_snapshot)
+                self.module.to(self.device, dtype=torch.float64 if self.cfg.use_f64 else torch.float32)
+                self.training_status = snapshot_data.training_status or RectangularTrainingStatus(
+                    self.domain.continuous_dims + self.num_discrete_dims, self.cfg.training_batch_size
+                )
+                self.training_status.to_device(self.device)
+                if snapshot_data.torch_cpu_rng_state is not None:
+                    torch.set_rng_state(snapshot_data.torch_cpu_rng_state.cpu())
+                if snapshot_data.torch_gpu_rng_state is not None and self.device.type == "cuda":
+                    if self.device.type == "cuda":
+                        torch.cuda.set_rng_state(snapshot_data.torch_gpu_rng_state.cpu(), self.device)
+                    else:
+                        log(f"Warning: snapshot contains GPU RNG state but current device is not CUDA. Ignoring GPU RNG state.", level="warn")
+                self.optimizer = torch.optim.Adam(self.module.parameters(), lr=self.cfg.learning_rate)
+                if snapshot_data.optimizer_state is not None:
+                    self.optimizer.load_state_dict(snapshot_data.optimizer_state)
+                self.scheduler = self._get_scheduler(
+                    self.cfg.training_steps, self.cfg.scheduler_type, self.optimizer,) if self.cfg.use_scheduler else None
+                if snapshot_data.scheduler_state is not None and self.scheduler is not None:
+                    self.scheduler.load_state_dict(snapshot_data.scheduler_state)
+            except Exception as error:
+                raise RuntimeError(f"Failed to load orchestrator state from file '{source_path}': {error}") from error
         else:
             self.module: RectangularSamplerModule = RectangularSamplerModule.from_kwargs(
                 domain=self.domain,
@@ -146,16 +162,16 @@ class RectangularOrchestrator(Orchestrator):
             self.training_status = RectangularTrainingStatus(
                 self.domain.continuous_dims + self.num_discrete_dims, self.cfg.training_batch_size
             )
+            self.module.to(self.device, dtype=torch.float64 if self.cfg.use_f64 else torch.float32)
+            self.training_status.to_device(self.device)
             if self.cfg.seed is not None:
                 torch.manual_seed(self.cfg.seed)
             self.optimizer = torch.optim.Adam(self.module.parameters(), lr=self.cfg.learning_rate)
             self.scheduler = self._get_scheduler(
                 self.cfg.training_steps, self.cfg.scheduler_type, self.optimizer,) if self.cfg.use_scheduler else None
         
-        self.training_status.to_device(self.device)
         self.loss_function = get_loss(self.cfg.loss_type, self.cfg.loss_kwargs)
-        self.module.to(self.device, dtype=torch.float64 if self.cfg.use_f64 else torch.float32)
-
+        
     def snapshot(self) -> OrchestratorSnapshot:
         if self.cfg.save_path is None:
             raise ValueError("save_path must be specified in the configuration to save a snapshot.") from None
@@ -163,18 +179,18 @@ class RectangularOrchestrator(Orchestrator):
         snapshot = OrchestratorSnapshot(
             kind=self.KIND,
             save_path=self.cfg.save_path,
+            cfg_kwargs=self.cfg.to_dict(),
         )
         destination = Path(self.cfg.save_path)
         temporary = destination.with_name(destination.name + ".tmp")
         try:
             snapshot_data = RectangularOrchestratorSnapshotData(
-                cfg=self.cfg,
                 training_status=self.training_status,
                 module_snapshot=self.module.snapshot(),
                 optimizer_state=self.optimizer.state_dict(),
                 scheduler_state=self.scheduler.state_dict() if self.scheduler is not None else None,
                 torch_cpu_rng_state=torch.get_rng_state(),
-                torch_gpu_rng_state=torch.cuda.get_rng_state_all() if self._get_device().type == "cuda" else None,
+                torch_gpu_rng_state=torch.cuda.get_rng_state(self.device) if self.device.type == "cuda" else None,
             )
             destination.parent.mkdir(parents=True, exist_ok=True)
             with temporary.open("wb") as stream:
@@ -194,17 +210,8 @@ class RectangularOrchestrator(Orchestrator):
             raise ValueError(f"snapshot kind '{snapshot.kind}' does not match orchestrator kind '{cls.KIND}'")
         if snapshot.save_path is None:
             raise ValueError("snapshot save_path must be set to load a snapshot")
-        source_path = Path(snapshot.save_path)
-        if not source_path.exists():
-            raise FileNotFoundError(f"snapshot file '{source_path}' does not exist")
-        try:
-            with source_path.open("rb") as stream:
-                snapshot_data = torch.load(stream, weights_only=False)
-            if not isinstance(snapshot_data, RectangularOrchestratorSnapshotData):
-                raise ValueError("snapshot data must be an instance of RectangularOrchestratorSnapshotData")
-            return cls(domain=domain, snapshot=snapshot_data)
-        except Exception as error:
-            raise RuntimeError(f"Failed to load MadNIS Integrator state from file '{source_path}': {error}") from error
+
+        return cls(domain=domain, snapshot=snapshot)
 
     def generate(self, max_samples: int) -> SampleBatch | GenerationStatus:
         training_remaining = self._training_samples_remaining()

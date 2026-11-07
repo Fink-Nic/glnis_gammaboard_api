@@ -13,7 +13,7 @@ dependencies = [
     "torch>=2.6,<3",
     "vegas>=6.2",
     "matplotlib>=3.6",
-    "gammaboard-process @ git+https://github.com/alphal00p/gammaboard.git@main#subdirectory=process_api/python",
+    "gammaboard-process @ git+https://github.com/alphal00p/gammaboard.git@c5968d1d9ade1d8c827f68e4cb7055937298946e#subdirectory=process_api/python",
     "madnis @ git+https://github.com/madgraph-ml/madnis.git@main",
 ]
 
