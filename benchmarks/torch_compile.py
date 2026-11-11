@@ -28,14 +28,16 @@ from glnis.core.nn.sampler_module import MixedFlow, SamplerModule
 
 
 def make_model(discrete: tuple[int, ...], continuous: int, condition: int,
-               discrete_first: bool = True) -> MixedFlow:
-    """The network sizes from tests/gaussian_test.py, with configurable domain."""
+               discrete_first: bool = True, mlp_layers: int = 3,
+               mlp_units: int | None = None) -> MixedFlow:
+    """Gaussian-example defaults; a width override applies to all MLP subnets."""
     return MixedFlow(
         RectangularDomain(discrete, continuous), dims_c=condition,
         discrete_dims_first=discrete_first,
-        flow={"spline": {"bins": 10}, "subnet": {"layers": 3, "units": 32}},
+        flow={"spline": {"bins": 10},
+              "subnet": {"layers": mlp_layers, "units": 32 if mlp_units is None else mlp_units}},
         discrete={"embedding_dim": 64, "feedforward_dim": 64, "heads": 4, "layers": 1,
-                  "subnet": {"layers": 3, "units": 64}},
+                  "subnet": {"layers": mlp_layers, "units": 64 if mlp_units is None else mlp_units}},
     )
 
 
@@ -129,17 +131,27 @@ def check_probability_and_gradients(model, prob, xs, condition, *, backward: boo
         actual = prob(xs, c=condition)
         torch.testing.assert_close(actual, expected, **tolerance)
         if backward:
-            params = tuple(model.parameters())
+            named_params = tuple(model.named_parameters())
+            params = tuple(parameter for _, parameter in named_params)
             expected_grad = torch.autograd.grad(expected.log().mean(), params, allow_unused=True)
             actual_grad = torch.autograd.grad(actual.log().mean(), params, allow_unused=True)
-            for actual_g, expected_g in zip(actual_grad, expected_grad):
+            for (name, _), actual_g, expected_g in zip(named_params, actual_grad, expected_grad):
                 if expected_g is None:
                     assert actual_g is None
                 else:
-                    torch.testing.assert_close(actual_g, expected_g, **tolerance)
+                    try:
+                        torch.testing.assert_close(actual_g, expected_g, **tolerance)
+                    except AssertionError as error:
+                        difference = (actual_g - expected_g).double()
+                        relative_l2 = (difference.norm() / expected_g.double().norm().clamp_min(1e-300)).item()
+                        raise AssertionError(
+                            f"Gradient mismatch for {name} (relative L2 error {relative_l2:.6g}): {error}"
+                        ) from error
 
 
 def measure(base, args, xs, condition, compiled: bool):
+    if xs.is_cuda:
+        torch.cuda.reset_peak_memory_stats(xs.device)
     model = deepcopy(base)
     start = time.perf_counter()
     run, prob, sample = prepare(model, args, compiled, xs, condition)
@@ -166,12 +178,15 @@ def measure(base, args, xs, condition, compiled: bool):
                 run()
         elapsed, _ = timed(repeat, xs.device)
         repeats.append(elapsed / args.iterations)
+    memory = ({"timed_peak_allocated_bytes": torch.cuda.max_memory_allocated(xs.device),
+               "timed_peak_reserved_bytes": torch.cuda.max_memory_reserved(xs.device)}
+              if xs.is_cuda else {})
     if args.workload in ("prob", "train", "cycle"):
         check_probability_and_gradients(model, prob, xs, condition,
                                         backward=args.workload in ("train", "cycle"),
                                         inference=args.context == "inference")
     result = {"setup_s": setup, "first_call_s": first, "median_s": statistics.median(repeats),
-              "repeats_s": repeats, "correctness": "passed"}
+              "repeats_s": repeats, "correctness": "passed", **memory}
     if args.probe_batch_sizes:
         result["batch_shape_probes"] = []
         context = torch.inference_mode if args.context == "inference" else torch.no_grad
@@ -212,6 +227,11 @@ def main():
     parser.add_argument("--discrete", type=int, nargs="*", default=[3])
     parser.add_argument("--continuous", type=int, default=3)
     parser.add_argument("--condition", type=int, default=0)
+    parser.add_argument("--mlp-layers", type=int, default=3)
+    parser.add_argument("--mlp-units", type=int,
+                        help="hidden width of every coupling and discrete-head MLP (defaults: 32/64)")
+    parser.add_argument("--recompile-limit", type=int,
+                        help="override Dynamo's per-function variant limit for this benchmark process")
     parser.add_argument("--continuous-first", action="store_true")
     parser.add_argument("--protect-training-samples", action="store_true",
                         help="mark cycle boundaries and clone generated tensors outside compilation")
@@ -234,6 +254,10 @@ def main():
     args = parser.parse_args()
     if min(args.batch_size, args.iterations, args.repeats, args.threads) < 1 or args.warmup < 0:
         parser.error("batch size, iterations, repeats and threads must be positive; warmup nonnegative")
+    if args.mlp_layers < 1 or (args.mlp_units is not None and args.mlp_units < 1):
+        parser.error("MLP layers and units must be positive")
+    if args.recompile_limit is not None and args.recompile_limit < 1:
+        parser.error("recompile limit must be positive")
     if args.check_restore and (args.workload != "sample" or args.target != "methods"):
         parser.error("--check-restore requires --workload sample --target methods")
     if args.probe_batch_sizes and (args.workload != "sample" or min(args.probe_batch_sizes) < 1):
@@ -241,10 +265,13 @@ def main():
     if args.protect_training_samples and args.workload != "cycle":
         parser.error("--protect-training-samples requires --workload cycle")
     torch.set_num_threads(args.threads)
+    if args.recompile_limit is not None:
+        torch._dynamo.config.recompile_limit = args.recompile_limit
     device, dtype = torch.device(args.device), getattr(torch, args.dtype)
     torch.manual_seed(42)
     model = make_model(tuple(args.discrete), args.continuous, args.condition,
-                       discrete_first=not args.continuous_first).to(device, dtype)
+                       discrete_first=not args.continuous_first, mlp_layers=args.mlp_layers,
+                       mlp_units=args.mlp_units).to(device, dtype)
     # A trained proposal is nonuniform; zero-initialized heads hide numerical
     # differences and do not exercise gradients through the earlier layers.
     with torch.no_grad():
@@ -254,6 +281,8 @@ def main():
         xs = model.sample(args.batch_size, c=condition).detach().clone()
     result = {"torch": torch.__version__, "python": platform.python_version(),
               "device": str(device),
+              "parameters": sum(parameter.numel() for parameter in model.parameters()),
+              "coupling_blocks": len(model.continuous_flow.subnets),
               "hardware": torch.cuda.get_device_name(device) if device.type == "cuda" else platform.processor() or platform.machine(),
               "compiler_environment": {key: os.environ.get(key) for key in
                                        ("TORCHINDUCTOR_CACHE_DIR", "TORCHINDUCTOR_COMPILE_THREADS",

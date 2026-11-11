@@ -80,6 +80,11 @@ reproduction commands, correctness checks, and the distinction between compiler
 startup and steady-state timing. Compilation is not enabled in the default
 orchestrator.
 
+The [six-dimensional follow-up](implementation/compilation-6d.md) uses
+`--continuous 6 --mlp-layers 4 --mlp-units 512`, with either `--discrete` or
+`--discrete 3`. Benchmark JSON includes parameter counts, coupling-block counts,
+and peak CUDA allocation during measurement.
+
 ## Optional backend checks
 
 Core checks must work without compiling the companion or importing Symbolica:

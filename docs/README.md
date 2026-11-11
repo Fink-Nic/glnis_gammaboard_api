@@ -35,6 +35,8 @@ GammaBoard process arguments from the outer tables in local TOML files.
 - [Extending components](implementation/extending.md): registration and implementation contracts.
 - [Compilation experiments](implementation/compilation.md): training/inference benchmarks,
   graph-capture changes, startup costs, and runtime integration limits.
+  The [six-dimensional report](implementation/compilation-6d.md) compares 4-layer,
+  512-unit proposals with and without discrete sampling.
 
 [Development](development.md) covers testing, editable environments, dependency
 updates, and optional-backend troubleshooting. Project-specific agent guidance

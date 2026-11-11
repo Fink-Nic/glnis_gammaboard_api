@@ -1,5 +1,10 @@
 # Sampler compilation experiments
 
+For the six-dimensional models with 4-layer, 512-unit MLPs, see the
+[larger-model report](compilation-6d.md), which compares continuous-only sampling
+and a three-way discrete choice. The measurements below retain the original
+smaller Gaussian profile for comparison.
+
 Compiling complete tensor methods can substantially accelerate this proposal on
 CUDA. Compilation takes long enough that short training runs lose time overall.
 Keep it opt-in and decide from the expected number of batches, including startup.
