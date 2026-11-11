@@ -1,0 +1,2113 @@
+{
+  "experiment": "Six-dimensional sampler compilation with four-layer, 512-unit MLPs",
+  "branch": "codex/torch-compile-experiments",
+  "base_commit": "b021772",
+  "date": "2026-11-11",
+  "environment": {
+    "python": "3.13.12",
+    "torch": "2.15.0+cu132",
+    "gpus": "2 x NVIDIA A30",
+    "continuous_device": "cuda:0",
+    "mixed_device": "cuda:1",
+    "cpu": "AMD EPYC 9754 128-Core Processor",
+    "torch_threads": 1,
+    "compiler_threads": 1,
+    "cuda_triton_default_fp_fusion": "1"
+  },
+  "models": {
+    "continuous": {
+      "cardinalities": [],
+      "continuous": 6,
+      "parameters": 3450414
+    },
+    "mixed": {
+      "cardinalities": [
+        3
+      ],
+      "continuous": 6,
+      "parameters": 4045233
+    },
+    "common": {
+      "coupling_blocks": 6,
+      "mlp_layers": 4,
+      "mlp_units": 512,
+      "spline_bins": 10,
+      "transformer_embedding": 64,
+      "transformer_feedforward": 64,
+      "transformer_heads": 4,
+      "transformer_layers": 1
+    }
+  },
+  "common_arguments": {
+    "device": "cuda:0",
+    "dtype": "float64",
+    "batch_size": 1000,
+    "discrete": [],
+    "continuous": 6,
+    "condition": 0,
+    "mlp_layers": 4,
+    "mlp_units": 512,
+    "recompile_limit": null,
+    "continuous_first": false,
+    "protect_training_samples": false,
+    "workload": "sample",
+    "context": "inference",
+    "target": "methods",
+    "mode": "default",
+    "backend": "inductor",
+    "fullgraph": true,
+    "dynamic": false,
+    "iterations": 30,
+    "repeats": 3,
+    "warmup": 3,
+    "threads": 1,
+    "check_restore": false,
+    "probe_batch_sizes": []
+  },
+  "notes": [
+    "Shared host; the two domains ran on separate A30 GPUs. Compare each compiled run with its own eager baseline.",
+    "All models use seed 42 and parameters perturbed away from uniform initialization; eager/compiled copies start identically.",
+    "Common arguments plus argument_overrides reproduce a run using benchmarks/torch_compile.py.",
+    "Times are seconds. CUDA synchronization surrounds timed blocks. Inference warm confirmations use 100 warmups and 3 repeats of 100 calls; cycle confirmations use 100 warmups and 3 repeats of 30 calls.",
+    "Fresh Inductor-cache sampling/cycle rows use separate empty domain/cache-group directories; other system/Triton caches were not purged.",
+    "Warm confirmation runs reuse the corresponding domain and cache group. Bulk and CPU use 3 repeats of 10 calls.",
+    "Training uses a cheap positive synthetic target and eager Adam; native evaluator, mappings, public adapter, scheduler and IPC are excluded.",
+    "Peak allocated/reserved CUDA bytes cover the whole process including base/model copies and are recorded before gradient/snapshot checks. Reserved bytes include allocator history.",
+    "42 runs passed. Mixed MLP-only cycle compilation failed at the default eight-variant limit; its limit32 retry passed.",
+    "Continuous-only float32 cycles failed the strict gradient tolerance, reproduced in a diagnostic run. No validated speedup is reported for those two failures.",
+    "Module/RNG restore checks are same-process, same-execution-mode checks, not fresh-worker or interrupted-window/optimizer recovery.",
+    "CPU compiler execution required an installed openssl executable on PATH."
+  ],
+  "runs": [
+    {
+      "id": "continuous-cpu-sample",
+      "argument_overrides": {
+        "device": "cpu",
+        "iterations": 10,
+        "check_restore": true
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-cpu-sample",
+        "fresh_inductor_cache": true,
+        "cache_group": "cpu"
+      },
+      "eager": {
+        "setup_s": 0.0002205311320722103,
+        "first_call_s": 0.2651260136626661,
+        "median_s": 0.26286428049206734,
+        "repeats_s": [
+          0.26286428049206734,
+          0.26438560760580004,
+          0.26021794630214573
+        ],
+        "correctness": "passed",
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 1.3403072282671928,
+        "first_call_s": 51.449662970378995,
+        "median_s": 0.18976713218726218,
+        "repeats_s": [
+          0.2021899892948568,
+          0.18976713218726218,
+          0.18934838944114746
+        ],
+        "correctness": "passed",
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 1.3851939345991322,
+      "break_even_calls": 718.559134958739
+    },
+    {
+      "id": "continuous-cycle-default",
+      "argument_overrides": {
+        "workload": "cycle"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-cycle-default",
+        "fresh_inductor_cache": true,
+        "cache_group": "cycle",
+        "wall_time_s": 88.34696965804324
+      },
+      "eager": {
+        "setup_s": 0.9447441310621798,
+        "first_call_s": 0.29005569824948907,
+        "median_s": 0.027319642125318448,
+        "repeats_s": [
+          0.028940060501918198,
+          0.027319642125318448,
+          0.02645103585285445
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 218035200,
+        "timed_peak_reserved_bytes": 241172480
+      },
+      "compiled": {
+        "setup_s": 0.5034143486991525,
+        "first_call_s": 78.94684553006664,
+        "median_s": 0.00769414830332001,
+        "repeats_s": [
+          0.008077549546336134,
+          0.00769414830332001,
+          0.007659088463212053
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 209711104,
+        "timed_peak_reserved_bytes": 371195904
+      },
+      "speedup": 3.550703865888584,
+      "break_even_calls": 3985.4008647558985
+    },
+    {
+      "id": "continuous-cycle-f32-diagnostic",
+      "argument_overrides": {
+        "dtype": "float32",
+        "workload": "cycle"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-cycle-f32-diagnostic",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "gradient_diagnostic": true
+      },
+      "eager": {
+        "setup_s": 0.9872607933357358,
+        "first_call_s": 0.25145156402140856,
+        "median_s": 0.02822619816288352,
+        "repeats_s": [
+          0.028304934532692037,
+          0.02822619816288352,
+          0.026990157878026368
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 113774592,
+        "timed_peak_reserved_bytes": 150994944
+      },
+      "compiled": {
+        "error": "AssertionError",
+        "message": "Gradient mismatch for continuous_flow.subnets.2.layers.4.bias (relative L2 error 0.00141018): Tensor-likes are not close!\n\nMismatched elements: 1 / 512 (0.2%)\nGreatest absolute difference: 2.7918722480535507e-05 at index (129,) (up to 2e-05 allowed)\nGreatest relative difference: 11.552022933959961 at index (129,) (up to 0.0002 allowed)"
+      },
+      "speedup": null,
+      "break_even_calls": null
+    },
+    {
+      "id": "continuous-cycle-f32",
+      "argument_overrides": {
+        "dtype": "float32",
+        "workload": "cycle"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-cycle-f32",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "wall_time_s": 120.07791326474398
+      },
+      "eager": {
+        "setup_s": 1.2213942711241543,
+        "first_call_s": 0.37727316468954086,
+        "median_s": 0.03639643910961846,
+        "repeats_s": [
+          0.03968678245631357,
+          0.03639643910961846,
+          0.035838793497532606
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 113774592,
+        "timed_peak_reserved_bytes": 150994944
+      },
+      "compiled": {
+        "error": "AssertionError",
+        "message": "Tensor-likes are not close!\n\nMismatched elements: 1 / 512 (0.2%)\nGreatest absolute difference: 2.7918722480535507e-05 at index (129,) (up to 2e-05 allowed)\nGreatest relative difference: 11.552022933959961 at index (129,) (up to 0.0002 allowed)"
+      },
+      "speedup": null,
+      "break_even_calls": null
+    },
+    {
+      "id": "continuous-cycle-reduce-protected",
+      "argument_overrides": {
+        "protect_training_samples": true,
+        "workload": "cycle",
+        "mode": "reduce-overhead"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-cycle-reduce-protected",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "wall_time_s": 41.65857344586402
+      },
+      "eager": {
+        "setup_s": 0.970922829117626,
+        "first_call_s": 0.2568559548817575,
+        "median_s": 0.028734027687460185,
+        "repeats_s": [
+          0.028734027687460185,
+          0.029243767804776628,
+          0.028159150341525673
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 218035200,
+        "timed_peak_reserved_bytes": 241172480
+      },
+      "compiled": {
+        "setup_s": 0.566518856678158,
+        "first_call_s": 31.673875677865,
+        "median_s": 0.0068883249070495365,
+        "repeats_s": [
+          0.008779885635400811,
+          0.0068883249070495365,
+          0.006886282578731576
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 209309696,
+        "timed_peak_reserved_bytes": 346030080
+      },
+      "speedup": 4.17141004165667,
+      "break_even_calls": 1419.620877491441
+    },
+    {
+      "id": "continuous-cycle-subnets",
+      "argument_overrides": {
+        "workload": "cycle",
+        "target": "subnets"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-cycle-subnets",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "wall_time_s": 17.46370350383222
+      },
+      "eager": {
+        "setup_s": 0.923109115101397,
+        "first_call_s": 0.24899338837713003,
+        "median_s": 0.02842338557044665,
+        "repeats_s": [
+          0.028241620492190124,
+          0.02842338557044665,
+          0.02862839337127904
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 218035200,
+        "timed_peak_reserved_bytes": 241172480
+      },
+      "compiled": {
+        "setup_s": 0.5291579635813832,
+        "first_call_s": 6.530716557055712,
+        "median_s": 0.03123373833174507,
+        "repeats_s": [
+          0.031184644143407544,
+          0.031256524426862595,
+          0.03123373833174507
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 218231808,
+        "timed_peak_reserved_bytes": 371195904
+      },
+      "speedup": 0.9100218894245503,
+      "break_even_calls": null
+    },
+    {
+      "id": "continuous-prob-default",
+      "argument_overrides": {
+        "workload": "prob"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-prob-default",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 37.65549524920061
+      },
+      "eager": {
+        "setup_s": 0.0002464810386300087,
+        "first_call_s": 0.005934554152190685,
+        "median_s": 0.005611094335714976,
+        "repeats_s": [
+          0.005611094335714976,
+          0.005497682529191176,
+          0.006245261228953799
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65660416,
+        "timed_peak_reserved_bytes": 73400320
+      },
+      "compiled": {
+        "setup_s": 0.9554521050304174,
+        "first_call_s": 31.359031281434,
+        "median_s": 0.0014830127358436585,
+        "repeats_s": [
+          0.0015039565041661263,
+          0.001480749063193798,
+          0.0014830127358436585
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 88649216,
+        "timed_peak_reserved_bytes": 98566144
+      },
+      "speedup": 3.7835779829112046,
+      "break_even_calls": 7826.46892258155
+    },
+    {
+      "id": "continuous-sample-bulk-reduce",
+      "argument_overrides": {
+        "batch_size": 100000,
+        "mode": "reduce-overhead",
+        "iterations": 10
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-bulk-reduce",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "long_warmup_confirmation": false
+      },
+      "eager": {
+        "setup_s": 0.0002656206488609314,
+        "first_call_s": 0.2084330809302628,
+        "median_s": 0.21097546759992838,
+        "repeats_s": [
+          0.2109274875372648,
+          0.21127069792710246,
+          0.21097546759992838
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 1007459840,
+        "timed_peak_reserved_bytes": 1285554176
+      },
+      "compiled": {
+        "setup_s": 1.1267280993051827,
+        "first_call_s": 14.181870555970818,
+        "median_s": 0.10638627926819026,
+        "repeats_s": [
+          0.11150217200629413,
+          0.10623189671896398,
+          0.10638627926819026
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 1001869312,
+        "timed_peak_reserved_bytes": 2541748224
+      },
+      "speedup": 1.9831078692777493,
+      "break_even_calls": 144.37343089232806
+    },
+    {
+      "id": "continuous-sample-bulk",
+      "argument_overrides": {
+        "batch_size": 100000,
+        "iterations": 10
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-bulk",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 61.85111616179347
+      },
+      "eager": {
+        "setup_s": 0.0002872510813176632,
+        "first_call_s": 0.2092555551789701,
+        "median_s": 0.20985915828496218,
+        "repeats_s": [
+          0.21048598499037324,
+          0.20959907029755415,
+          0.20985915828496218
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 1007459840,
+        "timed_peak_reserved_bytes": 1285554176
+      },
+      "compiled": {
+        "setup_s": 0.9528671819716692,
+        "first_call_s": 44.52539856405929,
+        "median_s": 0.10629137940704822,
+        "repeats_s": [
+          0.10621525510214269,
+          0.10629137940704822,
+          0.1065063332207501
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 1002659840,
+        "timed_peak_reserved_bytes": 1285554176
+      },
+      "speedup": 1.9743760919810431,
+      "break_even_calls": 437.09272739288525
+    },
+    {
+      "id": "continuous-sample-default",
+      "argument_overrides": {
+        "check_restore": true
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-default",
+        "fresh_inductor_cache": true,
+        "cache_group": "main",
+        "wall_time_s": 37.78440347779542
+      },
+      "eager": {
+        "setup_s": 0.00027531199157238007,
+        "first_call_s": 0.007397690322250128,
+        "median_s": 0.0063855704541007675,
+        "repeats_s": [
+          0.006706542133664091,
+          0.0063855704541007675,
+          0.006240501860156655
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320,
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 1.0680124857462943,
+        "first_call_s": 31.080679297912866,
+        "median_s": 0.0014875651647647222,
+        "repeats_s": [
+          0.0014767987964053948,
+          0.0014875651647647222,
+          0.0014898784769078095
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 88720384,
+        "timed_peak_reserved_bytes": 121634816,
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 4.2926324206514535,
+      "break_even_calls": 6562.062897588715
+    },
+    {
+      "id": "continuous-sample-dynamic",
+      "argument_overrides": {
+        "dynamic": true,
+        "probe_batch_sizes": [
+          1,
+          7,
+          1000
+        ]
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-dynamic",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 85.52726239385083
+      },
+      "eager": {
+        "setup_s": 0.00046513183042407036,
+        "first_call_s": 0.013390903826802969,
+        "median_s": 0.0077656421655168135,
+        "repeats_s": [
+          0.00649074362590909,
+          0.008187788864597678,
+          0.0077656421655168135
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320,
+        "batch_shape_probes": [
+          {
+            "batch_size": 1,
+            "first_call_s": 0.011953128036111593,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 7,
+            "first_call_s": 0.020987235009670258,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 1000,
+            "first_call_s": 0.00734670041128993,
+            "correctness": "passed"
+          }
+        ]
+      },
+      "compiled": {
+        "setup_s": 1.2496149172075093,
+        "first_call_s": 53.42391522182152,
+        "median_s": 0.0015094857662916183,
+        "repeats_s": [
+          0.0015094857662916183,
+          0.001498729068165024,
+          0.0015095304697751999
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 88720384,
+        "timed_peak_reserved_bytes": 98566144,
+        "batch_shape_probes": [
+          {
+            "batch_size": 1,
+            "first_call_s": 23.321115863975137,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 7,
+            "first_call_s": 0.0029325420036911964,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 1000,
+            "first_call_s": 0.0031618434004485607,
+            "correctness": "passed"
+          }
+        ]
+      },
+      "speedup": 5.144561372443286,
+      "break_even_calls": 8736.941760302096
+    },
+    {
+      "id": "continuous-sample-eval-nograd",
+      "argument_overrides": {
+        "context": "eval-no-grad"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-eval-nograd",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 11.724667197093368
+      },
+      "eager": {
+        "setup_s": 0.00031561078503727913,
+        "first_call_s": 0.009946050122380257,
+        "median_s": 0.006907092593610287,
+        "repeats_s": [
+          0.007077107299119234,
+          0.0067496819732089835,
+          0.006907092593610287
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320
+      },
+      "compiled": {
+        "setup_s": 1.3220032881945372,
+        "first_call_s": 3.740134629420936,
+        "median_s": 0.0022452760643015307,
+        "repeats_s": [
+          0.0022452760643015307,
+          0.0022615978339066106,
+          0.0015372995752841235
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 72417280,
+        "timed_peak_reserved_bytes": 94371840
+      },
+      "speedup": 3.076277658426369,
+      "break_even_calls": 1083.6711880330342
+    },
+    {
+      "id": "continuous-sample-f32",
+      "argument_overrides": {
+        "dtype": "float32"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-f32",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 48.45198690705001
+      },
+      "eager": {
+        "setup_s": 0.0003854520618915558,
+        "first_call_s": 0.009423668961971998,
+        "median_s": 0.007722250822310647,
+        "repeats_s": [
+          0.007239212499310573,
+          0.008169430959969758,
+          0.007722250822310647
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 33413632,
+        "timed_peak_reserved_bytes": 52428800
+      },
+      "compiled": {
+        "setup_s": 1.1270392527803779,
+        "first_call_s": 40.99613508488983,
+        "median_s": 0.001428429502993822,
+        "repeats_s": [
+          0.0014332051544139782,
+          0.001428429502993822,
+          0.001419128431007266
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 56933376,
+        "timed_peak_reserved_bytes": 77594624
+      },
+      "speedup": 5.406112661580923,
+      "break_even_calls": 6691.223515893778
+    },
+    {
+      "id": "continuous-sample-reduce",
+      "argument_overrides": {
+        "mode": "reduce-overhead",
+        "check_restore": true
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-reduce",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 20.36360134324059
+      },
+      "eager": {
+        "setup_s": 0.0002575111575424671,
+        "first_call_s": 0.006581638008356094,
+        "median_s": 0.00617401582809786,
+        "repeats_s": [
+          0.00617401582809786,
+          0.006121980662768086,
+          0.006494893537213405
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320,
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 1.0161724807694554,
+        "first_call_s": 13.862452202942222,
+        "median_s": 0.0018852648014823596,
+        "repeats_s": [
+          0.0021114740365495285,
+          0.0018852648014823596,
+          0.0015082162339240313
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 72371200,
+        "timed_peak_reserved_bytes": 98566144,
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 3.274879912489381,
+      "break_even_calls": 3467.626225503223
+    },
+    {
+      "id": "continuous-sample-subnets",
+      "argument_overrides": {
+        "target": "subnets"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-subnets",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 10.696369324810803
+      },
+      "eager": {
+        "setup_s": 0.00035357195883989334,
+        "first_call_s": 0.009247118141502142,
+        "median_s": 0.007973011303693055,
+        "repeats_s": [
+          0.015097953425720335,
+          0.007973011303693055,
+          0.0070961213670670984
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320
+      },
+      "compiled": {
+        "setup_s": 1.0334418271668255,
+        "first_call_s": 3.4321341388858855,
+        "median_s": 0.007147939223796129,
+        "repeats_s": [
+          0.007311844561869899,
+          0.007012657371039192,
+          0.007147939223796129
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 88769024,
+        "timed_peak_reserved_bytes": 119537664
+      },
+      "speedup": 1.1154279651889298,
+      "break_even_calls": 5400.710294922403
+    },
+    {
+      "id": "continuous-sample-training-nograd",
+      "argument_overrides": {
+        "context": "no-grad"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-sample-training-nograd",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 12.55835547298193
+      },
+      "eager": {
+        "setup_s": 0.00036525074392557144,
+        "first_call_s": 0.009901190176606178,
+        "median_s": 0.009069276368245482,
+        "repeats_s": [
+          0.009069276368245482,
+          0.008069063335036238,
+          0.009127721594025692
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320
+      },
+      "compiled": {
+        "setup_s": 1.3921018331311643,
+        "first_call_s": 4.958258340600878,
+        "median_s": 0.0020662697032094004,
+        "repeats_s": [
+          0.0022536041059841713,
+          0.0020662697032094004,
+          0.0019896933964143196
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 72417280,
+        "timed_peak_reserved_bytes": 94371840
+      },
+      "speedup": 4.389202607074369,
+      "break_even_calls": 905.3388117514871
+    },
+    {
+      "id": "continuous-train-default",
+      "argument_overrides": {
+        "workload": "train"
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-train-default",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "wall_time_s": 11.09350470919162
+      },
+      "eager": {
+        "setup_s": 0.9439678797498345,
+        "first_call_s": 0.2394283516332507,
+        "median_s": 0.01957234089883665,
+        "repeats_s": [
+          0.020669409073889256,
+          0.01957234089883665,
+          0.019570270894716184
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 217978880,
+        "timed_peak_reserved_bytes": 241172480
+      },
+      "compiled": {
+        "setup_s": 0.36913654394447803,
+        "first_call_s": 3.4037655224092305,
+        "median_s": 0.0055562357728679975,
+        "repeats_s": [
+          0.007778167895351847,
+          0.0055562357728679975,
+          0.005412542168051005
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 209645568,
+        "timed_peak_reserved_bytes": 346030080
+      },
+      "speedup": 3.5225900589769017,
+      "break_even_calls": 184.7521698572921
+    },
+    {
+      "id": "continuous-warm-cycle-default",
+      "argument_overrides": {
+        "workload": "cycle",
+        "warmup": 100
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-warm-cycle-default",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.9510811143554747,
+        "first_call_s": 0.26595915481448174,
+        "median_s": 0.028611018632849056,
+        "repeats_s": [
+          0.028259168891236187,
+          0.028611018632849056,
+          0.02968205097131431
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 218035200,
+        "timed_peak_reserved_bytes": 241172480
+      },
+      "compiled": {
+        "setup_s": 0.4188327332958579,
+        "first_call_s": 5.416295831091702,
+        "median_s": 0.007918689989795287,
+        "repeats_s": [
+          0.007918689989795287,
+          0.008052902203053236,
+          0.007772693410515785
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 209701888,
+        "timed_peak_reserved_bytes": 346030080
+      },
+      "speedup": 3.6130999786226896,
+      "break_even_calls": 223.17876227854396
+    },
+    {
+      "id": "continuous-warm-cycle-reduce-protected",
+      "argument_overrides": {
+        "protect_training_samples": true,
+        "workload": "cycle",
+        "mode": "reduce-overhead",
+        "warmup": 100
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-warm-cycle-reduce-protected",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.9654100420884788,
+        "first_call_s": 0.2577598821371794,
+        "median_s": 0.028648844097430508,
+        "repeats_s": [
+          0.028648844097430508,
+          0.02929417002014816,
+          0.028433211520314215
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 218035200,
+        "timed_peak_reserved_bytes": 241172480
+      },
+      "compiled": {
+        "setup_s": 0.36206370312720537,
+        "first_call_s": 5.356570311821997,
+        "median_s": 0.007148610195145011,
+        "repeats_s": [
+          0.007193551724776625,
+          0.007148610195145011,
+          0.0071244108024984595
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 209309696,
+        "timed_peak_reserved_bytes": 346030080
+      },
+      "speedup": 4.00761033478751,
+      "break_even_calls": 209.08907834001155
+    },
+    {
+      "id": "continuous-warm-cycle-subnets-limit32",
+      "argument_overrides": {
+        "recompile_limit": 32,
+        "workload": "cycle",
+        "target": "subnets",
+        "warmup": 100
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-warm-cycle-subnets-limit32",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.0005046110600233078,
+        "first_call_s": 0.23971817875280976,
+        "median_s": 0.03550755868976315,
+        "repeats_s": [
+          0.02956455803165833,
+          0.03550755868976315,
+          0.03711222619749606
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 218035200,
+        "timed_peak_reserved_bytes": 241172480
+      },
+      "compiled": {
+        "setup_s": 0.35847551794722676,
+        "first_call_s": 2.277146984823048,
+        "median_s": 0.03201100959752997,
+        "repeats_s": [
+          0.03048499939031899,
+          0.03201100959752997,
+          0.03336176937445998
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 218231808,
+        "timed_peak_reserved_bytes": 346030080
+      },
+      "speedup": 1.109229578704165,
+      "break_even_calls": 685.0753842633866
+    },
+    {
+      "id": "continuous-warm-sample-default",
+      "argument_overrides": {
+        "iterations": 100,
+        "warmup": 100
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-warm-sample-default",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.0002871309407055378,
+        "first_call_s": 0.007248539011925459,
+        "median_s": 0.006765964371152222,
+        "repeats_s": [
+          0.006681896522641182,
+          0.006765964371152222,
+          0.008158444287255406
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320
+      },
+      "compiled": {
+        "setup_s": 1.032326175365597,
+        "first_call_s": 3.2976029156707227,
+        "median_s": 0.0014667728403583169,
+        "repeats_s": [
+          0.0014755579736083746,
+          0.0014667610311880708,
+          0.0014667728403583169
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 72417280,
+        "timed_peak_reserved_bytes": 94371840
+      },
+      "speedup": 4.612823598164914,
+      "break_even_calls": 815.6703519708644
+    },
+    {
+      "id": "continuous-warm-sample-reduce",
+      "argument_overrides": {
+        "mode": "reduce-overhead",
+        "iterations": 100,
+        "warmup": 100
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-warm-sample-reduce",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.00024486100301146507,
+        "first_call_s": 0.006604086607694626,
+        "median_s": 0.0063245857693254946,
+        "repeats_s": [
+          0.006906699030660093,
+          0.0063174371374770995,
+          0.0063245857693254946
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320
+      },
+      "compiled": {
+        "setup_s": 1.124285195954144,
+        "first_call_s": 3.4474522680975497,
+        "median_s": 0.001391413719393313,
+        "repeats_s": [
+          0.0014070586906746029,
+          0.0013909830199554563,
+          0.001391413719393313
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 72361984,
+        "timed_peak_reserved_bytes": 98566144
+      },
+      "speedup": 4.5454387010666775,
+      "break_even_calls": 925.3454917518524
+    },
+    {
+      "id": "continuous-warm-sample-subnets",
+      "argument_overrides": {
+        "target": "subnets",
+        "iterations": 100,
+        "warmup": 100
+      },
+      "parameters": 3450414,
+      "cache": {
+        "id": "continuous-warm-sample-subnets",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.00034561101347208023,
+        "first_call_s": 0.008865635842084885,
+        "median_s": 0.00647562705911696,
+        "repeats_s": [
+          0.00622754286043346,
+          0.00647562705911696,
+          0.006550677861087024
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 65773056,
+        "timed_peak_reserved_bytes": 73400320
+      },
+      "compiled": {
+        "setup_s": 0.960687190759927,
+        "first_call_s": 1.7715594647452235,
+        "median_s": 0.006968610747717321,
+        "repeats_s": [
+          0.006968610747717321,
+          0.007001604582183063,
+          0.006933085098862648
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 73244160,
+        "timed_peak_reserved_bytes": 94371840
+      },
+      "speedup": 0.929256532406858,
+      "break_even_calls": null
+    },
+    {
+      "id": "mixed-cpu-sample",
+      "argument_overrides": {
+        "device": "cpu",
+        "discrete": [
+          3
+        ],
+        "iterations": 10,
+        "check_restore": true
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-cpu-sample",
+        "fresh_inductor_cache": true,
+        "cache_group": "cpu"
+      },
+      "eager": {
+        "setup_s": 0.00029309187084436417,
+        "first_call_s": 0.3070478127337992,
+        "median_s": 0.3040425347629935,
+        "repeats_s": [
+          0.30378222819417716,
+          0.3054719808977097,
+          0.3040425347629935
+        ],
+        "correctness": "passed",
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 0.9568866798654199,
+        "first_call_s": 52.76998769771308,
+        "median_s": 0.2192784349899739,
+        "repeats_s": [
+          0.2181144374422729,
+          0.2195071038790047,
+          0.2192784349899739
+        ],
+        "correctness": "passed",
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 1.386559215350544,
+      "break_even_calls": 630.2141309353857
+    },
+    {
+      "id": "mixed-cycle-default",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "workload": "cycle"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-cycle-default",
+        "fresh_inductor_cache": true,
+        "cache_group": "cycle",
+        "wall_time_s": 106.70815334189683
+      },
+      "eager": {
+        "setup_s": 0.9071583347395062,
+        "first_call_s": 0.34261356433853507,
+        "median_s": 0.03488284397559861,
+        "repeats_s": [
+          0.03461449889776607,
+          0.03488284397559861,
+          0.036210051427284874
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 257320448,
+        "timed_peak_reserved_bytes": 291504128
+      },
+      "compiled": {
+        "setup_s": 0.4324005343951285,
+        "first_call_s": 95.5086863473989,
+        "median_s": 0.009409751292938988,
+        "repeats_s": [
+          0.009271960395077864,
+          0.009610346797853709,
+          0.009409751292938988
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 250150400,
+        "timed_peak_reserved_bytes": 425721856
+      },
+      "speedup": 3.7070952132150885,
+      "break_even_calls": 3717.3073628070097
+    },
+    {
+      "id": "mixed-cycle-f32",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "dtype": "float32",
+        "discrete": [
+          3
+        ],
+        "workload": "cycle"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-cycle-f32",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "wall_time_s": 146.68463218817487
+      },
+      "eager": {
+        "setup_s": 1.4536469280719757,
+        "first_call_s": 0.5942816347815096,
+        "median_s": 0.04644602738941709,
+        "repeats_s": [
+          0.04644602738941709,
+          0.04782364067311088,
+          0.04512710136671861
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 149645312,
+        "timed_peak_reserved_bytes": 236978176
+      },
+      "compiled": {
+        "setup_s": 0.6472559901885688,
+        "first_call_s": 132.1753357280977,
+        "median_s": 0.014808340603485704,
+        "repeats_s": [
+          0.014808340603485704,
+          0.015036605562393864,
+          0.013269899397467573
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 149664256,
+        "timed_peak_reserved_bytes": 314572800
+      },
+      "speedup": 3.136477518519817,
+      "break_even_calls": 4133.509002737379
+    },
+    {
+      "id": "mixed-cycle-reduce-protected",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "protect_training_samples": true,
+        "workload": "cycle",
+        "mode": "reduce-overhead"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-cycle-reduce-protected",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "wall_time_s": 49.07758168084547
+      },
+      "eager": {
+        "setup_s": 0.9237950909882784,
+        "first_call_s": 0.3793311472982168,
+        "median_s": 0.03511557676829398,
+        "repeats_s": [
+          0.03510581472267707,
+          0.03514842124034961,
+          0.03511557676829398
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 257320448,
+        "timed_peak_reserved_bytes": 291504128
+      },
+      "compiled": {
+        "setup_s": 0.48186184698715806,
+        "first_call_s": 37.247206781990826,
+        "median_s": 0.008305713363612691,
+        "repeats_s": [
+          0.009974623828505476,
+          0.008304012333974242,
+          0.008305713363612691
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 249089536,
+        "timed_peak_reserved_bytes": 400556032
+      },
+      "speedup": 4.2278820892297135,
+      "break_even_calls": 1358.676910839133
+    },
+    {
+      "id": "mixed-cycle-subnets",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "workload": "cycle",
+        "target": "subnets"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-cycle-subnets",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "wall_time_s": 13.707874646410346
+      },
+      "eager": {
+        "setup_s": 0.8645709617994726,
+        "first_call_s": 0.3572183381766081,
+        "median_s": 0.03361669659304122,
+        "repeats_s": [
+          0.03309885951069494,
+          0.03361669659304122,
+          0.03493333533406258
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 257320448,
+        "timed_peak_reserved_bytes": 291504128
+      },
+      "compiled": {
+        "error": "FailOnRecompileLimitHit",
+        "message": "Hard failure due to fullgraph=True"
+      },
+      "speedup": null,
+      "break_even_calls": null
+    },
+    {
+      "id": "mixed-prob-default",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "workload": "prob"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-prob-default",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 36.1900602132082
+      },
+      "eager": {
+        "setup_s": 0.0003390810452401638,
+        "first_call_s": 0.023484596982598305,
+        "median_s": 0.006508223293349147,
+        "repeats_s": [
+          0.006508223293349147,
+          0.006296044774353504,
+          0.00661401206937929
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75908608,
+        "timed_peak_reserved_bytes": 94371840
+      },
+      "compiled": {
+        "setup_s": 0.7868214403279126,
+        "first_call_s": 29.781394826248288,
+        "median_s": 0.0018372005006919304,
+        "repeats_s": [
+          0.0018223734727750222,
+          0.0018372005006919304,
+          0.0018557139361898105
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 98243584,
+        "timed_peak_reserved_bytes": 121634816
+      },
+      "speedup": 3.542467624463419,
+      "break_even_calls": 6539.123002474689
+    },
+    {
+      "id": "mixed-sample-bulk-reduce",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "batch_size": 100000,
+        "discrete": [
+          3
+        ],
+        "mode": "reduce-overhead",
+        "iterations": 10
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-bulk-reduce",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "long_warmup_confirmation": false
+      },
+      "eager": {
+        "setup_s": 0.00047380244359374046,
+        "first_call_s": 0.24410213390365243,
+        "median_s": 0.23864339450374245,
+        "repeats_s": [
+          0.23896738588809968,
+          0.23864339450374245,
+          0.2384963779244572
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 1052072448,
+        "timed_peak_reserved_bytes": 1652555776
+      },
+      "compiled": {
+        "setup_s": 1.0019255871884525,
+        "first_call_s": 16.718165896832943,
+        "median_s": 0.13119405442848803,
+        "repeats_s": [
+          0.13081832388415932,
+          0.13119405442848803,
+          0.1313344330061227
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 1052072448,
+        "timed_peak_reserved_bytes": 2554331136
+      },
+      "speedup": 1.8190107436143266,
+      "break_even_calls": 162.6395800610297
+    },
+    {
+      "id": "mixed-sample-bulk",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "batch_size": 100000,
+        "discrete": [
+          3
+        ],
+        "iterations": 10
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-bulk",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 75.56158319395036
+      },
+      "eager": {
+        "setup_s": 0.0012038247659802437,
+        "first_call_s": 0.2530152127146721,
+        "median_s": 0.23967175888828934,
+        "repeats_s": [
+          0.24073241241276264,
+          0.23967175888828934,
+          0.23933139559812844
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 1052072448,
+        "timed_peak_reserved_bytes": 1652555776
+      },
+      "compiled": {
+        "setup_s": 1.1522081210277975,
+        "first_call_s": 52.49072733288631,
+        "median_s": 0.13119079819880425,
+        "repeats_s": [
+          0.1307833245024085,
+          0.13122918531298639,
+          0.13119079819880425
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 1052072448,
+        "timed_peak_reserved_bytes": 1652555776
+      },
+      "speedup": 1.8268945854349856,
+      "break_even_calls": 492.148263410506
+    },
+    {
+      "id": "mixed-sample-default",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "check_restore": true
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-default",
+        "fresh_inductor_cache": true,
+        "cache_group": "main",
+        "wall_time_s": 40.04123054910451
+      },
+      "eager": {
+        "setup_s": 0.0003323107957839966,
+        "first_call_s": 0.03017398528754711,
+        "median_s": 0.007700750573227803,
+        "repeats_s": [
+          0.007700750573227803,
+          0.007626439273978273,
+          0.007841190493976077
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75973120,
+        "timed_peak_reserved_bytes": 96468992,
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 0.8259481219574809,
+        "first_call_s": 32.61067526880652,
+        "median_s": 0.0019063582022984824,
+        "repeats_s": [
+          0.001901362199957172,
+          0.0019067922296623389,
+          0.0019063582022984824
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 98243584,
+        "timed_peak_reserved_bytes": 144703488,
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 4.0395087155934615,
+      "break_even_calls": 5765.249392202085
+    },
+    {
+      "id": "mixed-sample-dynamic",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "dynamic": true,
+        "probe_batch_sizes": [
+          1,
+          7,
+          1000
+        ]
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-dynamic",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 81.65359613718465
+      },
+      "eager": {
+        "setup_s": 0.0006098519079387188,
+        "first_call_s": 0.028333894908428192,
+        "median_s": 0.009683727861071627,
+        "repeats_s": [
+          0.009683727861071627,
+          0.009865932601193587,
+          0.008947163230429094
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75973120,
+        "timed_peak_reserved_bytes": 96468992,
+        "batch_shape_probes": [
+          {
+            "batch_size": 1,
+            "first_call_s": 0.008860915899276733,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 7,
+            "first_call_s": 0.03142476687207818,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 1000,
+            "first_call_s": 0.009455238934606314,
+            "correctness": "passed"
+          }
+        ]
+      },
+      "compiled": {
+        "setup_s": 1.195402238983661,
+        "first_call_s": 54.965566490311176,
+        "median_s": 0.001947004192819198,
+        "repeats_s": [
+          0.0019072520391394696,
+          0.001947004192819198,
+          0.001986649368579189
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 98263040,
+        "timed_peak_reserved_bytes": 121634816,
+        "batch_shape_probes": [
+          {
+            "batch_size": 1,
+            "first_call_s": 17.168507327791303,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 7,
+            "first_call_s": 0.0027420418336987495,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 1000,
+            "first_call_s": 0.0036371848545968533,
+            "correctness": "passed"
+          }
+        ]
+      },
+      "speedup": 4.97365537104977,
+      "break_even_calls": 7255.270756640268
+    },
+    {
+      "id": "mixed-sample-eval-nograd",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "context": "eval-no-grad"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-eval-nograd",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 9.933234175667167
+      },
+      "eager": {
+        "setup_s": 0.00035478128120303154,
+        "first_call_s": 0.02236741967499256,
+        "median_s": 0.008350192041446765,
+        "repeats_s": [
+          0.008264218705395858,
+          0.008350192041446765,
+          0.008510287369911869
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75973120,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "compiled": {
+        "setup_s": 0.8556144936010242,
+        "first_call_s": 3.2742389091290534,
+        "median_s": 0.0028616071989138923,
+        "repeats_s": [
+          0.0028616071989138923,
+          0.002883561964457234,
+          0.0027230259651939074
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 82124800,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "speedup": 2.918007770114653,
+      "break_even_calls": 748.304220415134
+    },
+    {
+      "id": "mixed-sample-f32",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "dtype": "float32",
+        "discrete": [
+          3
+        ]
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-f32",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 49.3319181590341
+      },
+      "eager": {
+        "setup_s": 0.0003724917769432068,
+        "first_call_s": 0.04074432607740164,
+        "median_s": 0.010406738379970193,
+        "repeats_s": [
+          0.009528727767368158,
+          0.012689877006535729,
+          0.010406738379970193
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 42260480,
+        "timed_peak_reserved_bytes": 58720256
+      },
+      "compiled": {
+        "setup_s": 1.2545946869067848,
+        "first_call_s": 40.47714879922569,
+        "median_s": 0.0019228681766738495,
+        "repeats_s": [
+          0.0017979523011793692,
+          0.0019228681766738495,
+          0.0019349942449480295
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 61674496,
+        "timed_peak_reserved_bytes": 83886080
+      },
+      "speedup": 5.41209142998644,
+      "break_even_calls": 4914.104726882732
+    },
+    {
+      "id": "mixed-sample-reduce",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "mode": "reduce-overhead",
+        "check_restore": true
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-reduce",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 21.391326834913343
+      },
+      "eager": {
+        "setup_s": 0.0003494913689792156,
+        "first_call_s": 0.020203533116728067,
+        "median_s": 0.007244198629632592,
+        "repeats_s": [
+          0.007272955061246951,
+          0.007244198629632592,
+          0.00720460646164914
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75973120,
+        "timed_peak_reserved_bytes": 96468992,
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 0.7620218996889889,
+        "first_call_s": 14.455056530423462,
+        "median_s": 0.0026500915953268605,
+        "repeats_s": [
+          0.0026500915953268605,
+          0.0026660377004494268,
+          0.0020436707728852827
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 81963008,
+        "timed_peak_reserved_bytes": 119537664,
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 2.733565376535258,
+      "break_even_calls": 3307.8300727756696
+    },
+    {
+      "id": "mixed-sample-subnets",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "target": "subnets"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-subnets",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 10.948425429873168
+      },
+      "eager": {
+        "setup_s": 0.0003416910767555237,
+        "first_call_s": 0.021525077987462282,
+        "median_s": 0.0071697002897659935,
+        "repeats_s": [
+          0.007326152610282103,
+          0.0071697002897659935,
+          0.007134301463762919
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75973120,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "compiled": {
+        "setup_s": 0.9099807878956199,
+        "first_call_s": 3.1332570598460734,
+        "median_s": 0.007917349009464185,
+        "repeats_s": [
+          0.007829863671213388,
+          0.007917349009464185,
+          0.008082841709256171
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 99852800,
+        "timed_peak_reserved_bytes": 121634816
+      },
+      "speedup": 0.905568300853673,
+      "break_even_calls": null
+    },
+    {
+      "id": "mixed-sample-training-nograd",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "context": "no-grad"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-sample-training-nograd",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "wall_time_s": 43.516352395992726
+      },
+      "eager": {
+        "setup_s": 0.00042561208829283714,
+        "first_call_s": 0.01230141008272767,
+        "median_s": 0.009371238201856614,
+        "repeats_s": [
+          0.009198730159550906,
+          0.009598874766379595,
+          0.009371238201856614
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 76997632,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "compiled": {
+        "setup_s": 0.8404034157283604,
+        "first_call_s": 36.5480174520053,
+        "median_s": 0.0018388827641805012,
+        "repeats_s": [
+          0.0018232953579475483,
+          0.0018391117764015993,
+          0.0018388827641805012
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 98243584,
+        "timed_peak_reserved_bytes": 121634816
+      },
+      "speedup": 5.096158593901939,
+      "break_even_calls": 4962.019404795084
+    },
+    {
+      "id": "mixed-train-default",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "workload": "train"
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-train-default",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "wall_time_s": 12.643331251107156
+      },
+      "eager": {
+        "setup_s": 0.8832505261525512,
+        "first_call_s": 0.3384932456538081,
+        "median_s": 0.02572173629887402,
+        "repeats_s": [
+          0.02484763474203646,
+          0.02572173629887402,
+          0.025736473361030222
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 257255936,
+        "timed_peak_reserved_bytes": 291504128
+      },
+      "compiled": {
+        "setup_s": 0.3686809097416699,
+        "first_call_s": 3.517540439032018,
+        "median_s": 0.006567396533985932,
+        "repeats_s": [
+          0.007665778029089173,
+          0.006567396533985932,
+          0.006446586378539602
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 250076672,
+        "timed_peak_reserved_bytes": 400556032
+      },
+      "speedup": 3.916580362669649,
+      "break_even_calls": 139.10568621381537
+    },
+    {
+      "id": "mixed-warm-cycle-default",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "workload": "cycle",
+        "warmup": 100
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-warm-cycle-default",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.9177029030397534,
+        "first_call_s": 0.36047038482502103,
+        "median_s": 0.0331924919039011,
+        "repeats_s": [
+          0.03409761289755504,
+          0.03310020556673408,
+          0.0331924919039011
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 257320448,
+        "timed_peak_reserved_bytes": 291504128
+      },
+      "compiled": {
+        "setup_s": 0.3874423527158797,
+        "first_call_s": 5.601982580963522,
+        "median_s": 0.009511051358034213,
+        "repeats_s": [
+          0.00950859469982485,
+          0.009511051358034213,
+          0.009628956858068704
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 250141184,
+        "timed_peak_reserved_bytes": 400556032
+      },
+      "speedup": 3.489886728017992,
+      "break_even_calls": 198.94278123367292
+    },
+    {
+      "id": "mixed-warm-cycle-reduce-protected",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "protect_training_samples": true,
+        "workload": "cycle",
+        "mode": "reduce-overhead",
+        "warmup": 100
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-warm-cycle-reduce-protected",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.9430524338968098,
+        "first_call_s": 0.38871591724455357,
+        "median_s": 0.03904088879935443,
+        "repeats_s": [
+          0.038952375094716746,
+          0.03904088879935443,
+          0.041428302057708304
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 257320448,
+        "timed_peak_reserved_bytes": 291504128
+      },
+      "compiled": {
+        "setup_s": 0.41486999299377203,
+        "first_call_s": 5.872664805036038,
+        "median_s": 0.008526600726569692,
+        "repeats_s": [
+          0.008526600726569692,
+          0.008474721837167938,
+          0.00855496550599734
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 249089536,
+        "timed_peak_reserved_bytes": 400556032
+      },
+      "speedup": 4.57871665993452,
+      "break_even_calls": 162.40806389018869
+    },
+    {
+      "id": "mixed-warm-cycle-subnets-limit32",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "recompile_limit": 32,
+        "workload": "cycle",
+        "target": "subnets",
+        "warmup": 100
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-warm-cycle-subnets-limit32",
+        "fresh_inductor_cache": false,
+        "cache_group": "cycle",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.0010783150792121887,
+        "first_call_s": 0.44873762875795364,
+        "median_s": 0.04813879169523716,
+        "repeats_s": [
+          0.046490223100408914,
+          0.051125031399230164,
+          0.04813879169523716
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 257320448,
+        "timed_peak_reserved_bytes": 291504128
+      },
+      "compiled": {
+        "setup_s": 0.4779316959902644,
+        "first_call_s": 7.457964260131121,
+        "median_s": 0.06066922713071108,
+        "repeats_s": [
+          0.06835799080630144,
+          0.06066922713071108,
+          0.04417667666760584
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 258323968,
+        "timed_peak_reserved_bytes": 425721856
+      },
+      "speedup": 0.7934630779377285,
+      "break_even_calls": null
+    },
+    {
+      "id": "mixed-warm-sample-default",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "iterations": 100,
+        "warmup": 100
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-warm-sample-default",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.0003646719269454479,
+        "first_call_s": 0.022407719865441322,
+        "median_s": 0.007954363021999597,
+        "repeats_s": [
+          0.007954363021999597,
+          0.007872695187106728,
+          0.00830743352882564
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75973120,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "compiled": {
+        "setup_s": 0.9056211961433291,
+        "first_call_s": 3.4012051187455654,
+        "median_s": 0.0020772212790325286,
+        "repeats_s": [
+          0.0020484266569837928,
+          0.0020772212790325286,
+          0.002097105961292982
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 82124800,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "speedup": 3.8293286816820804,
+      "break_even_calls": 728.9349330774704
+    },
+    {
+      "id": "mixed-warm-sample-reduce",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "mode": "reduce-overhead",
+        "iterations": 100,
+        "warmup": 100
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-warm-sample-reduce",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.00034906109794974327,
+        "first_call_s": 0.02086337422952056,
+        "median_s": 0.007555824504233897,
+        "repeats_s": [
+          0.007555824504233897,
+          0.0074243189627304675,
+          0.007738026231527329
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75973120,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "compiled": {
+        "setup_s": 0.8583824238739908,
+        "first_call_s": 3.2697614352218807,
+        "median_s": 0.0017582231992855667,
+        "repeats_s": [
+          0.0017694278480485082,
+          0.0017582231992855667,
+          0.0017566796811297537
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 81963008,
+        "timed_peak_reserved_bytes": 119537664
+      },
+      "speedup": 4.297420547803099,
+      "break_even_calls": 708.3845900653914
+    },
+    {
+      "id": "mixed-warm-sample-subnets",
+      "argument_overrides": {
+        "device": "cuda:1",
+        "discrete": [
+          3
+        ],
+        "target": "subnets",
+        "iterations": 100,
+        "warmup": 100
+      },
+      "parameters": 4045233,
+      "cache": {
+        "id": "mixed-warm-sample-subnets",
+        "fresh_inductor_cache": false,
+        "cache_group": "main",
+        "long_warmup_confirmation": true
+      },
+      "eager": {
+        "setup_s": 0.0003367410972714424,
+        "first_call_s": 0.020533382892608643,
+        "median_s": 0.008566773147322237,
+        "repeats_s": [
+          0.009595540389418601,
+          0.008566773147322237,
+          0.007556145158596337
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 75973120,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "compiled": {
+        "setup_s": 1.0348579534329474,
+        "first_call_s": 1.4904881590045989,
+        "median_s": 0.00823324390221387,
+        "repeats_s": [
+          0.00823324390221387,
+          0.008287429711781442,
+          0.008146535749547183
+        ],
+        "correctness": "passed",
+        "timed_peak_allocated_bytes": 83206656,
+        "timed_peak_reserved_bytes": 96468992
+      },
+      "speedup": 1.0405100649354846,
+      "break_even_calls": 7509.01465217522
+    }
+  ]
+}

@@ -5,8 +5,10 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+import subprocess
+from typing import Any, Literal
 import warnings
+from xml.etree import ElementTree
 
 import numpy as np
 from numpy.typing import NDArray
@@ -14,6 +16,7 @@ import torch
 from torch import Tensor
 
 from gammaboard_process import Domain, RectangularDomain, Feedback, SampleBatch, GenerationStatus
+from glnis.core.nn.execution import SamplerExecution
 from glnis.core.nn.losses import Loss
 from glnis.core.nn.sampler_module import RectangularSamplerModule
 from glnis.core.nn.schedulers import Scheduler
@@ -23,14 +26,14 @@ from glnis.utils.types import BuildFromKind, Config, RectangularTrainingStatus
 @dataclass
 class OrchestratorConfig(Config):
     save_path: str | None = None
-    sampler_kwargs: dict = field(default_factory=dict)
+    module_kwargs: dict = field(default_factory=dict)
 
 
 @dataclass
 class OrchestratorSnapshot:
     kind: str
     save_path: str
-    cfg_kwargs: dict = field(default_factory=dict)
+    cfg_kwargs: dict
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -44,38 +47,16 @@ class RectangularOrchestratorConfig(OrchestratorConfig):
     max_batch_size: int = 100_000
     use_gpu: bool = True
     use_f64: bool = True
-    cuda_id: int = 1
+    gpu_id: int | Literal["auto"] = "auto"
     learning_rate: float = 1e-3
     loss: dict = field(default_factory=lambda: {"kind": "kl_divergence"})
-    scheduler: dict | None = field(default_factory=lambda: {"kind": "cosineannealing"})
-
-    @classmethod
-    def from_kwargs(cls, **kwargs):
-        return cls(**cls.normalize_kwargs(**kwargs))
-
-    @staticmethod
-    def normalize_kwargs(**kwargs):
-        """Normalize a partial table without filling in unrelated defaults."""
-        values = deepcopy(kwargs)
-        # Accept existing run files while writing only the table-based format.
-        if "loss_type" in values or "loss_kwargs" in values:
-            legacy = {"kind": values.pop("loss_type", "kl_divergence"), **values.pop("loss_kwargs", {})}
-            if "loss" in values and values["loss"] != legacy:
-                raise ValueError("configure either loss or loss_type/loss_kwargs")
-            values["loss"] = legacy
-        if "use_scheduler" in values or "scheduler_type" in values:
-            enabled = values.pop("use_scheduler", True)
-            kind = values.pop("scheduler_type", "cosineannealing")
-            legacy = {"kind": kind} if enabled and kind is not None else None
-            if "scheduler" in values and values["scheduler"] != legacy:
-                raise ValueError("configure either scheduler or use_scheduler/scheduler_type")
-            values["scheduler"] = legacy
-        return values
+    scheduler: dict | Literal[False] | None = field(default_factory=lambda: {"kind": "cosineannealing"})
+    execution: dict = field(default_factory=lambda: {"kind": "eager"})
 
     def __post_init__(self):
-        for name in ("training_steps", "training_batch_size", "max_batch_size", "cuda_id"):
+        for name in ("training_steps", "training_batch_size", "max_batch_size"):
             value = getattr(self, name)
-            minimum = 0 if name in ("training_steps", "cuda_id") else 1
+            minimum = 0 if name == "training_steps" else 1
             if type(value) is not int or value < minimum:
                 raise ValueError(f"orchestrator.{name} must be an integer >= {minimum}")
         for name in ("use_gpu", "use_f64"):
@@ -83,15 +64,21 @@ class RectangularOrchestratorConfig(OrchestratorConfig):
                 raise ValueError(f"orchestrator.{name} must be bool")
         if self.seed is not None and (type(self.seed) is not int or self.seed < 0):
             raise ValueError("orchestrator.seed must be a nonnegative integer or None")
+        if self.gpu_id != "auto" and (type(self.gpu_id) is not int or self.gpu_id < 0):
+            raise ValueError('orchestrator.gpu_id must be "auto" or a nonnegative integer')
         if not np.isfinite(self.learning_rate) or self.learning_rate <= 0:
             raise ValueError("orchestrator.learning_rate must be positive and finite")
-        if not isinstance(self.sampler_kwargs, dict) or not isinstance(self.loss, dict):
-            raise ValueError("sampler_kwargs and loss must be configuration tables")
+        if not isinstance(self.module_kwargs, dict) or not isinstance(self.loss, dict) or not isinstance(self.execution, dict):
+            raise ValueError("module_kwargs, loss and execution must be configuration tables")
+        if self.scheduler is False:
+            self.scheduler = None
         if self.scheduler is not None and not isinstance(self.scheduler, dict):
-            raise ValueError("scheduler must be a configuration table or None")
-        self.sampler_kwargs = deepcopy(self.sampler_kwargs)
+            raise ValueError("scheduler must be a configuration table, false, or None")
+        self.module_kwargs = deepcopy(self.module_kwargs)
         self.loss = deepcopy(self.loss)
         self.scheduler = deepcopy(self.scheduler)
+        self.execution = deepcopy(self.execution)
+        SamplerExecution.subclass_for_kind(self.execution.get("kind", SamplerExecution.DEFAULT_KIND))
 
 
 @dataclass
@@ -155,7 +142,7 @@ class Orchestrator(ABC, BuildFromKind):
 class RectangularOrchestrator(Orchestrator):
     KIND = "rectangular"
     DEFAULT_KIND = "rectangular"
-    RESTORE_OVERRIDES = {"save_path", "use_gpu", "use_f64", "cuda_id", "max_batch_size"}
+    RESTORE_OVERRIDES = {"save_path", "use_gpu", "use_f64", "gpu_id", "max_batch_size", "execution"}
 
     def __init__(self, domain: RectangularDomain, dims_c: int = 0,
                  cfg: RectangularOrchestratorConfig | None = None,
@@ -175,7 +162,7 @@ class RectangularOrchestrator(Orchestrator):
             if self.cfg.seed is not None:
                 torch.manual_seed(self.cfg.seed)
             self.module = RectangularSamplerModule.from_kwargs(
-                domain=domain, dims_c=dims_c, **self.cfg.sampler_kwargs)
+                domain=domain, dims_c=dims_c, **self.cfg.module_kwargs)
         else:
             self.module = RectangularSamplerModule.from_snapshot(snapshot_data.module_snapshot)
             if self.module.domain.require_rectangular_shape() != domain.require_rectangular_shape():
@@ -202,6 +189,8 @@ class RectangularOrchestrator(Orchestrator):
         self.scheduler = (Scheduler.from_kwargs(optimizer=self.optimizer, training_steps=self.cfg.training_steps,
                                                **self.cfg.scheduler)
                           if self.cfg.scheduler is not None and self.optimizer is not None else None)
+        self.module.train(self.training_status.step < self.cfg.training_steps)
+        self.execution = SamplerExecution.from_kwargs(module=self.module, **self.cfg.execution)
         if snapshot_data is not None and not fresh_training:
             if snapshot_data.optimizer_state is not None and self.optimizer is not None:
                 self.optimizer.load_state_dict(snapshot_data.optimizer_state)
@@ -216,7 +205,9 @@ class RectangularOrchestrator(Orchestrator):
     def _read_snapshot(self, snapshot):
         source_path = Path(snapshot.save_path)
         with source_path.open("rb") as stream:
-            data = torch.load(stream, weights_only=False, map_location=self.device)
+            # Let module/buffer placement and optimizer loading move their own
+            # tensors, preserving Adam's CPU step counters.
+            data = torch.load(stream, weights_only=False, map_location="cpu")
         if not isinstance(data, RectangularOrchestratorSnapshotData):
             raise ValueError("snapshot data must be RectangularOrchestratorSnapshotData")
         return data
@@ -256,7 +247,7 @@ class RectangularOrchestrator(Orchestrator):
     def _from_stage(cls, domain, snapshot, cfg=None, **kwargs):
         saved = RectangularOrchestratorConfig.from_kwargs(**snapshot.cfg_kwargs)
         effective = cfg or RectangularOrchestratorConfig.from_kwargs(**{**saved.to_dict(), **kwargs})
-        if effective.sampler_kwargs != saved.sampler_kwargs:
+        if effective.module_kwargs != saved.module_kwargs:
             raise ValueError("stage handoff cannot change the sampler module architecture")
         return cls(domain=domain, cfg=effective, snapshot=snapshot, fresh_training=True)
 
@@ -272,8 +263,10 @@ class RectangularOrchestrator(Orchestrator):
         weights = np.empty(count, dtype=np.float64)
         for start in range(0, count, self.cfg.max_batch_size):
             size = min(self.cfg.max_batch_size, count - start)
-            with torch.no_grad():
-                samples, prob = self.module.sample(size, return_prob=True)
+            if self.execution.cuda_graphs and self.device.type == "cuda":
+                torch.compiler.cudagraph_mark_step_begin()
+            with torch.no_grad() if remaining is not None else torch.inference_mode():
+                samples, prob = self.execution.sample(size, return_prob=True)
             if not torch.isfinite(prob).all() or torch.any(prob <= 0):
                 raise ValueError("sampler returned nonpositive or nonfinite probabilities")
             if remaining is not None:
@@ -291,7 +284,9 @@ class RectangularOrchestrator(Orchestrator):
         if not torch.any(self.training_status.ingested_weights):
             last_loss = 0.0
         else:
-            q_test = self.module.prob(self.training_status.generated_samples)
+            if self.execution.cuda_graphs and self.device.type == "cuda":
+                torch.compiler.cudagraph_mark_step_begin()
+            q_test = self.execution.prob(self.training_status.generated_samples)
             loss = self.loss_function(self.training_status, q_test)
             if not torch.isfinite(loss).item():
                 warnings.warn("nonfinite batch loss: skipping optimization", RuntimeWarning)
@@ -305,6 +300,8 @@ class RectangularOrchestrator(Orchestrator):
                 else:
                     warnings.warn("nonfinite batch gradients: skipping optimization", RuntimeWarning)
         self.training_status.finish_step(last_loss)
+        if self.training_status.step >= self.cfg.training_steps:
+            self.module.eval()
 
     def feedback(self, feedback: Feedback) -> None:
         if self.training_status.step >= self.cfg.training_steps:
@@ -334,6 +331,29 @@ class RectangularOrchestrator(Orchestrator):
                 "trained_samples": status.total_trained_samples}
 
     def _get_device(self) -> torch.device:
-        if torch.cuda.is_available() and self.cfg.use_gpu:
-            return torch.device(f"cuda:{min(self.cfg.cuda_id, torch.cuda.device_count() - 1)}")
+        if self.cfg.use_gpu and torch.cuda.is_available():
+            count = torch.cuda.device_count()
+            if self.cfg.gpu_id != "auto":
+                if self.cfg.gpu_id >= count:
+                    raise ValueError(f"gpu_id={self.cfg.gpu_id} is outside the {count} visible CUDA devices")
+                return torch.device(f"cuda:{self.cfg.gpu_id}")
+            # Query before CUDA property/memory probes create this process's
+            # contexts. UUIDs preserve CUDA_VISIBLE_DEVICES ordering/filtering.
+            try:
+                report = subprocess.run(["nvidia-smi", "-q", "-x"], capture_output=True,
+                                        text=True, check=True, timeout=5)
+                devices = {gpu.findtext("uuid", "").lower().removeprefix("gpu-"): gpu
+                           for gpu in ElementTree.fromstring(report.stdout).findall("gpu")}
+                for index in range(count):
+                    uuid = str(torch.cuda.get_device_properties(index).uuid).lower().removeprefix("gpu-")
+                    gpu = devices.get(uuid)
+                    processes = gpu.find("processes") if gpu is not None else None
+                    if processes is not None and not (processes.text or "").strip() and not len(processes):
+                        return torch.device(f"cuda:{index}")
+            except (OSError, subprocess.SubprocessError, ElementTree.ParseError):
+                pass
+            # All busy, unavailable process information, or an unmatched MIG
+            # UUID: choose the most free VRAM, breaking ties by visible index.
+            index = max(range(count), key=lambda i: torch.cuda.mem_get_info(i)[0])
+            return torch.device(f"cuda:{index}")
         return torch.device("cpu")

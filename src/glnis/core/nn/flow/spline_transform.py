@@ -146,22 +146,17 @@ def unconstrained_rational_quadratic_spline(
     else:
         inside_interval_mask = torch.all((inputs >= bottom) & (inputs <= top), dim=-1)
 
-    outside_interval_mask = ~inside_interval_mask
-
-    outputs = torch.zeros_like(inputs)
-    logabsdet = torch.zeros_like(inputs)
-
-    outputs[outside_interval_mask] = inputs[outside_interval_mask]
-    logabsdet[outside_interval_mask] = 0
-
-    (
-        outputs[inside_interval_mask],
-        logabsdet[inside_interval_mask],
-    ) = rational_quadratic_spline(
-        inputs=inputs[inside_interval_mask],
-        unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
-        unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
-        unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
+    # Retain the batch shape instead of selecting a data-dependent number of
+    # rows. Evaluate inactive rows at an interior point so invalid/outside inputs
+    # cannot introduce NaNs into gradients through the unused branch of where.
+    inside = inside_interval_mask[..., None]
+    midpoint = (bottom + top) / 2 if inverse else (left + right) / 2
+    safe_inputs = torch.where(inside, inputs, midpoint)
+    outputs, logabsdet = rational_quadratic_spline(
+        inputs=safe_inputs,
+        unnormalized_widths=unnormalized_widths,
+        unnormalized_heights=unnormalized_heights,
+        unnormalized_derivatives=unnormalized_derivatives,
         inverse=inverse,
         left=left,
         right=right,
@@ -172,7 +167,7 @@ def unconstrained_rational_quadratic_spline(
         min_derivative=min_derivative,
     )
 
-    return outputs, logabsdet
+    return torch.where(inside, outputs, inputs), torch.where(inside, logabsdet, 0.0)
 
 
 def rational_quadratic_spline(

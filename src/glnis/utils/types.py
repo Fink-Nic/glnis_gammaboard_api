@@ -677,43 +677,6 @@ class Result:
             combined.combine_with(result)
         return combined
 
-    @classmethod
-    def from_legacy(cls, legacy_result: "Result") -> "Result":
-        return cls.from_kwargs(
-            n_points=legacy_result.n_points,
-            total_time=legacy_result.total_time,
-            real_mean=legacy_result.real_mean,
-            real_error=legacy_result.real_error,
-            imag_mean=legacy_result.imag_mean,
-            imag_error=legacy_result.imag_error,
-            abs_real_mean=legacy_result.abs_real_mean,
-            abs_real_error=legacy_result.abs_real_error,
-            abs_imag_mean=legacy_result.abs_imag_mean,
-            abs_imag_error=legacy_result.abs_imag_error,
-        )
-
-    def to_legacy(self: "Result") -> "IntegrationResult":
-        return IntegrationResult(
-            n_points=self.n_points,
-            total_time=self.total_time,
-            real_mean=self.real.mean,
-            real_error=self.real.error,
-            imag_mean=self.imag.mean,
-            imag_error=self.imag.error,
-            abs_real_mean=self.abs_real.mean,
-            abs_real_error=self.abs_real.error,
-            abs_imag_mean=self.abs_imag.mean,
-            abs_imag_error=self.abs_imag.error,
-            real_rsd=self.real.rsd,
-            imag_rsd=self.imag.rsd,
-            abs_real_rsd=self.abs_real.rsd,
-            abs_imag_rsd=self.abs_imag.rsd,
-            real_tvar=self.real.tvar,
-            imag_tvar=self.imag.tvar,
-            abs_real_tvar=self.abs_real.tvar,
-            abs_imag_tvar=self.abs_imag.tvar,
-        )
-
 
 @dataclass
 class RectangularTrainingStatus:
@@ -758,12 +721,10 @@ class RectangularTrainingStatus:
         n_samples = samples.shape[0]
         if self.num_generated + n_samples > self.training_batch_size:
             raise ValueError("generation exceeds the training window")
-        if n_samples == self.training_batch_size:
-            self.generated_samples = samples
-            self.generated_probs = probs
-        else:
-            self.generated_probs[self.num_generated:self.num_generated + n_samples] = probs
-            self.generated_samples[self.num_generated:self.num_generated + n_samples, :] = samples
+        # Compiled CUDA-graph outputs may be reused by the next invocation.
+        # Own every retained tensor, including complete training windows.
+        self.generated_probs[self.num_generated:self.num_generated + n_samples].copy_(probs)
+        self.generated_samples[self.num_generated:self.num_generated + n_samples, :].copy_(samples)
         self.num_generated += n_samples
         self.produced_batches += 1
 

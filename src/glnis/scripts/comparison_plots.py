@@ -32,8 +32,7 @@ def _metric_scale(axis, values) -> None:
 
 
 def _run_name(data) -> str:
-    settings = getattr(data, "settings", {})
-    return str(settings.get("comparison", {}).get("run_name", settings.get("run_name", "Sampler comparison")))
+    return str(data.settings.get("comparison", {}).get("run_name", "Sampler comparison"))
 
 
 def _write_summary(path: Path, data, comment: str) -> None:
@@ -42,13 +41,13 @@ def _write_summary(path: Path, data, comment: str) -> None:
         lines.extend([comment, ""])
     lines.append("Training curves use the samples evaluated for each training step.")
     lines.append("Time variance uses accumulated processing time, not elapsed wall time.")
-    target = getattr(data, "target", None)
+    target = data.target
     if target is not None:
         lines.append("Reference:")
         for phase in ("real", "imag"):
             value = getattr(target, phase)
             lines.append(f"  {phase}: {value.mean:.8e} +/- {value.error:.8e}")
-    run_configs = getattr(data, "run_configs", {})
+    run_configs = data.run_configs
     for label, result in data.result.items():
         lines.extend(["", label, "-" * 60])
         progress = data.training_progress.get(label)

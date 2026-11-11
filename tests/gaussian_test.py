@@ -10,7 +10,7 @@ sigma = np.array([0.2, 1.0, 5.0])
 
 training_steps = 50
 training_batch_size = 1000
-sampler_config = dict(
+module_config = dict(
     kind="mixed flow",
     flow=dict(
         permutations="log",
@@ -82,12 +82,11 @@ if __name__ == "__main__":
         save_path = Path("saved_state.pkl")
     init_args = dict(
         save_path=str(save_path),
-        sampler=sampler_config, 
+        module=module_config,
         orchestrator=dict(
             training_steps=training_steps,
             training_batch_size=training_batch_size,
-            loss_type="kl_divergence",
-            loss_kwargs={"threshold": 30.0, "normalize_across_training_steps": True}
+            loss={"kind": "kl_divergence", "threshold": 30.0, "normalize_across_training_steps": True}
         )
     )
     init_args.pop("kind", None)

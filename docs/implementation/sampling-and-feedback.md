@@ -42,6 +42,10 @@ loss; it does not reconstruct them from mapped evaluator coordinates.
 
 The GammaBoard process contract supplies complete draws. The buffers also support
 fragmented draws/windows and persist their unfinished contents for recovery.
+Every draw is copied into owned training buffers, including full windows, so
+later CUDA-graph invocations cannot overwrite retained outputs. Training
+generation uses `no_grad`; completed training switches the proposal to `eval`
+and generates under `inference_mode`. See [execution options](../configuration/orchestrators.md#execution-and-compilation).
 The default orchestrator does not report `FINISHED` when training ends; inference
 is available until the caller's external budget is exhausted.
 

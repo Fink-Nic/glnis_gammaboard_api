@@ -132,13 +132,13 @@ def _normalize_sampler(config: dict[str, Any]) -> dict[str, Any]:
     if issubclass(implementation, RectangularOrchestrator):
         settings = RectangularOrchestratorConfig.from_kwargs(**orchestrator)
         orchestrator = settings.to_dict()
-        orchestrator.pop("sampler_kwargs")
+        orchestrator.pop("module_kwargs")
         orchestrator.pop("save_path")
         Loss.from_kwargs(**settings.loss)
         if settings.scheduler is not None:
             Scheduler.subclass_for_kind(settings.scheduler.get("kind", Scheduler.DEFAULT_KIND))
     result["orchestrator"] = {"kind": orchestrator_kind, **orchestrator}
-    module = result["sampler"]
+    module = result["module"]
     module_kind = module.get("kind", RectangularSamplerModule.DEFAULT_KIND)
     RectangularSamplerModule.subclass_for_kind(module_kind)
     if module_kind == "mixed flow":

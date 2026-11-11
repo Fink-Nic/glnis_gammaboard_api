@@ -7,6 +7,8 @@
 - `src/glnis/core/nn/orchestrator.py`: generation windows, optimization, runtime
   settings, and training-state persistence.
 - `src/glnis/core/nn/sampler_module.py`: sampler-module interfaces and mixed flows.
+- `src/glnis/core/nn/execution.py`: orchestrator-owned eager/compiled callables;
+  compiler objects stay outside serialized proposal modules.
 - `src/glnis/core/nn/flow/`: active continuous/discrete flows, spline transforms,
   and subnet constructors. Use `flow/subnet_constructor.py`; do not introduce
   imports from the retired `core/nn/subnet_constructor.py` location.
@@ -27,6 +29,12 @@
   before configuration construction. Do not add parallel string-dispatch systems.
 - Keep configuration in the corresponding dataclasses. Preserve caller-owned
   configuration dictionaries, coordinate arrays, and feedback arrays.
+- Route local `[sampler.module]` / adapter `module` to orchestrator `module_kwargs`.
+  The adapter owns that routing. Support only the current configuration and
+  snapshot schema; do not add aliases, legacy-field migrations, or pickle repairs.
+- GPU selection belongs to the orchestrator. `gpu_id="auto"` prefers the first
+  unused visible GPU, then the most free VRAM. Respect CUDA visibility/order;
+  automatic selection is a point-in-time decision, not a GPU reservation.
 - Public sample dimensions include singleton discrete axes. Internal proposal
   dimensions omit singleton axes and may add hidden mapping channels. Keep
   generation, density queries, and discrete constraints consistent about this.
@@ -43,6 +51,10 @@
   parameters and reset training state. Keep these two operations distinct.
 - Register PyTorch parameters and buffers appropriately, and respect configured
   device and precision without changing process-wide defaults as a side effect.
+- `prob` scores complete internal points. Keep partial discrete queries in eager
+  `discrete_mass`, sharing probability normalization and masks with sampling.
+  Retained generation tensors belong to training buffers, not compiler output
+  storage. Compilation is lazy and must not consume samples during checkpointing.
 - Keep GammaLoop imports lazy. Core imports, numerical mappings with explicit
   graph properties, and packaging must work without the native companion or
   Symbolica. `glnis.core.nn` is an implicit namespace package: preserve packaging

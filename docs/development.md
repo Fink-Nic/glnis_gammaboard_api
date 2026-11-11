@@ -73,6 +73,44 @@ not only the initially uniform proposal. Keep test artifacts in temporary paths.
 Report optional skips and the device/precision actually exercised; a CPU run
 is not CUDA validation.
 
+For performance experiments, [benchmarks/torch_compile.py](../benchmarks/torch_compile.py)
+compares eager and compiled sampling, probabilities, and training paths. Read
+[the compilation report](implementation/compilation.md) for measured results,
+reproduction commands, correctness checks, and the distinction between compiler
+startup and steady-state timing. The orchestrator defaults to eager; optional
+[execution settings](configuration/orchestrators.md#execution-and-compilation)
+enable compilation.
+
+The [six-dimensional follow-up](implementation/compilation-6d.md) uses
+`--continuous 6 --mlp-layers 4 --mlp-units 512`, with either `--discrete` or
+`--discrete 3`. Benchmark JSON includes parameter counts, coupling-block counts,
+and peak CUDA allocation during measurement.
+
+[benchmarks/orchestrator_compile.py](../benchmarks/orchestrator_compile.py)
+repeats that workload through the native execution policy and public adapter,
+including interrupted training-window recovery in separate workers. See the
+[native report](implementation/compilation-native-6d.md) for complete timings
+and bitwise versus numerical recovery checks.
+
+[Execution tests](../tests/test_execution.py) use the eager compiler backend by
+default. To exercise real Inductor compilation and restore pending feedback in a
+fresh process on CPU, set `GLNIS_TEST_COMPILE_BACKEND=inductor`. For CUDA graphs:
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 TORCHINDUCTOR_COMPILE_THREADS=1 \
+GLNIS_TEST_COMPILE_BACKEND=inductor GLNIS_TEST_COMPILE_DEVICE=cuda:0 \
+GLNIS_TEST_COMPILE_MODE=reduce-overhead .venv/bin/python -m pytest -q \
+  tests/test_execution.py::test_compiled_checkpoint_in_fresh_process
+```
+
+The check compares subsequent draws, trained parameters, optimizer and scheduler
+states exactly within the same execution/device setup. Eager/compiled switching
+is a runtime override with different numerical/RNG behavior. Fresh code generation
+can also change roundoff; the native benchmark records exact and numerical
+agreement separately instead of weakening the execution test. The test fixture
+clears compiler caches between tests so unrelated architectures do not exhaust
+the per-function variant limit.
+
 ## Optional backend checks
 
 Core checks must work without compiling the companion or importing Symbolica:
@@ -94,9 +132,8 @@ backends/fixtures can skip tests. Failures inside an installed backend, such as
 binary loading or license errors, should propagate rather than be treated as
 an absent feature.
 
-The native namespace is `glnis_gammaloop_native._rust`. Older checkouts may contain
-ignored `src/glnis/_rust*.so` binaries that shadow the compatibility facade;
-current state parsing imports the companion directly. Explicit graph mappings
+The native namespace is `glnis_gammaloop_native._rust`; state parsing imports
+the companion directly. Explicit graph mappings
 remain core-only and do not need state parsing.
 
 ## Updating dependencies
@@ -137,6 +174,8 @@ include the files under `glnis/core/nn`.
 compiler tools, and Triton compatibility for worker processes. Keep those concerns
 in the bootstrap/runtime layer rather than adding environment mutations to
 sampler math. Device and floating-point choices belong to the orchestrator.
+GPU selection tests cover visible-device ordering, occupied devices, free-memory
+fallbacks, explicit indices, and CPU selection without requiring actual GPUs.
 
 Apptainer uses Nix inside its image build and exposes normal executables in the
 resulting SIF. The [UBELIX guide](../ops/ubelix/README.md) is the canonical source

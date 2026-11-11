@@ -27,7 +27,7 @@ def test_invalid_orchestrator_settings_fail_before_construction(sampler_settings
         RunConfig.from_dict({"sampler": sampler_settings, "integrand": {"kind": "sine"}})
 
 
-@pytest.mark.parametrize("component", ["loss", "scheduler"])
+@pytest.mark.parametrize("component", ["loss", "scheduler", "execution"])
 def test_unknown_kinds_are_rejected(sampler_settings, component):
     sampler_settings["orchestrator"][component] = {"kind": "missing"}
     with pytest.raises(ValueError, match="Unknown kind"):
@@ -37,6 +37,19 @@ def test_unknown_kinds_are_rejected(sampler_settings, component):
 def test_old_flat_sampler_settings_have_an_actionable_error():
     with pytest.raises(ValueError, match="sampler.training_steps"):
         RunConfig.from_dict({"sampler": {"training_steps": 1}, "integrand": {"kind": "sine"}})
+
+
+def test_module_configuration_has_one_adapter_route(sampler_settings):
+    config = RunConfig.from_dict({"sampler": sampler_settings, "integrand": {"kind": "sine"}})
+    sampler = config.build().sampler
+    assert sampler.cfg.module == sampler_settings["module"]
+    assert sampler.orchestrator.cfg.module_kwargs == sampler_settings["module"]
+    assert "module_kwargs" not in config.sampler["orchestrator"]
+    assert "module_kwargs" not in sampler.cfg.orchestrator
+    for settings in ({"sampler": sampler_settings["module"]},
+                     {"orchestrator": {"module_kwargs": sampler_settings["module"]}}):
+        with pytest.raises(ValueError, match="module|sampler.sampler"):
+            RunConfig.from_dict({"sampler": settings, "integrand": {"kind": "sine"}})
 
 
 def test_toml_paths_are_relative_to_configuration(tmp_path, monkeypatch):

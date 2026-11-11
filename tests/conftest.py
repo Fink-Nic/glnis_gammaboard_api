@@ -15,6 +15,9 @@ def torch_runtime():
     torch.set_default_device("cpu")
     torch.set_default_dtype(torch.float64)
     yield
+    # Compiled variants belong to one test; unrelated model shapes must not
+    # exhaust Dynamo's process-wide per-code-object cache in later tests.
+    torch.compiler.reset()
     torch.set_rng_state(rng)
     torch.set_default_device(device)
     torch.set_default_dtype(dtype)
@@ -24,7 +27,7 @@ def torch_runtime():
 @pytest.fixture
 def sampler_settings():
     return {
-        "sampler": {
+        "module": {
             "kind": "mixed flow",
             "flow": {"kind": "coupling", "spline": {"kind": "rqs", "bins": 4},
                      "subnet": {"kind": "mlp", "layers": 2, "units": 8}},

@@ -57,11 +57,6 @@ class Variance(Loss):
         return variance(status, q_test, normalize_across_training_steps=self.cfg.normalize_across_training_steps)
 
 
-def get_loss(loss_type: str, loss_kwargs: dict | None = None) -> Loss:
-    """Compatibility helper; new configurations use ``Loss.from_kwargs``."""
-    return Loss.from_kind(loss_type, **(loss_kwargs or {}))
-
-
 def softclip(x: torch.Tensor, threshold: float = 30.0):
     return threshold * torch.arcsinh(x / threshold)
 

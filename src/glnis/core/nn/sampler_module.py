@@ -77,7 +77,7 @@ class SamplerModule(ABC, nn.Module, BuildFromKind):
         Use during training with gradients enabled.
 
         Args:
-            xs: Previously generated output of the model.
+            xs: Complete internal points, shape (batch, discrete_dims + continuous_dims).
             c: Optional conditioning tensor.
 
         Returns:
@@ -178,15 +178,12 @@ class MixedFlow(RectangularSamplerModule):
             **self.cfg.flow,
         )
 
-        self.max_dim_discrete = max(self.discrete_cardinalities) if self.discrete_cardinalities else 0
-        one_hot_mask = []
-        for dim in self.discrete_cardinalities:
-            one_hot_mask.extend([True] * dim + [False] * (self.max_dim_discrete - dim))
-        self.register_buffer("one_hot_mask", torch.tensor(one_hot_mask, dtype=torch.bool))
         self.register_buffer("dummy", torch.tensor([0.0]))
 
 
     def prob(self, xs: Tensor, c: Tensor | None = None) -> Tensor:
+        if xs.ndim != 2 or xs.shape[1] != len(self.discrete_cardinalities) + self.continuous_dims:
+            raise ValueError("prob requires complete internal coordinates")
         if self.discrete_flow is None:
             return self.continuous_flow.prob(xs, c=c)
 
@@ -317,8 +314,9 @@ class MixedFlow(RectangularSamplerModule):
         return torch.as_tensor(xs, device=self.dummy.device, dtype=self.dummy.dtype)
 
     def _encode_discrete(self, indices: torch.Tensor) -> torch.Tensor:
-        return (
-            torch.functional.F.one_hot(indices, self.max_dim_discrete)
-            .to(self.dummy.dtype)
-            .flatten(start_dim=1)[:, self.one_hot_mask]
-        )
+        # Each cardinality is fixed by the domain. Separate one-hot blocks avoid
+        # boolean indexing with a data-dependent output shape during compilation.
+        return torch.cat([
+            torch.functional.F.one_hot(indices[:, i], cardinality)
+            for i, cardinality in enumerate(self.discrete_cardinalities)
+        ], dim=1).to(self.dummy.dtype)

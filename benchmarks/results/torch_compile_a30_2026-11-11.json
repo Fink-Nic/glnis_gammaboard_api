@@ -1,0 +1,719 @@
+{
+  "experiment": "Sampler torch.compile exploration",
+  "branch": "codex/torch-compile-experiments",
+  "base_commit": "60fe940d06ad5cb676a00379c6656628f51030cf",
+  "date": "2026-11-11",
+  "environment": {
+    "python": "3.13.12",
+    "torch": "2.15.0+cu132",
+    "cuda_gpu": "NVIDIA A30",
+    "cpu": "AMD EPYC 9754 128-Core Processor",
+    "torch_threads": 1,
+    "compiler_threads": 1,
+    "cuda_triton_default_fp_fusion": "1"
+  },
+  "common_arguments": {
+    "device": "cuda:0",
+    "dtype": "float64",
+    "batch_size": 1000,
+    "discrete": [
+      3
+    ],
+    "continuous": 3,
+    "condition": 0,
+    "continuous_first": false,
+    "workload": "sample",
+    "context": "inference",
+    "target": "methods",
+    "mode": "default",
+    "backend": "inductor",
+    "fullgraph": true,
+    "dynamic": false,
+    "iterations": 30,
+    "repeats": 3,
+    "warmup": 3,
+    "threads": 1,
+    "check_restore": false,
+    "probe_batch_sizes": [],
+    "protect_training_samples": false
+  },
+  "notes": [
+    "Shared host. These are observations, not isolated hardware guarantees.",
+    "Each run starts from fresh identical eager/compiled model copies with seed 42 and perturbed parameters.",
+    "Common arguments plus each argument_overrides map reproduce that workload with benchmarks/torch_compile.py.",
+    "All times are seconds. CUDA is synchronized around first calls and repeated timing blocks.",
+    "Setup time was not recorded in the earliest exploratory runs; their break_even_calls excludes setup.",
+    "Fresh-cache runs use empty TORCHINDUCTOR_CACHE_DIR directories; other system caches were not purged.",
+    "Training uses a synthetic weighted negative-log-probability objective and eager Adam, not the public adapter.",
+    "Module restore checks run in one process and the same execution mode; interrupted optimizer/feedback recovery is outside this experiment.",
+    "CPU compilation initially required exposing an installed openssl executable on PATH.",
+    "Unprotected reduce-overhead training reproducibly fails on overwritten CUDA-graph outputs; explicit cycle boundaries and external sample/probability clones pass."
+  ],
+  "runs": [
+    {
+      "id": "sample-f64-1000",
+      "argument_overrides": {},
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "first_call_s": 0.00585522223263979,
+        "median_s": 0.006408493872731924,
+        "repeats_s": [
+          0.006542680397008856,
+          0.006408493872731924,
+          0.006190895025307934
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "first_call_s": 24.25171372666955,
+        "median_s": 0.0010469023293505112,
+        "repeats_s": [
+          0.0010571920778602363,
+          0.0010469023293505112,
+          0.0010449893772602082
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 6.121386583128243,
+      "break_even_calls": 4522.138306929977
+    },
+    {
+      "id": "sample-reduce-f64-1000",
+      "argument_overrides": {
+        "mode": "reduce-overhead"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "first_call_s": 0.006238983944058418,
+        "median_s": 0.005243771973376473,
+        "repeats_s": [
+          0.005401902226731181,
+          0.005183712393045425,
+          0.005243771973376473
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "first_call_s": 11.28738478757441,
+        "median_s": 0.00047948517215748627,
+        "repeats_s": [
+          0.0004754701784501473,
+          0.00047987553601463637,
+          0.00047948517215748627
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 10.936254712073062,
+      "break_even_calls": 2367.856150209926
+    },
+    {
+      "id": "cold-sample-reduce-f64-1000",
+      "argument_overrides": {
+        "mode": "reduce-overhead",
+        "check_restore": true,
+        "probe_batch_sizes": [
+          1,
+          7,
+          1000
+        ]
+      },
+      "cache_condition": "fresh Inductor directory",
+      "eager": {
+        "setup_s": 0.021387462969869375,
+        "first_call_s": 0.005328240804374218,
+        "median_s": 0.004971220390871167,
+        "repeats_s": [
+          0.004971220390871167,
+          0.004905229123930137,
+          0.005042476020753384
+        ],
+        "correctness": "passed",
+        "batch_shape_probes": [
+          {
+            "batch_size": 1,
+            "first_call_s": 0.00687191728502512,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 7,
+            "first_call_s": 0.011802415829151869,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 1000,
+            "first_call_s": 0.005094639956951141,
+            "correctness": "passed"
+          }
+        ],
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 0.8861776981502771,
+        "first_call_s": 25.407595184165984,
+        "median_s": 0.0003205676097422838,
+        "repeats_s": [
+          0.00031773222920795284,
+          0.0003205676097422838,
+          0.00032069988859196506
+        ],
+        "correctness": "passed",
+        "batch_shape_probes": [
+          {
+            "batch_size": 1,
+            "first_call_s": 10.095777987036854,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 7,
+            "first_call_s": 12.481797664891928,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 1000,
+            "first_call_s": 0.0012112348340451717,
+            "correctness": "passed"
+          }
+        ],
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 15.50755672061727,
+      "break_even_calls": 5648.036612220713
+    },
+    {
+      "id": "sample-f64-100000",
+      "argument_overrides": {
+        "batch_size": 100000,
+        "iterations": 10
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "first_call_s": 0.04983094288036227,
+        "median_s": 0.04502770062536001,
+        "repeats_s": [
+          0.07682480192743242,
+          0.04502770062536001,
+          0.044954906310886146
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "first_call_s": 26.931416539940983,
+        "median_s": 0.01153836390003562,
+        "repeats_s": [
+          0.01158818299882114,
+          0.01153836390003562,
+          0.011535607790574432
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 3.9024337432468226,
+      "break_even_calls": 802.6908928516629
+    },
+    {
+      "id": "sample-nograd-f64-1000",
+      "argument_overrides": {
+        "context": "no-grad"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "first_call_s": 0.007758189924061298,
+        "median_s": 0.008358552710463603,
+        "repeats_s": [
+          0.008143255533650518,
+          0.008358552710463603,
+          0.008436077693477272
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "first_call_s": 3.6211740863509476,
+        "median_s": 0.001296944993858536,
+        "repeats_s": [
+          0.0013352742108205954,
+          0.001290718341867129,
+          0.001296944993858536
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 6.444801244496966,
+      "break_even_calls": 511.6987577673133
+    },
+    {
+      "id": "sample-eval-nograd-f64-1000",
+      "argument_overrides": {
+        "context": "eval-no-grad"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.0003422820009291172,
+        "first_call_s": 0.020638051442801952,
+        "median_s": 0.005932228965684771,
+        "repeats_s": [
+          0.00594568569213152,
+          0.005932228965684771,
+          0.005431789330517253
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "setup_s": 1.1636149887926877,
+        "first_call_s": 2.9518954921513796,
+        "median_s": 0.0019886448048055173,
+        "repeats_s": [
+          0.0020068835622320575,
+          0.0019886448048055173,
+          0.001750309858471155
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 2.98305104629528,
+      "break_even_calls": 1038.2763446811864
+    },
+    {
+      "id": "prob-inference-verified-f64-1000",
+      "argument_overrides": {
+        "workload": "prob"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.0003325110301375389,
+        "first_call_s": 0.025601711124181747,
+        "median_s": 0.005466862224663297,
+        "repeats_s": [
+          0.004979649294788639,
+          0.005466862224663297,
+          0.005712936197717984
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "setup_s": 0.9792072507552803,
+        "first_call_s": 2.9244777439162135,
+        "median_s": 0.0009104952681809664,
+        "repeats_s": [
+          0.0009079179260879755,
+          0.0009221336338669061,
+          0.0009104952681809664
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 6.004273076108645,
+      "break_even_calls": 851.0619995170294
+    },
+    {
+      "id": "train-f64-1000",
+      "argument_overrides": {
+        "workload": "train"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.9103862997144461,
+        "first_call_s": 0.17758067091926932,
+        "median_s": 0.017125884257256984,
+        "repeats_s": [
+          0.016614976292476057,
+          0.017125884257256984,
+          0.017603125097230075
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "setup_s": 0.39266604697331786,
+        "first_call_s": 3.2862726100720465,
+        "median_s": 0.003765072301030159,
+        "repeats_s": [
+          0.0036246334357808033,
+          0.003822148529191812,
+          0.003765072301030159
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 4.548620288797955,
+      "break_even_calls": 193.92322075187377
+    },
+    {
+      "id": "cycle-f64-1000",
+      "argument_overrides": {
+        "workload": "cycle"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "first_call_s": 0.2682329318486154,
+        "median_s": 0.02240178923433026,
+        "repeats_s": [
+          0.021975804570441446,
+          0.02240178923433026,
+          0.02295268968058129
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "first_call_s": 72.49795639375225,
+        "median_s": 0.010464537469670177,
+        "repeats_s": [
+          0.010971476727475723,
+          0.010251107967148225,
+          0.010464537469670177
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 2.1407338164021423,
+      "break_even_calls": 6050.783286295245
+    },
+    {
+      "id": "cold-cycle-f64-1000",
+      "argument_overrides": {
+        "workload": "cycle"
+      },
+      "cache_condition": "fresh Inductor directory",
+      "eager": {
+        "setup_s": 0.9917963668704033,
+        "first_call_s": 0.28419151110574603,
+        "median_s": 0.03149521212714414,
+        "repeats_s": [
+          0.0344343992571036,
+          0.03149521212714414,
+          0.030872828032200535
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "setup_s": 0.5117867910303175,
+        "first_call_s": 71.50603104289621,
+        "median_s": 0.007748657697811722,
+        "repeats_s": [
+          0.007551425571242968,
+          0.007748657697811722,
+          0.0077826744721581536
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 4.0646023292574425,
+      "break_even_calls": 2979.035555093756
+    },
+    {
+      "id": "sample-subnets-f64-1000",
+      "argument_overrides": {
+        "target": "subnets"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "first_call_s": 0.0069604068994522095,
+        "median_s": 0.007001428119838238,
+        "repeats_s": [
+          0.007646391602853934,
+          0.007001428119838238,
+          0.006896042373652259
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "first_call_s": 0.5745842470787466,
+        "median_s": 0.0067211780697107315,
+        "repeats_s": [
+          0.006648967104653517,
+          0.0067211780697107315,
+          0.007111826896046599
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 1.0416965667656486,
+      "break_even_calls": 2025.4192280109864
+    },
+    {
+      "id": "sample-f32-1000",
+      "argument_overrides": {
+        "dtype": "float32"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.03988731512799859,
+        "first_call_s": 0.007891951128840446,
+        "median_s": 0.007181389241789778,
+        "repeats_s": [
+          0.007181389241789778,
+          0.007694979229321082,
+          0.007150111099084218
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "setup_s": 1.2750846119597554,
+        "first_call_s": 25.46990759111941,
+        "median_s": 0.001002949895337224,
+        "repeats_s": [
+          0.0010504094418138266,
+          0.001002949895337224,
+          0.000999149540439248
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 7.160267202954505,
+      "break_even_calls": 4321.028570451362
+    },
+    {
+      "id": "cpu-sample-f64-1000",
+      "argument_overrides": {
+        "device": "cpu"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "first_call_s": 0.012942410074174404,
+        "median_s": 0.010791185700024167,
+        "repeats_s": [
+          0.010503792592013875,
+          0.011069821442166965,
+          0.010791185700024167
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "first_call_s": 36.953365058638155,
+        "median_s": 0.008470047467077772,
+        "repeats_s": [
+          0.00823016120120883,
+          0.008667686209082603,
+          0.008470047467077772
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 1.274040758563447,
+      "break_even_calls": 15914.787893383122
+    },
+    {
+      "id": "cpu-sample-restore-f64-1000",
+      "argument_overrides": {
+        "device": "cpu",
+        "check_restore": true
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.013909024186432362,
+        "first_call_s": 0.0128444810397923,
+        "median_s": 0.010417019668966531,
+        "repeats_s": [
+          0.010417019668966531,
+          0.010242257298280795,
+          0.01082739159464836
+        ],
+        "correctness": "passed",
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 0.9392186552286148,
+        "first_call_s": 3.3509040479548275,
+        "median_s": 0.008205247670412063,
+        "repeats_s": [
+          0.008538400661200285,
+          0.008205247670412063,
+          0.007583403602863351
+        ],
+        "correctness": "passed",
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 1.2695557876369858,
+      "break_even_calls": 1927.5807817187294
+    },
+    {
+      "id": "sample-dynamic-f64-1000",
+      "argument_overrides": {
+        "dynamic": true,
+        "check_restore": true,
+        "probe_batch_sizes": [
+          1,
+          7,
+          1000
+        ]
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.0006052730605006218,
+        "first_call_s": 0.02095544245094061,
+        "median_s": 0.00612308899872005,
+        "repeats_s": [
+          0.005966517701745033,
+          0.0063776399629811445,
+          0.00612308899872005
+        ],
+        "correctness": "passed",
+        "batch_shape_probes": [
+          {
+            "batch_size": 1,
+            "first_call_s": 0.00690867705270648,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 7,
+            "first_call_s": 0.011572724673897028,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 1000,
+            "first_call_s": 0.006307514850050211,
+            "correctness": "passed"
+          }
+        ],
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "compiled": {
+        "setup_s": 1.1028891112655401,
+        "first_call_s": 30.46114615071565,
+        "median_s": 0.0014531826910873255,
+        "repeats_s": [
+          0.0014061574979374806,
+          0.0020677410997450353,
+          0.0014531826910873255
+        ],
+        "correctness": "passed",
+        "batch_shape_probes": [
+          {
+            "batch_size": 1,
+            "first_call_s": 11.675801346078515,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 7,
+            "first_call_s": 0.002173548098653555,
+            "correctness": "passed"
+          },
+          {
+            "batch_size": 1000,
+            "first_call_s": 0.0019131279550492764,
+            "correctness": "passed"
+          }
+        ],
+        "module_restore": "passed (same execution mode and RNG state)"
+      },
+      "speedup": 4.2135713811307,
+      "break_even_calls": 6754.412715928621
+    },
+    {
+      "id": "conditional-cycle-f64-64",
+      "argument_overrides": {
+        "batch_size": 64,
+        "discrete": [
+          2,
+          3
+        ],
+        "condition": 2,
+        "continuous_first": true,
+        "workload": "cycle",
+        "iterations": 5,
+        "repeats": 2
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.9190240101888776,
+        "first_call_s": 0.20736322412267327,
+        "median_s": 0.024117270717397332,
+        "repeats_s": [
+          0.023583504650741816,
+          0.024651036784052848
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "setup_s": 0.45492358738556504,
+        "first_call_s": 73.24263824289665,
+        "median_s": 0.008268138580024242,
+        "repeats_s": [
+          0.008316160831600427,
+          0.008220116328448056
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 2.916892415865461,
+      "break_even_calls": 4578.873717939672
+    },
+    {
+      "id": "cycle-subnets-f64-1000",
+      "argument_overrides": {
+        "workload": "cycle",
+        "target": "subnets"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.9319821549579501,
+        "first_call_s": 0.19113554619252682,
+        "median_s": 0.022343988328551254,
+        "repeats_s": [
+          0.02141224330601593,
+          0.022343988328551254,
+          0.023824360501021147
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "setup_s": 0.38278452306985855,
+        "first_call_s": 5.484117402229458,
+        "median_s": 0.027616001199930906,
+        "repeats_s": [
+          0.04628784066687028,
+          0.027616001199930906,
+          0.026962730940431355
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 0.809095718340538,
+      "break_even_calls": null
+    },
+    {
+      "id": "cycle-reduce-released-f64-1000",
+      "argument_overrides": {
+        "workload": "cycle",
+        "mode": "reduce-overhead"
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.9948607562109828,
+        "first_call_s": 0.2320087580010295,
+        "median_s": 0.02825175579637289,
+        "repeats_s": [
+          0.031045988465969763,
+          0.02825175579637289,
+          0.027007443209489185
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "error": "RuntimeError",
+        "message": "Error: accessing tensor output of CUDAGraphs that has been overwritten by a subsequent run. Stack trace: File \"/shared/codex-2/nfink/gammaboard_nis/src/glnis/core/nn/sampler_module.py\", line 250, in sample\n    x = torch.cat((x_discrete.to(x_continuous.dtype), x_continuous), dim=1). To prevent overwriting, call torch.compiler.cudagraph_mark_step_begin() before each model invocation. If a tensor is a user-visible output that must remain live across generations, manually clone the tensor outside torch.compile(), or set torch._inductor.config.triton.cudagraph_trees_generation_cloning = 'user_visible' to clone all user-visible tensors that persist across generations."
+      },
+      "speedup": null,
+      "break_even_calls": null
+    },
+    {
+      "id": "cycle-reduce-protected-f64-1000",
+      "argument_overrides": {
+        "workload": "cycle",
+        "mode": "reduce-overhead",
+        "protect_training_samples": true
+      },
+      "cache_condition": "existing shared caches",
+      "eager": {
+        "setup_s": 0.9364162152633071,
+        "first_call_s": 0.21073462394997478,
+        "median_s": 0.02852544286288321,
+        "repeats_s": [
+          0.027767613530158997,
+          0.02852544286288321,
+          0.04797228279833992
+        ],
+        "correctness": "passed"
+      },
+      "compiled": {
+        "setup_s": 0.48230983782559633,
+        "first_call_s": 14.057329094968736,
+        "median_s": 0.003732096760844191,
+        "repeats_s": [
+          0.002915632522975405,
+          0.003732096760844191,
+          0.003811523768429955
+        ],
+        "correctness": "passed"
+      },
+      "speedup": 7.643275266108274,
+      "break_even_calls": 540.1646086197153
+    }
+  ]
+}

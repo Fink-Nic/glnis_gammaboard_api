@@ -8,7 +8,7 @@ process `args` object. Source:
 | --- | --- | --- | --- |
 | `kind` | string | `default` | Adapter implementation; currently only `default` is accepted |
 | `save_path` | path string or Python `None` | `None` | Destination of the binary checkpoint; required when saving |
-| `sampler` | table | `{}` | Proposal-module configuration; defaults to a mixed flow |
+| `module` | table | `{}` | Proposal-module configuration; defaults to a mixed flow |
 | `orchestrator` | table | `{}` | Generation/training configuration; defaults to rectangular orchestration |
 | `mapping` | table or Python `None` | `None` | Optional layered coordinate mapping |
 | `parser` | table or Python `None` | `None` | Metadata-parser settings |
@@ -30,17 +30,20 @@ axes in public samples, removes them internally, and appends any hidden mapping
 channels to the internal proposal domain. The mapping output dimension must
 match the public continuous dimension.
 
-`save_path` and the top-level proposal `sampler` table are passed to the
-orchestrator as `save_path` and `sampler_kwargs`. Configure them here rather than
+`save_path` and the top-level proposal `module` table are passed to the
+orchestrator as `save_path` and `module_kwargs`. Configure them here rather than
 duplicating those adapter-owned values inside `[sampler.orchestrator]`.
 
-Use [model configuration](models.md), [orchestrator configuration](orchestrators.md),
+Use [module configuration](modules.md), [orchestrator configuration](orchestrators.md),
 and [mapping configuration](mappings.md) for their nested options. For array
 shapes and feedback ownership, read [sampling and feedback](../implementation/sampling-and-feedback.md).
 
-## Compatibility
+## Configuration schema
 
-The current adapter is `GammaBoardSampler`. Older `MadnisSampler` classes,
-`madnis` adapter spelling, and `sgn_strat_naive`/`sgn_strat_full` kinds are not
-available. A new stratum-specific implementation belongs behind an orchestrator
+Current run files use `sampler.module`; direct Python/GammaBoard arguments use
+`module`. Snapshots use the same schema; previous field names are not migrated.
+Set proposal options in the adapter's `module` table;
+duplicating them in `orchestrator.module_kwargs` is rejected.
+
+The adapter is `GammaBoardSampler`. A new stratum-specific implementation belongs behind an orchestrator
 `kind`; see [extending components](../implementation/extending.md#orchestrators-and-strata).

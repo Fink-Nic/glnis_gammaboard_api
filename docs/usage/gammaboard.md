@@ -46,7 +46,7 @@ contains arguments accepted by `GammaBoardSampler`, for example this JSON object
     "training_batch_size": 128,
     "loss": {"kind": "kl_divergence"}
   },
-  "sampler": {"kind": "mixed flow"}
+  "module": {"kind": "mixed flow"}
 }
 ```
 
@@ -78,6 +78,8 @@ A mapping can obtain graph properties from GammaLoop evaluator metadata with
 requires the optional companion and symbolic dependencies. Explicit
 `graph_properties` avoid state parsing. Configure coordinate mappings explicitly;
 evaluator metadata alone does not enable a mapping.
+Saved states must match the GammaLoop version used by GammaBoard. A state-format
+mismatch requires regenerating that state with the matching GammaLoop build.
 
 Supply the license to the environment launching physics operations:
 
@@ -88,6 +90,67 @@ export SYMBOLICA_LICENSE='your-license-key'
 See [mapping configuration](../configuration/mappings.md) and
 [optional-backend development](../development.md#optional-backend-checks).
 
-The files under [deployment templates](../../examples/templates/) predate the
-current sampler configuration schema. Migrate their sampler arguments before
-launching them; retired `sgn_strat_naive` and `sgn_strat_full` kinds are unavailable.
+## Run and task cards
+
+The [cards](../../examples/templates/) are adapted from the sibling
+`gammaboard_os_ct/resources/templates` installation and use its current
+`task_queue.sampler.config` / `accumulator={config=...}` definitions:
+
+- [GammaLoop baseline](../../examples/templates/runs/gammaloop_train_sample.toml):
+  training and inference for the MSbar ttH NLO GL30 group, selected as graph group
+  8 in `NLO_MSbar`. It exposes training/device/precision settings, losses,
+  schedulers, continuous/discrete networks, splines, execution policy, and queue
+  sizes. Adjust state paths and graph selections for your generated state.
+- [OS GL02](../../examples/templates/runs/madnis_NLO_GL02_OS.toml) and
+  [sign-stratified OS GL02](../../examples/templates/runs/madnis_NLO_GL02_OS_sgn_stratified.toml):
+  graph group 10 in `NLO_OS`, retaining the supplied real target and Voronoi
+  partition. Stratification belongs to GammaBoard's process-sampler configuration.
+- [NLO campaign](../../examples/templates/runs/epem_a_ttxh_NLO_campaign.toml):
+  eleven graph groups with the supplied MSbar targets. Children use the expanded
+  baseline, and graph group is included in run/checkpoint names.
+
+Every process command assumes the installation is named `glnis_gammaboard_api`,
+as a sibling of GammaBoard. State paths are interpreted by GammaBoard relative
+to its resource root; sampler checkpoint paths are relative to process `cwd`.
+Training excludes its estimates from published results. Inference restores the
+completed training sampler with `from_name` and starts a fresh accumulator.
+Keep `train_samples = train_steps * train_batch_size` when editing replacements.
+
+GammaBoard expands an entire `$(name:default)` placeholder as a typed value.
+The baseline's `loss`, `scheduler`, and `execution` replacements are complete
+configuration values, so `scheduler=false` and `execution={kind="eager"}` work
+without leaving incompatible suboptions behind. The commented compiled execution
+table exposes both methods' graph, shape, and mode options. Optional mapping
+configuration is shown separately; a hypercube evaluator needs no extra mapping.
+
+Validate a card with `gammaboard run validate CARD`, then submit it with
+`gammaboard run create CARD`. Validation reads the referenced GammaLoop state;
+`--probe` additionally starts runtimes and requires the configured worker command
+to exist. It is not necessary to create database records to validate a card.
+
+The [task cards](../../examples/templates/tasks/) come from the same installation:
+scalar Monte Carlo, native Havana four-phase training/inference, and two PDF
+diagnostics. Append with `gammaboard run task append RUN CARD`. The PDF examples
+target a two-dimensional domain and a source task named `inference`; adjust their
+geometry/discrete coordinates and source name for another run (the flow baseline
+names its inference task `sample`). Task names must be unique in the destination
+queue. The Havana append card intentionally uses GammaBoard's native sampler.
+
+## Compilation and the process deadline
+
+The referenced GammaBoard installation hardcodes **300 seconds per process
+request**, including initialization, generation, feedback, and checkpoint queries.
+It has no run-card timeout setting. `shutdown_grace_seconds` controls shutdown
+and does not extend this deadline. The GammaBoard checkout is unchanged here.
+
+The sampler creates compiled callables during initialization but compiles lazily
+on first generation/probability use. A new shape or the transition to inference
+can trigger more work. The baseline defaults to eager execution; enable its
+compiled table when these requests fit within the deadline. Reusing a persistent
+`TORCHINDUCTOR_CACHE_DIR` in the worker-launch environment reduces recompilation
+cost, but does not remove first-use startup. If cold compilation exceeds five
+minutes, use eager execution or change GammaBoard's request-timeout implementation
+before enabling compilation for that workload. A 1,800-second configurable
+request window would need an upstream change; it cannot be enabled in these cards.
+See the [native measurements](../implementation/compilation-native-6d.md) for
+startup, shape changes, and recovery costs.

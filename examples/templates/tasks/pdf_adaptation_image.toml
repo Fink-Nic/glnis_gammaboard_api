@@ -1,0 +1,6 @@
+# Append a full-domain 2D PDF comparison to a tetrahedron example.
+[[task_queue]]
+name = "pdf-plane"
+kind = "pdf_adaptation_image"
+sampler = { from_name = "inference" }
+geometry = { offset = [0.0,0.0], u_vector = [1.0,0.0], v_vector = [0.0,1.0], u_linspace = { start = 0.0, stop = 1.0, count = 65 }, v_linspace = { start = 0.0, stop = 1.0, count = 65 } }

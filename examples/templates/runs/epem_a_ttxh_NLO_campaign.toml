@@ -9,68 +9,74 @@
 # ./gammaboard run create ../glnis_gammaboard_api/examples/templates/runs/epem_a_ttxh_NLO_campaign.toml
 
 kind = "integration_campaign"
-name = "epem-a-ttxh-NLO-madnis-campaign"
-replacements = { state_folder = "../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state" , seed = 0 }
+name = "epem-a-ttxh-NLO-flow-campaign"
+replacements = { 
+    state_folder = "../../gammaloop_os_ct/gammaboard_states/distributions_comparison/NLO/state_NLO_OS" , 
+    integrand_name = "NLO_OS",
+    child_definition = "gammaloop_train_sample_compiled" ,
+    seed = 0, }
 target = { kind = "vector", components = { real = -1.3205e-4, imag = 0.0 } }
 
 [stop_condition]
 max_total_samples = 10_000_000_000
 
 [allocation]
-min_samples_per_child = 80_000_000
+max_active_runs = 2
+min_evaluators_per_run = 10
+min_samples_per_child = 30_000_000
 allocation_window_samples = 10_000_000
 
 [[children]]
 name = "GL00"
-replacements = { integrand_name = "NLO_GL00", target_real = 3.1908e-05, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 5, target_real = 3.1908e-05, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL02"
-replacements = { integrand_name = "NLO_GL02", target_real = -2.5040e-06, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 10, target_real = -2.5040e-06, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL06"
-replacements = { integrand_name = "NLO_GL06", target_real = -2.4706e-04, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 7, target_real = -2.4706e-04, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL08"
-replacements = { integrand_name = "NLO_GL08", target_real = -3.2336e-06, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 9, target_real = -3.2336e-06, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL10"
-replacements = { integrand_name = "NLO_GL10", target_real = 4.7475e-05, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 4, target_real = 4.7475e-05, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL12"
-replacements = { integrand_name = "NLO_GL12", target_real = 5.5828e-05, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 6, target_real = 5.5828e-05, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL18"
-replacements = { integrand_name = "NLO_GL18", target_real = 1.3472e-04, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 0, target_real = 1.3472e-04, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL20"
-replacements = { integrand_name = "NLO_GL20", target_real = 2.0875e-04, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 2, target_real = 2.0875e-04, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL22"
-replacements = { integrand_name = "NLO_GL22", target_real = -9.1283e-05, train_batch_size = 20000, train_steps = 3000, train_samples = 60_000_000, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 3, target_real = -9.1283e-05, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL26"
-replacements = { integrand_name = "NLO_GL26", target_real = -1.4765e-04, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 1, target_real = -1.4765e-04, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }
 
 [[children]]
 name = "GL30"
-replacements = { integrand_name = "NLO_GL30", target_real = -1.1848e-04, train_batch_size = 20000, train_steps = 3000, train_samples = 60_000_000, seed = "$(seed:0)", state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)" }
-run = { file = "madnis_gammaloop_train_sample.toml" }
+replacements = { graph_group = 8, target_real = -1.1848e-04, state_folder = "$(state_folder:b)", integrand_name = "$(integrand_name:a)", seed = "$(seed:0)" }
+run = { file = "$(child_definition:c)" }

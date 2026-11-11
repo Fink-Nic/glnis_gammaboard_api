@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
+from dataclasses import asdict
 from functools import partial
 from itertools import product
 from pathlib import Path
@@ -101,7 +103,8 @@ class SamplerAggregator:
         """
         from gammaboard_sampler import GammaBoardSampler
 
-        configuration = config if isinstance(config, RunConfig) else RunConfig.from_dict(config)
+        values = asdict(config) if isinstance(config, RunConfig) else deepcopy(config)
+        configuration = RunConfig.from_dict(values)
         integrand = Integrand.from_config(configuration.integrand)
         initialization = dict(configuration.sampler)
         # A comparison may save to a different location from sampler.save_path.

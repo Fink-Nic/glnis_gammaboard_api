@@ -132,12 +132,11 @@ command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind"
 cwd = "$resources/.."
 ```
 
-Run cards such as `examples/templates/runs/ghost_bump_madnis.toml` and
-`examples/templates/runs/gg_hhh_1L.toml` include this command as a commented
-alternative to their default Nix command. Select the Apptainer command in the
-run card and migrate their older sampler arguments to the
-[current configuration schema](../../docs/configuration/README.md) before
-submitting it. CUDA execution requires a GPU worker allocation
+The [GammaLoop baseline](../../examples/templates/runs/gammaloop_train_sample.toml)
+uses the virtual-environment entry point by default. Replace its process command
+with the Apptainer command above to use the image; its sampler arguments already
+use the [current configuration schema](../../docs/configuration/README.md).
+CUDA execution requires a GPU worker allocation
 and `--nv`; it does not require rebuilding the image on a GPU node. Supply your
 Symbolica license in the environment used to launch the sampler; see
 [GammaLoop inputs](../../docs/usage/gammaboard.md#gammaloop-inputs).

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 
 class DiscreteFlow(nn.Module, Distribution, BuildFromKind):
+    """Discrete proposals: prob scores complete points; discrete_mass handles constraints."""
     KIND = "discrete flow base"
     DEFAULT_KIND = "transformer"
 
@@ -40,6 +41,8 @@ class DiscreteFlow(nn.Module, Distribution, BuildFromKind):
             x = x.unsqueeze(0)
         if c is not None and c.ndim == 1:
             c = c.unsqueeze(0)
+        if x.shape[1] != self.num_discrete_dims or torch.any(x < 0):
+            raise NotImplementedError("partial discrete masses require an implementation-specific marginal")
         return self.prob(x, c)
 
 @dataclass
@@ -106,9 +109,13 @@ class DiscreteTransformer(DiscreteFlow):
         x: torch.Tensor,
         c: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if x.ndim != 2 or x.shape[1] != self.num_discrete_dims:
+            raise ValueError("prob requires complete discrete coordinates; use discrete_mass for partial points")
+        return self._prefix_prob(x, c)
+
+    def _prefix_prob(self, x: torch.Tensor, c: torch.Tensor | None = None) -> torch.Tensor:
+        """Shared tensor scoring; only complete vectors enter the compiled prob path."""
         x_dim = x.shape[1]
-        if x_dim > self.num_discrete_dims:
-            raise ValueError("too many discrete coordinates")
         if x_dim == 0:
             return self.prior_mask.new_ones(x.shape[0])
         x_embed = F.pad(self.x_embedding(x[:, :-1]), (0, 0, 1, 0))
@@ -118,15 +125,17 @@ class DiscreteTransformer(DiscreteFlow):
         embedding = x_embed + pos_embed
         if c is not None and self.c_embedding is not None:
             embedding = embedding + self.c_embedding(c)[:, None, :]
-        hidden = self.transformer(embedding, self.causal_mask[:x_dim, :x_dim])
-        if c is not None:
-            hidden = torch.cat((hidden, c[:, None, :].expand(-1, x_dim, -1)), dim=-1)
-        net_log_probs = self.subnet(hidden)
-
-        prior_probs = self.prior_mask.expand(x.shape[0], -1, -1).clone()[:, :x_dim, :]
-
-        log_probs = net_log_probs.masked_fill(prior_probs == 0, -torch.inf).log_softmax(dim=-1)
+        # Every prefix uses the same causal mask. Supplying the hint avoids
+        # inspecting tensor values to detect causality during graph capture.
+        hidden = self.transformer(embedding, self.causal_mask[:x_dim, :x_dim], is_causal=True)
+        log_probs = self._masked_log_probs(hidden, c, self.prior_mask[:x_dim])
         return log_probs.gather(2, x[:, :, None])[:, :, 0].sum(dim=1).exp()
+
+    def _masked_log_probs(self, hidden, c, prior):
+        if c is not None:
+            condition = c[:, None, :].expand(-1, hidden.shape[1], -1) if hidden.ndim == 3 else c
+            hidden = torch.cat((hidden, condition), dim=-1)
+        return self.subnet(hidden).masked_fill(prior == 0, -torch.inf).log_softmax(dim=-1)
 
     def discrete_mass(self, x: torch.Tensor, c: torch.Tensor | None = None) -> torch.Tensor:
         """Exact prefix masses; holes marked -1 are marginalized by enumeration."""
@@ -151,7 +160,7 @@ class DiscreteTransformer(DiscreteFlow):
             if holes:
                 candidates[:, holes] = torch.tensor(options, device=x.device, dtype=x.dtype)
             condition = None if c is None else c[index:index + 1].expand(len(options), -1)
-            results.append(self.prob(candidates, condition).sum())
+            results.append(self._prefix_prob(candidates, condition).sum())
         return torch.stack(results) if results else self.prior_mask.new_empty(0)
 
     def sample(
@@ -188,11 +197,10 @@ class DiscreteTransformer(DiscreteFlow):
                 embedding = next_embedding[:, None, :]
             else:
                 embedding = torch.cat((embedding, next_embedding[:, None, :]), dim=1)
-            hidden = self.transformer(embedding, self.causal_mask[: i + 1, : i + 1])[:, -1]
-            if c is not None:
-                hidden = torch.cat((hidden, c), dim=-1)
-            logits = self.subnet(hidden).masked_fill(self.prior_mask[None, i, :] == 0, -torch.inf)
-            probabilities = logits.softmax(dim=-1)
+            hidden = self.transformer(
+                embedding, self.causal_mask[: i + 1, : i + 1], is_causal=True
+            )[:, -1]
+            probabilities = self._masked_log_probs(hidden, c, self.prior_mask[i]).exp()
             samples = torch.multinomial(probabilities, 1)
             x = torch.cat((x, samples), dim=1)
             prob = prob * torch.gather(probabilities, 1, samples)[:, 0]
