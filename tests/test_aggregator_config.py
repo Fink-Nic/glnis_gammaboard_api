@@ -27,7 +27,7 @@ def test_invalid_orchestrator_settings_fail_before_construction(sampler_settings
         RunConfig.from_dict({"sampler": sampler_settings, "integrand": {"kind": "sine"}})
 
 
-@pytest.mark.parametrize("component", ["loss", "scheduler"])
+@pytest.mark.parametrize("component", ["loss", "scheduler", "execution"])
 def test_unknown_kinds_are_rejected(sampler_settings, component):
     sampler_settings["orchestrator"][component] = {"kind": "missing"}
     with pytest.raises(ValueError, match="Unknown kind"):

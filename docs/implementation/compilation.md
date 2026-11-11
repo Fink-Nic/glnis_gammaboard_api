@@ -8,8 +8,9 @@ smaller Gaussian profile for comparison.
 Compiling complete tensor methods can substantially accelerate this proposal on
 CUDA. Compilation takes long enough that short training runs lose time overall.
 Keep it opt-in and decide from the expected number of batches, including startup.
-This branch provides a benchmark and removes graph-capture obstacles; the
-production orchestrator still runs eagerly and has no compilation configuration.
+The measurements below predate the optional orchestrator execution policy.
+Production execution defaults to eager; see [execution settings](../configuration/orchestrators.md#execution-and-compilation)
+to enable compilation. Compiled callables stay outside the proposal checkpoint.
 
 ## What is compiled
 
@@ -102,11 +103,11 @@ Run this variant with `--workload cycle --mode reduce-overhead
 --protect-training-samples`. The raw results retain both the failure and the
 successful protected run. This is a real integration requirement:
 [`RectangularTrainingStatus.add_generation_data`](../../src/glnis/utils/types.py)
-currently retains full-window tensors directly, while partial windows copy into
-buffers. A future compiled orchestrator must own retained tensors before another
-compiled call can reuse their storage, and set iteration boundaries deliberately.
-This prototype does not establish correctness for delayed or fragmented feedback
-under CUDA graphs.
+retained full-window tensors directly at measurement time. The current runtime
+copies all retained samples/probabilities into owned buffers and marks execution
+boundaries. The standalone benchmark does not establish delayed-feedback
+correctness; [execution tests](../../tests/test_execution.py) now cover interrupted
+windows with CUDA graphs separately.
 
 ## Startup and batch shapes
 
@@ -187,24 +188,24 @@ identical eager/compiled samples: their random streams and arithmetic can differ
 mode, reconstructing the compiled callable after loading the raw module. This
 passed for CPU Inductor and CUDA Inductor with both static CUDA-graph sampling
 and dynamic sampling within the same process. Fresh-worker replay was not tested.
-It is not a test of a compiled orchestrator's interrupted
-feedback/optimizer recovery; no such orchestrator is implemented here.
+It is not a test of a compiled orchestrator's interrupted feedback/optimizer
+recovery. That integration is now covered separately by
+[execution tests](../../tests/test_execution.py), including fresh-process recovery.
 
 [Compilation tests](../../tests/test_torch_compile.py) exercise graph capture,
 conditional probabilities and gradients after parameter updates, both
 factorization orders, pure domains, support changes without new graph shapes,
 outside-spline gradients, and legacy module loading. The default tests use the
 eager compiler backend; actual Inductor correctness is checked by the benchmark.
-The existing checkpoint and feedback tests continue to run through the production
-eager orchestrator.
+Checkpoint and feedback tests cover eager and compiled execution policies.
 
-For a future production option, keep compiled callables on the orchestrator,
-outside its raw proposal and checkpoint data. Compile `prob()` for long training
-runs and `sample()` for repeated generation; do not recompile explicitly after
-each parameter update. Benchmark separate training and evaluation contexts. Keep
-training generation under `no_grad`, since its tensors are later used by autograd;
-reserve `eval()` plus `inference_mode()` for the completed training phase. See
+The orchestrator's [execution policy](../configuration/orchestrators.md#execution-and-compilation)
+owns compiled callables outside its raw proposal and checkpoint data. It compiles
+`prob()` and `sample()` lazily and reuses them after parameter updates. Training
+generation uses `no_grad`, since its tensors are later used by autograd;
+`eval()` plus `inference_mode()` applies after training completes. See
 [PyTorch's inference-mode restrictions](https://docs.pytorch.org/docs/2.15/generated/torch.autograd.grad_mode.inference_mode.html).
-Any explicit warmup must preserve RNG and training buffers. Application-level
-timing, retained-output ownership, and interrupted-window recovery remain
-necessary before adopting that runtime option.
+There is no constructor/checkpoint warmup. Retained outputs are copied into owned
+buffers, and interrupted-window recovery is tested with a fresh worker. The
+performance measurements above still describe the standalone benchmark rather
+than the full application with a native evaluator.

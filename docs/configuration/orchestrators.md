@@ -17,11 +17,58 @@ The current orchestrator is `kind="rectangular"`. Options below belong under
 | `learning_rate` | positive finite number | `0.001` | Initial Adam learning rate |
 | `loss` | table | `{kind="kl_divergence"}` | Registered objective |
 | `scheduler` | table or Python `None` | `{kind="cosineannealing"}` | Registered learning-rate scheduler |
+| `execution` | table | `{kind="eager"}` | Runtime sampling/probability execution policy |
 
 A training draw can exceed `max_batch_size` by combining several forward passes,
 but cannot exceed the ungenerated remainder of its training window. Optimizer
 selection is currently fixed to Adam in this orchestrator. A different optimizer
 or training strategy can be implemented in another orchestrator.
+
+## Execution and compilation
+
+Source: [execution.py](../../src/glnis/core/nn/execution.py). Execution is owned by
+the orchestrator; the proposal remains a regular `nn.Module` for parameters,
+device moves, optimizer state, and serialization.
+
+`kind="eager"` accepts no additional options. `kind="torch_compile"` accepts:
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `backend` | nonempty string | `inductor` | PyTorch compiler backend |
+| `sample` | table or boolean | `{fullgraph=true, dynamic=true}` | Compile sampling; `false` keeps it eager, `true` uses defaults |
+| `prob` | table or boolean | `{fullgraph=true, dynamic=false}` | Compile complete-point training probabilities; `false` keeps them eager |
+
+Method tables accept `torch.compile` keyword arguments, including `mode`,
+`fullgraph`, `dynamic`, and `options`. Their backend inherits the outer setting
+unless overridden in the method table. Compilation is lazy, with no constructor
+warmup, and errors propagate rather than silently falling back. If explicitly
+using `fullgraph=false`, PyTorch may split execution at graph breaks.
+
+```toml
+[sampler.orchestrator.execution]
+kind = "torch_compile"
+
+[sampler.orchestrator.execution.sample]
+dynamic = true
+
+[sampler.orchestrator.execution.prob]
+dynamic = false
+```
+
+For fixed sampling batches, `sample={dynamic=false, mode="reduce-overhead"}`
+enables the CUDA-graph experiment. The orchestrator marks execution boundaries
+and copies retained samples/probabilities into owned training buffers before
+another compiled call. NumPy conversion, feedback, losses, optimizer/scheduler
+policy, `pdf`, and `discrete_mass` remain eager. Compilation of `prob` includes
+the associated autograd work, but does not compile the whole optimization loop.
+
+Training generation uses `no_grad`; completed runs use `eval` and
+`inference_mode`. A fresh stage explicitly returns to training mode.
+Execution settings are saved as metadata and may be overridden on restore;
+compiled callables are rebuilt outside the serialized module. Saving a checkpoint
+does not compile or warm up anything. See [recovery semantics](../implementation/checkpoints-and-stages.md)
+and the [six-dimensional performance report](../implementation/compilation-6d.md)
+for startup costs and the observed float32 gradient discrepancy.
 
 ## Losses
 

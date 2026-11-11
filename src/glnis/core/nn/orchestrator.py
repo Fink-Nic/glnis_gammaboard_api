@@ -14,6 +14,7 @@ import torch
 from torch import Tensor
 
 from gammaboard_process import Domain, RectangularDomain, Feedback, SampleBatch, GenerationStatus
+from glnis.core.nn.execution import SamplerExecution
 from glnis.core.nn.losses import Loss
 from glnis.core.nn.sampler_module import RectangularSamplerModule
 from glnis.core.nn.schedulers import Scheduler
@@ -48,6 +49,7 @@ class RectangularOrchestratorConfig(OrchestratorConfig):
     learning_rate: float = 1e-3
     loss: dict = field(default_factory=lambda: {"kind": "kl_divergence"})
     scheduler: dict | None = field(default_factory=lambda: {"kind": "cosineannealing"})
+    execution: dict = field(default_factory=lambda: {"kind": "eager"})
 
     @classmethod
     def from_kwargs(cls, **kwargs):
@@ -85,13 +87,15 @@ class RectangularOrchestratorConfig(OrchestratorConfig):
             raise ValueError("orchestrator.seed must be a nonnegative integer or None")
         if not np.isfinite(self.learning_rate) or self.learning_rate <= 0:
             raise ValueError("orchestrator.learning_rate must be positive and finite")
-        if not isinstance(self.sampler_kwargs, dict) or not isinstance(self.loss, dict):
-            raise ValueError("sampler_kwargs and loss must be configuration tables")
+        if not isinstance(self.sampler_kwargs, dict) or not isinstance(self.loss, dict) or not isinstance(self.execution, dict):
+            raise ValueError("sampler_kwargs, loss and execution must be configuration tables")
         if self.scheduler is not None and not isinstance(self.scheduler, dict):
             raise ValueError("scheduler must be a configuration table or None")
         self.sampler_kwargs = deepcopy(self.sampler_kwargs)
         self.loss = deepcopy(self.loss)
         self.scheduler = deepcopy(self.scheduler)
+        self.execution = deepcopy(self.execution)
+        SamplerExecution.subclass_for_kind(self.execution.get("kind", SamplerExecution.DEFAULT_KIND))
 
 
 @dataclass
@@ -155,7 +159,7 @@ class Orchestrator(ABC, BuildFromKind):
 class RectangularOrchestrator(Orchestrator):
     KIND = "rectangular"
     DEFAULT_KIND = "rectangular"
-    RESTORE_OVERRIDES = {"save_path", "use_gpu", "use_f64", "cuda_id", "max_batch_size"}
+    RESTORE_OVERRIDES = {"save_path", "use_gpu", "use_f64", "cuda_id", "max_batch_size", "execution"}
 
     def __init__(self, domain: RectangularDomain, dims_c: int = 0,
                  cfg: RectangularOrchestratorConfig | None = None,
@@ -202,6 +206,8 @@ class RectangularOrchestrator(Orchestrator):
         self.scheduler = (Scheduler.from_kwargs(optimizer=self.optimizer, training_steps=self.cfg.training_steps,
                                                **self.cfg.scheduler)
                           if self.cfg.scheduler is not None and self.optimizer is not None else None)
+        self.module.train(self.training_status.step < self.cfg.training_steps)
+        self.execution = SamplerExecution.from_kwargs(module=self.module, **self.cfg.execution)
         if snapshot_data is not None and not fresh_training:
             if snapshot_data.optimizer_state is not None and self.optimizer is not None:
                 self.optimizer.load_state_dict(snapshot_data.optimizer_state)
@@ -216,7 +222,9 @@ class RectangularOrchestrator(Orchestrator):
     def _read_snapshot(self, snapshot):
         source_path = Path(snapshot.save_path)
         with source_path.open("rb") as stream:
-            data = torch.load(stream, weights_only=False, map_location=self.device)
+            # Let module/buffer placement and optimizer loading move their own
+            # tensors, preserving Adam's CPU step counters.
+            data = torch.load(stream, weights_only=False, map_location="cpu")
         if not isinstance(data, RectangularOrchestratorSnapshotData):
             raise ValueError("snapshot data must be RectangularOrchestratorSnapshotData")
         return data
@@ -272,8 +280,10 @@ class RectangularOrchestrator(Orchestrator):
         weights = np.empty(count, dtype=np.float64)
         for start in range(0, count, self.cfg.max_batch_size):
             size = min(self.cfg.max_batch_size, count - start)
-            with torch.no_grad():
-                samples, prob = self.module.sample(size, return_prob=True)
+            if self.execution.cuda_graphs and self.device.type == "cuda":
+                torch.compiler.cudagraph_mark_step_begin()
+            with torch.no_grad() if remaining is not None else torch.inference_mode():
+                samples, prob = self.execution.sample(size, return_prob=True)
             if not torch.isfinite(prob).all() or torch.any(prob <= 0):
                 raise ValueError("sampler returned nonpositive or nonfinite probabilities")
             if remaining is not None:
@@ -291,7 +301,9 @@ class RectangularOrchestrator(Orchestrator):
         if not torch.any(self.training_status.ingested_weights):
             last_loss = 0.0
         else:
-            q_test = self.module.prob(self.training_status.generated_samples)
+            if self.execution.cuda_graphs and self.device.type == "cuda":
+                torch.compiler.cudagraph_mark_step_begin()
+            q_test = self.execution.prob(self.training_status.generated_samples)
             loss = self.loss_function(self.training_status, q_test)
             if not torch.isfinite(loss).item():
                 warnings.warn("nonfinite batch loss: skipping optimization", RuntimeWarning)
@@ -305,6 +317,8 @@ class RectangularOrchestrator(Orchestrator):
                 else:
                     warnings.warn("nonfinite batch gradients: skipping optimization", RuntimeWarning)
         self.training_status.finish_step(last_loss)
+        if self.training_status.step >= self.cfg.training_steps:
+            self.module.eval()
 
     def feedback(self, feedback: Feedback) -> None:
         if self.training_status.step >= self.cfg.training_steps:

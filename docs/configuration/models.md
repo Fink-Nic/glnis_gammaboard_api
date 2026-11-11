@@ -55,6 +55,12 @@ values. External conditions are embedded into the transformer and appended as
 conditioning features to the output subnet. Its sampling and probability paths
 use the same autoregressive prefix convention.
 
+`prob(x, c)` requires complete discrete vectors of shape
+`(batch, num_discrete_dims)`. Prefixes and holes marked `-1` belong to
+`discrete_mass`, which evaluates their exact masses eagerly. Full-point scoring,
+prefix scoring, and sampling share the cardinality mask and log-probability
+normalization. Mixed-flow `prob` likewise requires all packed internal coordinates.
+
 ## Subnets
 
 The active source is [flow/subnet_constructor.py](../../src/glnis/core/nn/flow/subnet_constructor.py).

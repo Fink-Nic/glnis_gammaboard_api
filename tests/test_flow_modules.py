@@ -1,4 +1,6 @@
 """Probability identities must hold beyond zero-initialized networks."""
+from itertools import product
+
 import numpy as np
 import pytest
 import torch
@@ -25,6 +27,15 @@ def test_transformer_generation_equals_probability_and_prefix_sums(dimensions, c
     x, density = model.sample(n=7, c=condition, return_prob=True)
     torch.testing.assert_close(density, model.prob(x, c=condition), rtol=1e-12, atol=1e-12)
     torch.testing.assert_close(model.discrete_mass(x[:, :0], condition), torch.ones(7))
+    with pytest.raises(ValueError, match="complete discrete"):
+        model.prob(x[:, :-1], condition)
+    if len(dimensions) > 1:
+        # Marginalize a hole before an observed axis, after nonuniform updates.
+        constraint = torch.tensor([[-1, 0]])
+        candidates = torch.tensor(list(product(range(dimensions[0]), [0], *[range(d) for d in dimensions[2:]])))
+        c = None if condition is None else condition[:1].expand(len(candidates), -1)
+        expected = model.prob(candidates, c).sum()
+        torch.testing.assert_close(model.discrete_mass(constraint, None if condition is None else condition[:1])[0], expected)
     model.prob(x, c=condition).log().sum().backward()
     assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.x_embedding.parameters()) if len(dimensions) > 1 else True
 

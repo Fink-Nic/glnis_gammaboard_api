@@ -7,6 +7,8 @@
 - `src/glnis/core/nn/orchestrator.py`: generation windows, optimization, runtime
   settings, and training-state persistence.
 - `src/glnis/core/nn/sampler_module.py`: sampler-module interfaces and mixed flows.
+- `src/glnis/core/nn/execution.py`: orchestrator-owned eager/compiled callables;
+  compiler objects stay outside serialized proposal modules.
 - `src/glnis/core/nn/flow/`: active continuous/discrete flows, spline transforms,
   and subnet constructors. Use `flow/subnet_constructor.py`; do not introduce
   imports from the retired `core/nn/subnet_constructor.py` location.
@@ -43,6 +45,10 @@
   parameters and reset training state. Keep these two operations distinct.
 - Register PyTorch parameters and buffers appropriately, and respect configured
   device and precision without changing process-wide defaults as a side effect.
+- `prob` scores complete internal points. Keep partial discrete queries in eager
+  `discrete_mass`, sharing probability normalization and masks with sampling.
+  Retained generation tensors belong to training buffers, not compiler output
+  storage. Compilation is lazy and must not consume samples during checkpointing.
 - Keep GammaLoop imports lazy. Core imports, numerical mappings with explicit
   graph properties, and packaging must work without the native companion or
   Symbolica. `glnis.core.nn` is an implicit namespace package: preserve packaging

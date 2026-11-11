@@ -54,6 +54,7 @@ overridden through `init_args`:
 | `cuda_id` | orchestrator | Device index |
 | `use_f64` | orchestrator | Model and training-buffer precision |
 | `max_batch_size` | orchestrator | Generation/forward-pass chunk limit |
+| `execution` | orchestrator | Eager/compiled policy and per-method compiler settings |
 
 The binary state is read from `snapshot["orchestrator_snapshot"]["save_path"]`,
 even when the future output path changes. To relocate a standalone checkpoint,
@@ -69,6 +70,16 @@ metadata key is read as the combined pending mapping weights; new snapshots writ
 Restoring on the same device/precision setup retains the tested numerical
 continuation. Device or precision overrides can change numerical results; they
 are not a promise of bit-identical cross-device execution.
+
+Execution callables are runtime objects, outside the serialized module. Saving a
+checkpoint retains the raw module and training state without compilation. Restore
+recreates the execution policy after device/precision placement and restores RNG
+last; compilation happens lazily on first use and may reuse compatible PyTorch
+caches. Switching eager/compiled policies or compiler settings can change random
+streams and arithmetic and is not a promise of bitwise-identical continuation.
+No compiler cache is required to read the checkpoint.
+The checkpoint is initially read on CPU; module/buffer placement and optimizer
+loading then move the appropriate tensors, preserving Adam's CPU step counters.
 
 ## Fresh stages
 
@@ -94,6 +105,10 @@ A stage keeps compatible proposal parameters and inherits source settings, with
 optimizer, scheduler, and a new draw sequence seeded by the effective stage seed.
 Source pending feedback is discarded. It works with a fresh or previously
 trained source proposal. Set `training_steps=0` for an inference stage.
+
+The orchestrator explicitly selects training/evaluation mode from the new stage's
+training status. Starting fresh training on a saved evaluation-mode module returns
+it to training mode and creates new execution callables.
 
 Proposal architecture, mapping, parser/graph configuration, public domain, and
 orchestrator kind remain compatible. In particular, this factory does not

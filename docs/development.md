@@ -77,13 +77,31 @@ For performance experiments, [benchmarks/torch_compile.py](../benchmarks/torch_c
 compares eager and compiled sampling, probabilities, and training paths. Read
 [the compilation report](implementation/compilation.md) for measured results,
 reproduction commands, correctness checks, and the distinction between compiler
-startup and steady-state timing. Compilation is not enabled in the default
-orchestrator.
+startup and steady-state timing. The orchestrator defaults to eager; optional
+[execution settings](configuration/orchestrators.md#execution-and-compilation)
+enable compilation.
 
 The [six-dimensional follow-up](implementation/compilation-6d.md) uses
 `--continuous 6 --mlp-layers 4 --mlp-units 512`, with either `--discrete` or
 `--discrete 3`. Benchmark JSON includes parameter counts, coupling-block counts,
 and peak CUDA allocation during measurement.
+
+[Execution tests](../tests/test_execution.py) use the eager compiler backend by
+default. To exercise real Inductor compilation and restore pending feedback in a
+fresh process on CPU, set `GLNIS_TEST_COMPILE_BACKEND=inductor`. For CUDA graphs:
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 TORCHINDUCTOR_COMPILE_THREADS=1 \
+GLNIS_TEST_COMPILE_BACKEND=inductor GLNIS_TEST_COMPILE_DEVICE=cuda:0 \
+GLNIS_TEST_COMPILE_MODE=reduce-overhead .venv/bin/python -m pytest -q \
+  tests/test_execution.py::test_compiled_checkpoint_in_fresh_process
+```
+
+The check compares subsequent draws, trained parameters, optimizer and scheduler
+states exactly within the same execution/device setup. Eager/compiled switching
+is a runtime override with different numerical/RNG behavior. The test fixture
+clears compiler caches between tests so unrelated architectures do not exhaust
+the per-function variant limit.
 
 ## Optional backend checks
 

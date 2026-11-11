@@ -20,7 +20,10 @@ def parameters(sampler):
 
 @pytest.mark.parametrize("mapped", [False, True])
 @pytest.mark.parametrize("legacy_pending", [False, True])
-def test_interrupted_checkpoint_resumes_exactly(tmp_path, sampler_settings, graph_settings, mapped, legacy_pending):
+@pytest.mark.parametrize("compiled", [False, True])
+def test_interrupted_checkpoint_resumes_exactly(tmp_path, sampler_settings, graph_settings, mapped, legacy_pending, compiled):
+    if compiled:
+        sampler_settings["orchestrator"]["execution"] = {"kind": "torch_compile", "backend": "eager"}
     if mapped:
         sampler_settings.update(mapping={"layer_cfgs": [{"kind": "ose"}]}, graph_properties=graph_settings)
     sampler = GammaBoardSampler(domain=RectangularDomain((1, 2), 3), save_path=str(tmp_path / "sampler.pt"), **sampler_settings)

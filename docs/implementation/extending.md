@@ -35,6 +35,7 @@ appropriate. Update the option reference and behavior tests with the implementat
 | --- | --- |
 | Orchestrator | `Orchestrator`; generation, feedback, snapshot, `_from_snapshot`; `_from_stage` for stage transfer |
 | Proposal module | `RectangularSamplerModule`; `sample`, `prob`, `pdf`, `discrete_mass`, `to_disc_cont` |
+| Execution policy | `SamplerExecution`; runtime `sample`/`prob` callables and a `cuda_graphs` flag for iteration boundaries |
 | Continuous flow | `Flow` factory family; conditional `sample` and probability interface compatible with the mixed module |
 | Discrete proposal | `DiscreteFlow`; conditional `sample`, `prob`, and supported marginal masses |
 | Subnet | `SubnetConstructor`; PyTorch `forward` on the supplied regular/conditional features |
@@ -59,6 +60,12 @@ input width, while `mlp fully conditioned` reuses the condition at hidden layers
 Transformer subnets can receive tensors with a sequence axis. The proposal's
 sampling and differentiable probability paths must use identical factorization
 and conditions after training, not only at zero-initialized weights.
+
+`prob` scores complete internal points. Discrete marginal/prefix queries belong
+to `discrete_mass` and stay eager. The orchestrator may compile `sample`/`prob`
+through a separate execution policy; module implementations should not install
+compiler wrappers into their serialized state. A stratum orchestrator can own
+one execution policy per child proposal.
 
 The current spline base is a factory-selected callable, not a registered
 `nn.Module` by itself. If adding learned spline parameters, ensure the owning

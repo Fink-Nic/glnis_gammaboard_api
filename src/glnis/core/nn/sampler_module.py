@@ -77,7 +77,7 @@ class SamplerModule(ABC, nn.Module, BuildFromKind):
         Use during training with gradients enabled.
 
         Args:
-            xs: Previously generated output of the model.
+            xs: Complete internal points, shape (batch, discrete_dims + continuous_dims).
             c: Optional conditioning tensor.
 
         Returns:
@@ -188,6 +188,8 @@ class MixedFlow(RectangularSamplerModule):
 
 
     def prob(self, xs: Tensor, c: Tensor | None = None) -> Tensor:
+        if xs.ndim != 2 or xs.shape[1] != len(self.discrete_cardinalities) + self.continuous_dims:
+            raise ValueError("prob requires complete internal coordinates")
         if self.discrete_flow is None:
             return self.continuous_flow.prob(xs, c=c)
 

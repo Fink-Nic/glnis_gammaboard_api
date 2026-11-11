@@ -169,8 +169,8 @@ class GammaBoardSampler(Sampler):
                       init_args: dict[str, Any] | None = None, evaluator_metadata: Any = None) -> Self:
         """Resume a run, including pending feedback and RNG state.
 
-        init_args overrides output path, device, precision, and generation chunk
-        size. Changing the proposal, mapping, or training settings requires a new stage.
+        init_args overrides output path, device, precision, execution policy and
+        generation chunk size. Changing the proposal, mapping, or training settings requires a new stage.
         The checkpoint is read from its recorded source path regardless of the new output path.
         """
         snapshot = GammaBoardSamplerSnapshot.from_dict(snapshot) if isinstance(snapshot, dict) else deepcopy(snapshot)

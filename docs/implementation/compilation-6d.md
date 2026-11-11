@@ -8,7 +8,8 @@ or training compilation takes 31–96 seconds.
 This repeats the [earlier compilation experiment](compilation.md) with six
 continuous dimensions and larger MLPs, comparing a continuous-only proposal with
 one that also samples a three-way discrete choice. It measures proposal execution
-and training costs; the production orchestrator still runs eagerly.
+and training costs. Production defaults to eager, with compilation available
+through [orchestrator execution settings](../configuration/orchestrators.md#execution-and-compilation).
 
 ## Models and measurement
 
@@ -242,5 +243,7 @@ The initial 1,000-sample static inference cases also check exact module/RNG
 continuation after reconstructing compiled callables from a raw module snapshot.
 This is same-process
 replay, not fresh-worker or interrupted-feedback/optimizer recovery. Those
-application integration checks remain necessary before adding a production
-compilation option.
+application integration checks are covered separately by the current
+[execution tests](../../tests/test_execution.py), including real Inductor
+fresh-process recovery on CPU and CUDA. The historical benchmark's results and
+limits above are unchanged.

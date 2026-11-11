@@ -8,7 +8,8 @@ training orchestration. Configuration reference is maintained separately under
 flowchart LR
     Runtime[GammaBoard or local runner] --> Adapter[GammaBoardSampler]
     Adapter --> Orchestrator
-    Orchestrator --> Model[Sampler module]
+    Orchestrator --> Execution[Eager or compiled execution]
+    Execution --> Model[Sampler module]
     Model --> Flows[Continuous and discrete flows]
     Flows --> Blocks[Subnets and spline transforms]
     Adapter --> Mapping[Layered coordinate mapping]
@@ -22,6 +23,7 @@ flowchart LR
 | --- | --- | --- |
 | Public adapter | Domain adaptation, singleton masking, hidden mapping channels, mapping corrections, public densities, lifecycle delegation | [gammaboard_sampler.py](../../src/gammaboard_sampler.py) |
 | Orchestrator | Generation windows, training buffers, optimizer, loss, scheduler, device/precision, proposal checkpoints | [orchestrator.py](../../src/glnis/core/nn/orchestrator.py) |
+| Proposal execution | Runtime `sample`/`prob` callables and compiler settings, outside serialized model state | [execution.py](../../src/glnis/core/nn/execution.py) |
 | Proposal module | Joint sampling and probabilities, tensor layout, discrete masses | [sampler_module.py](../../src/glnis/core/nn/sampler_module.py) |
 | Flow components | Conditional probability factorization and learned coordinate transforms | [flow/](../../src/glnis/core/nn/flow/) |
 | Coordinate mapping | Geometry, Jacobians, separately exposed integration corrections | [mappings.py](../../src/glnis/core/mappings.py) |
@@ -33,7 +35,7 @@ process feedback use NumPy. Numerical integrands evaluate raw values and do not
 own proposal probabilities or graph-dependent coordinate mappings.
 
 `BuildFromKind` discovers imported implementation classes. It is used for
-orchestrators, modules, flows, subnets, splines, losses, schedulers, and mapping
+orchestrators, execution policies, modules, flows, subnets, splines, losses, schedulers, and mapping
 layers. Local integrands currently have a separate explicit factory registry.
 
 ## Generation and evaluation

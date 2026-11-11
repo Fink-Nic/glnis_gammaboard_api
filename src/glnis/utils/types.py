@@ -758,12 +758,10 @@ class RectangularTrainingStatus:
         n_samples = samples.shape[0]
         if self.num_generated + n_samples > self.training_batch_size:
             raise ValueError("generation exceeds the training window")
-        if n_samples == self.training_batch_size:
-            self.generated_samples = samples
-            self.generated_probs = probs
-        else:
-            self.generated_probs[self.num_generated:self.num_generated + n_samples] = probs
-            self.generated_samples[self.num_generated:self.num_generated + n_samples, :] = samples
+        # Compiled CUDA-graph outputs may be reused by the next invocation.
+        # Own every retained tensor, including complete training windows.
+        self.generated_probs[self.num_generated:self.num_generated + n_samples].copy_(probs)
+        self.generated_samples[self.num_generated:self.num_generated + n_samples, :].copy_(samples)
         self.num_generated += n_samples
         self.produced_batches += 1
 
