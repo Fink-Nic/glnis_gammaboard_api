@@ -118,7 +118,9 @@ class DiscreteTransformer(DiscreteFlow):
         embedding = x_embed + pos_embed
         if c is not None and self.c_embedding is not None:
             embedding = embedding + self.c_embedding(c)[:, None, :]
-        hidden = self.transformer(embedding, self.causal_mask[:x_dim, :x_dim])
+        # Every prefix uses the same causal mask. Supplying the hint avoids
+        # inspecting tensor values to detect causality during graph capture.
+        hidden = self.transformer(embedding, self.causal_mask[:x_dim, :x_dim], is_causal=True)
         if c is not None:
             hidden = torch.cat((hidden, c[:, None, :].expand(-1, x_dim, -1)), dim=-1)
         net_log_probs = self.subnet(hidden)
@@ -188,7 +190,9 @@ class DiscreteTransformer(DiscreteFlow):
                 embedding = next_embedding[:, None, :]
             else:
                 embedding = torch.cat((embedding, next_embedding[:, None, :]), dim=1)
-            hidden = self.transformer(embedding, self.causal_mask[: i + 1, : i + 1])[:, -1]
+            hidden = self.transformer(
+                embedding, self.causal_mask[: i + 1, : i + 1], is_causal=True
+            )[:, -1]
             if c is not None:
                 hidden = torch.cat((hidden, c), dim=-1)
             logits = self.subnet(hidden).masked_fill(self.prior_mask[None, i, :] == 0, -torch.inf)

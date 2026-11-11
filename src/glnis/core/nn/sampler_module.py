@@ -179,6 +179,7 @@ class MixedFlow(RectangularSamplerModule):
         )
 
         self.max_dim_discrete = max(self.discrete_cardinalities) if self.discrete_cardinalities else 0
+        # Retain this buffer for compatibility with existing state dictionaries.
         one_hot_mask = []
         for dim in self.discrete_cardinalities:
             one_hot_mask.extend([True] * dim + [False] * (self.max_dim_discrete - dim))
@@ -317,8 +318,9 @@ class MixedFlow(RectangularSamplerModule):
         return torch.as_tensor(xs, device=self.dummy.device, dtype=self.dummy.dtype)
 
     def _encode_discrete(self, indices: torch.Tensor) -> torch.Tensor:
-        return (
-            torch.functional.F.one_hot(indices, self.max_dim_discrete)
-            .to(self.dummy.dtype)
-            .flatten(start_dim=1)[:, self.one_hot_mask]
-        )
+        # Each cardinality is fixed by the domain. Separate one-hot blocks avoid
+        # boolean indexing with a data-dependent output shape during compilation.
+        return torch.cat([
+            torch.functional.F.one_hot(indices[:, i], cardinality)
+            for i, cardinality in enumerate(self.discrete_cardinalities)
+        ], dim=1).to(self.dummy.dtype)

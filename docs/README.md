@@ -33,6 +33,8 @@ GammaBoard process arguments from the outer tables in local TOML files.
 - [Checkpoints and stages](implementation/checkpoints-and-stages.md): exact recovery
   versus a fresh training run on a retained proposal.
 - [Extending components](implementation/extending.md): registration and implementation contracts.
+- [Compilation experiments](implementation/compilation.md): training/inference benchmarks,
+  graph-capture changes, startup costs, and runtime integration limits.
 
 [Development](development.md) covers testing, editable environments, dependency
 updates, and optional-backend troubleshooting. Project-specific agent guidance

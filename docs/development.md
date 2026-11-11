@@ -73,6 +73,13 @@ not only the initially uniform proposal. Keep test artifacts in temporary paths.
 Report optional skips and the device/precision actually exercised; a CPU run
 is not CUDA validation.
 
+For performance experiments, [benchmarks/torch_compile.py](../benchmarks/torch_compile.py)
+compares eager and compiled sampling, probabilities, and training paths. Read
+[the compilation report](implementation/compilation.md) for measured results,
+reproduction commands, correctness checks, and the distinction between compiler
+startup and steady-state timing. Compilation is not enabled in the default
+orchestrator.
+
 ## Optional backend checks
 
 Core checks must work without compiling the companion or importing Symbolica:

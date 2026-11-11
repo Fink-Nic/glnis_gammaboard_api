@@ -200,6 +200,7 @@ class Flow(nn.Module, Distribution, BuildFromKind):
         # A block with no transformed coordinates is an identity.
         condition_masks = condition_masks[~condition_masks.all(dim=1)]
         self.register_buffer("condition_masks", condition_masks)
+        self._set_coordinate_indices()
 
         self.subnets = nn.ModuleList()
         self.coupling_transforms: list[SplineTransform] = []
@@ -216,6 +217,22 @@ class Flow(nn.Module, Distribution, BuildFromKind):
             )
             self.coupling_transforms.append(coupling_transform)
 
+    def _set_coordinate_indices(self):
+        # Masks describe architecture, not batch data. Integer indices keep the
+        # number of features static for the compiler, including empty conditions.
+        masks = self.condition_masks.cpu()
+        self._condition_indices = tuple(mask.nonzero().flatten().tolist() for mask in masks)
+        self._transform_indices = tuple((~mask).nonzero().flatten().tolist() for mask in masks)
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        # Modules are also stored as complete objects in existing checkpoints.
+        if not hasattr(self, "_condition_indices"):
+            self._set_coordinate_indices()
+
+    def _load_from_state_dict(self, *args, **kwargs):
+        super()._load_from_state_dict(*args, **kwargs)
+        self._set_coordinate_indices()
 
     def transform(
         self,
@@ -240,14 +257,13 @@ class Flow(nn.Module, Distribution, BuildFromKind):
             return x, jac
 
         batch_size = x.shape[0]
+        blocks = list(zip(self._condition_indices, self._transform_indices,
+                          self.subnets, self.coupling_transforms))
         if inverse:
-            blocks = zip(reversed(self.condition_masks), reversed(self.subnets), reversed(self.coupling_transforms)) # type: ignore
-        else:
-            blocks = zip(self.condition_masks, self.subnets, self.coupling_transforms) # type: ignore
-        for mask, subnet, coupling_transform in blocks:
-            inv_mask = ~mask # type: ignore
-            x_trafo = x[:, inv_mask]
-            x_cond = x[:, mask] if self.dims_in > 1 else torch.ones_like(x_trafo) # type: ignore
+            blocks.reverse()
+        for condition_indices, transform_indices, subnet, coupling_transform in blocks:
+            x_trafo = x[:, transform_indices]
+            x_cond = x[:, condition_indices] if self.dims_in > 1 else torch.ones_like(x_trafo)
             if c is not None:
                 x_cond = torch.cat((x_cond, c), dim=1)
             subnet_out = subnet(x_cond).reshape(
@@ -256,7 +272,7 @@ class Flow(nn.Module, Distribution, BuildFromKind):
             x_out, block_jac = coupling_transform(
                 x_trafo, subnet_out, inverse
             )
-            x[:, inv_mask] = x_out
+            x[:, transform_indices] = x_out
             jac += block_jac.sum(dim=1)
 
         return x, jac
