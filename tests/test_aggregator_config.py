@@ -39,6 +39,19 @@ def test_old_flat_sampler_settings_have_an_actionable_error():
         RunConfig.from_dict({"sampler": {"training_steps": 1}, "integrand": {"kind": "sine"}})
 
 
+def test_module_configuration_has_one_adapter_route(sampler_settings):
+    config = RunConfig.from_dict({"sampler": sampler_settings, "integrand": {"kind": "sine"}})
+    sampler = config.build().sampler
+    assert sampler.cfg.module == sampler_settings["module"]
+    assert sampler.orchestrator.cfg.module_kwargs == sampler_settings["module"]
+    assert "module_kwargs" not in config.sampler["orchestrator"]
+    assert "module_kwargs" not in sampler.cfg.orchestrator
+    for settings in ({"sampler": sampler_settings["module"]},
+                     {"orchestrator": {"module_kwargs": sampler_settings["module"]}}):
+        with pytest.raises(ValueError, match="module|sampler.sampler"):
+            RunConfig.from_dict({"sampler": settings, "integrand": {"kind": "sine"}})
+
+
 def test_toml_paths_are_relative_to_configuration(tmp_path, monkeypatch):
     source = tmp_path / "config.toml"
     source.write_text('''[sampler]

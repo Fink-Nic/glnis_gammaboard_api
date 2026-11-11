@@ -88,7 +88,7 @@ unimplemented rather than fabricate a density.
 ## Orchestrators and strata
 
 An orchestrator receives the internal rectangular domain, shared proposal
-`sampler_kwargs`, and checkpoint `save_path`. Expose a configuration with
+`module_kwargs`, and checkpoint `save_path`. Expose a configuration with
 `to_dict()` for the adapter's snapshot metadata. For local runners, expose the
 training-window/status information they use and a generation limit.
 

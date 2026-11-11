@@ -20,7 +20,7 @@ GammaBoard process arguments from the outer tables in local TOML files.
 | --- | --- |
 | [Sampler](configuration/sampler.md) | Adapter options and public-domain settings |
 | [Orchestrators](configuration/orchestrators.md) | Training, devices, losses, schedulers |
-| [Models](configuration/models.md) | Mixed flows, continuous/discrete flows, subnets, splines |
+| [Modules](configuration/modules.md) | Mixed flows, continuous/discrete flows, subnets, splines |
 | [Mappings](configuration/mappings.md) | Coordinate layers, channel partitions, parser metadata, graph properties |
 | [Local runs and analysis](configuration/local-runs.md) | Integrands, aggregation, comparisons, slice settings |
 
@@ -37,6 +37,9 @@ GammaBoard process arguments from the outer tables in local TOML files.
   graph-capture changes, startup costs, and runtime integration limits.
   The [six-dimensional report](implementation/compilation-6d.md) compares 4-layer,
   512-unit proposals with and without discrete sampling.
+- [Native compilation and recovery](implementation/compilation-native-6d.md): the
+  same 6D workload through the public adapter, including fresh workers with
+  reused and empty compiler caches.
 
 [Development](development.md) covers testing, editable environments, dependency
 updates, and optional-backend troubleshooting. Project-specific agent guidance

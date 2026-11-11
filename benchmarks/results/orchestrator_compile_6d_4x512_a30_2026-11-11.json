@@ -1,0 +1,2376 @@
+{
+  "measured_utc_date": "2026-11-11",
+  "scope": "Public GammaBoardSampler, native execution, interrupted feedback recovery in fresh workers",
+  "profiles": [
+    {
+      "domain": "continuous",
+      "torch": "2.15.0+cu132",
+      "arguments": {
+        "device": "cuda:0",
+        "policy": "eager",
+        "discrete": [],
+        "continuous": 6,
+        "layers": 4,
+        "units": 512,
+        "batch_size": 1000,
+        "bulk_size": 100000,
+        "warmup": 100,
+        "iterations": 30,
+        "inference_iterations": 100,
+        "bulk_iterations": 10,
+        "repeats": 3,
+        "resume": null,
+        "output": "/tmp/glnis-native-6d-diagnostics/continuous-eager.json"
+      },
+      "hardware": "NVIDIA A30",
+      "cache_dir": "/tmp/glnis-native-6d-diagnostics/continuous-eager-cache",
+      "construct_s": 1.0733703658916056,
+      "process_start_to_ready_s": 3.0217133802361786,
+      "parameters": 3450414,
+      "training_before": {
+        "first_s": 0.5233443579636514,
+        "median_s": 0.03176328246481717,
+        "repeats_s": [
+          0.032534001690025134,
+          0.03176328246481717,
+          0.03037274433299899
+        ]
+      },
+      "prepare_partial_s": 0.007889783009886742,
+      "snapshot_s": 0.3636412909254432,
+      "snapshot_bytes": 97844373,
+      "snapshot_rng_unchanged": true,
+      "continuation_draw_s": 0.008542075753211975,
+      "continuation_feedback_s": 0.023656798992305994,
+      "training_after": {
+        "first_s": 0.030451168306171894,
+        "median_s": 0.032350085924069086,
+        "repeats_s": [
+          0.032448775693774225,
+          0.032350085924069086,
+          0.03136739913995067
+        ]
+      },
+      "inference": {
+        "first_s": 0.00798820424824953,
+        "median_s": 0.007153228609822691,
+        "repeats_s": [
+          0.006682035839185118,
+          0.007153228609822691,
+          0.009017283706925809
+        ]
+      },
+      "bulk_inference": {
+        "first_s": 0.21969380881637335,
+        "median_s": 0.21104721957817674,
+        "repeats_s": [
+          0.211508721485734,
+          0.21103374548256398,
+          0.21104721957817674
+        ]
+      },
+      "recovery": {
+        "reused": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:0",
+            "policy": "eager",
+            "discrete": [],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-xfhvoaer/bundle.json",
+            "output": "/tmp/glnis-native-compile-xfhvoaer/reused.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-6d-diagnostics/continuous-eager-cache",
+          "restore_load_s": 1.7330906582064927,
+          "process_start_to_ready_s": 3.5879546757787466,
+          "parameters": 3450414,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 0.32314064214006066,
+          "continuation_feedback_s": 0.28482477087527514,
+          "training_after": {
+            "first_s": 0.04276570910587907,
+            "median_s": 0.030053562376027305,
+            "repeats_s": [
+              0.029836542469759784,
+              0.030053562376027305,
+              0.030357061962907512
+            ]
+          },
+          "inference": {
+            "first_s": 0.006981088779866695,
+            "median_s": 0.006567057468928396,
+            "repeats_s": [
+              0.006567057468928396,
+              0.006449396177195013,
+              0.0067673784121871
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 0.2145622381940484,
+            "median_s": 0.211446572560817,
+            "repeats_s": [
+              0.21109947208315133,
+              0.2114558436907828,
+              0.211446572560817
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 21.75051586376503
+        },
+        "empty": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:0",
+            "policy": "eager",
+            "discrete": [],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-xfhvoaer/bundle.json",
+            "output": "/tmp/glnis-native-compile-xfhvoaer/empty.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-compile-xfhvoaer/empty-cache",
+          "restore_load_s": 1.7455894737504423,
+          "process_start_to_ready_s": 3.6217850842513144,
+          "parameters": 3450414,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 0.3076241170056164,
+          "continuation_feedback_s": 0.22734365100041032,
+          "training_after": {
+            "first_s": 0.03203390398994088,
+            "median_s": 0.03953974776280423,
+            "repeats_s": [
+              0.035025930233920616,
+              0.040208922264476615,
+              0.03953974776280423
+            ]
+          },
+          "inference": {
+            "first_s": 0.01000610226765275,
+            "median_s": 0.008087479649111629,
+            "repeats_s": [
+              0.008364023007452488,
+              0.006491105360910296,
+              0.008087479649111629
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 0.22186545934528112,
+            "median_s": 0.21202116943895816,
+            "repeats_s": [
+              0.21202116943895816,
+              0.2118652946781367,
+              0.21206230362877249
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 23.505004555918276
+        }
+      },
+      "probability_check": "passed"
+    },
+    {
+      "domain": "continuous",
+      "torch": "2.15.0+cu132",
+      "arguments": {
+        "device": "cuda:0",
+        "policy": "default",
+        "discrete": [],
+        "continuous": 6,
+        "layers": 4,
+        "units": 512,
+        "batch_size": 1000,
+        "bulk_size": 100000,
+        "warmup": 100,
+        "iterations": 30,
+        "inference_iterations": 100,
+        "bulk_iterations": 10,
+        "repeats": 3,
+        "resume": null,
+        "output": "/tmp/glnis-native-6d-diagnostics/continuous-default.json"
+      },
+      "hardware": "NVIDIA A30",
+      "cache_dir": "/tmp/glnis-native-6d-diagnostics/continuous-default-cache",
+      "construct_s": 1.4300367361865938,
+      "process_start_to_ready_s": 3.277063683141023,
+      "parameters": 3450414,
+      "training_before": {
+        "first_s": 93.92664551176131,
+        "median_s": 0.013130671499917904,
+        "repeats_s": [
+          0.013495811633765698,
+          0.013102018026014168,
+          0.013130671499917904
+        ]
+      },
+      "prepare_partial_s": 0.0021910592913627625,
+      "snapshot_s": 0.356591559946537,
+      "snapshot_bytes": 97847253,
+      "snapshot_rng_unchanged": true,
+      "continuation_draw_s": 0.0023933500051498413,
+      "continuation_feedback_s": 0.010654664132744074,
+      "training_after": {
+        "first_s": 0.012341651134192944,
+        "median_s": 0.013117222767323255,
+        "repeats_s": [
+          0.012490850531806548,
+          0.013117222767323255,
+          0.013431701405594746
+        ]
+      },
+      "inference": {
+        "first_s": 2.9633224331773818,
+        "median_s": 0.0019467760296538472,
+        "repeats_s": [
+          0.002104559177532792,
+          0.0019123567920178175,
+          0.0019467760296538472
+        ]
+      },
+      "bulk_inference": {
+        "first_s": 0.10458082193508744,
+        "median_s": 0.10680761761032045,
+        "repeats_s": [
+          0.10671271020546555,
+          0.10680761761032045,
+          0.10693956017494202
+        ]
+      },
+      "recovery": {
+        "reused": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:0",
+            "policy": "default",
+            "discrete": [],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-a19ck8m8/bundle.json",
+            "output": "/tmp/glnis-native-compile-a19ck8m8/reused.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-6d-diagnostics/continuous-default-cache",
+          "restore_load_s": 2.2099345987662673,
+          "process_start_to_ready_s": 4.153339998330921,
+          "parameters": 3450414,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 12.833718168083578,
+          "continuation_feedback_s": 2.1512137530371547,
+          "training_after": {
+            "first_s": 0.019562621135264635,
+            "median_s": 0.01248359023593366,
+            "repeats_s": [
+              0.012478785899778208,
+              0.012516038709630568,
+              0.01248359023593366
+            ]
+          },
+          "inference": {
+            "first_s": 2.631460349075496,
+            "median_s": 0.0020228636590763926,
+            "repeats_s": [
+              0.0020228636590763926,
+              0.0019013467477634548,
+              0.002024721768684685
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 0.10470928205177188,
+            "median_s": 0.10669693872332572,
+            "repeats_s": [
+              0.10669693872332572,
+              0.10664079459384083,
+              0.10673659900203347
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 31.450297805014998
+        },
+        "empty": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:0",
+            "policy": "default",
+            "discrete": [],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-a19ck8m8/bundle.json",
+            "output": "/tmp/glnis-native-compile-a19ck8m8/empty.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-compile-a19ck8m8/empty-cache",
+          "restore_load_s": 1.9779294040054083,
+          "process_start_to_ready_s": 3.8277153060771525,
+          "parameters": 3450414,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 26.29434728436172,
+          "continuation_feedback_s": 21.765163706149906,
+          "training_after": {
+            "first_s": 0.016549458727240562,
+            "median_s": 0.011572466899330417,
+            "repeats_s": [
+              0.011425560340285301,
+              0.011572466899330417,
+              0.011808705873166521
+            ]
+          },
+          "inference": {
+            "first_s": 5.059347364120185,
+            "median_s": 0.001944641158916056,
+            "repeats_s": [
+              0.001944641158916056,
+              0.001958420509472489,
+              0.001931752199307084
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 0.10620485991239548,
+            "median_s": 0.10695130000822246,
+            "repeats_s": [
+              0.1066846190020442,
+              0.10695130000822246,
+              0.10719796707853675
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 66.91807758063078
+        }
+      },
+      "probability_check": "passed"
+    },
+    {
+      "domain": "continuous",
+      "torch": "2.15.0+cu132",
+      "arguments": {
+        "device": "cuda:0",
+        "policy": "reduce-overhead",
+        "discrete": [],
+        "continuous": 6,
+        "layers": 4,
+        "units": 512,
+        "batch_size": 1000,
+        "bulk_size": 100000,
+        "warmup": 100,
+        "iterations": 30,
+        "inference_iterations": 100,
+        "bulk_iterations": 10,
+        "repeats": 3,
+        "resume": null,
+        "output": "/tmp/glnis-native-6d-diagnostics/continuous-reduce-overhead.json"
+      },
+      "hardware": "NVIDIA A30",
+      "cache_dir": "/tmp/glnis-native-6d-diagnostics/continuous-reduce-overhead-cache",
+      "construct_s": 1.5951147302985191,
+      "process_start_to_ready_s": 3.5698392228223383,
+      "parameters": 3450414,
+      "training_before": {
+        "first_s": 83.109925261233,
+        "median_s": 0.01347349703622361,
+        "repeats_s": [
+          0.01347349703622361,
+          0.013436238172774513,
+          0.013981332474698623
+        ]
+      },
+      "prepare_partial_s": 29.946298126131296,
+      "snapshot_s": 0.3611639132723212,
+      "snapshot_bytes": 97845205,
+      "snapshot_rng_unchanged": true,
+      "continuation_draw_s": 0.01196242030709982,
+      "continuation_feedback_s": 0.012447291985154152,
+      "training_after": {
+        "first_s": 0.012372000608593225,
+        "median_s": 0.011667275242507458,
+        "repeats_s": [
+          0.011737150512635708,
+          0.011323661419252555,
+          0.011667275242507458
+        ]
+      },
+      "inference": {
+        "first_s": 1.583642469253391,
+        "median_s": 0.0017942320695146917,
+        "repeats_s": [
+          0.0017942320695146917,
+          0.0018256465904414655,
+          0.0017745417775586248
+        ]
+      },
+      "bulk_inference": {
+        "first_s": 35.16525353491306,
+        "median_s": 0.10622186651453376,
+        "repeats_s": [
+          0.10596147240139545,
+          0.10622186651453376,
+          0.10635719108395278
+        ]
+      },
+      "recovery": {
+        "reused": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:0",
+            "policy": "reduce-overhead",
+            "discrete": [],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-415qln8e/bundle.json",
+            "output": "/tmp/glnis-native-compile-415qln8e/reused.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-6d-diagnostics/continuous-reduce-overhead-cache",
+          "restore_load_s": 2.241065945941955,
+          "process_start_to_ready_s": 4.320117799099535,
+          "parameters": 3450414,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 4.727484267670661,
+          "continuation_feedback_s": 2.1951825567521155,
+          "training_after": {
+            "first_s": 2.068314518779516,
+            "median_s": 0.011277395331611236,
+            "repeats_s": [
+              0.011207324732095004,
+              0.011277395331611236,
+              0.011456424075489243
+            ]
+          },
+          "inference": {
+            "first_s": 1.5257148891687393,
+            "median_s": 0.0017840639408677817,
+            "repeats_s": [
+              0.0017664164630696178,
+              0.001787806050851941,
+              0.0017840639408677817
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 1.9864480290561914,
+            "median_s": 0.10639888858422637,
+            "repeats_s": [
+              0.10626692390069366,
+              0.10639888858422637,
+              0.1064970709849149
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 25.729015573393553
+        },
+        "empty": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:0",
+            "policy": "reduce-overhead",
+            "discrete": [],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-415qln8e/bundle.json",
+            "output": "/tmp/glnis-native-compile-415qln8e/empty.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-compile-415qln8e/empty-cache",
+          "restore_load_s": 2.1203849497251213,
+          "process_start_to_ready_s": 4.107296593021601,
+          "parameters": 3450414,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 16.765594544820487,
+          "continuation_feedback_s": 21.893381224013865,
+          "training_after": {
+            "first_s": 14.521748376078904,
+            "median_s": 0.011456094169989228,
+            "repeats_s": [
+              0.011792257909352582,
+              0.011456094169989228,
+              0.01122187787356476
+            ]
+          },
+          "inference": {
+            "first_s": 1.451830361969769,
+            "median_s": 0.00172446068841964,
+            "repeats_s": [
+              0.00172489520162344,
+              0.00172446068841964,
+              0.001724298489280045
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 15.009884119033813,
+            "median_s": 0.10653489497490227,
+            "repeats_s": [
+              0.10628872490487992,
+              0.1076083404943347,
+              0.10653489497490227
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 3925,
+              "max_abs": 6.661338147750939e-16
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 970,
+              "max_abs": 1.687538997430238e-14
+            },
+            "bulk.xs_continuous": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 362874,
+              "max_abs": 1.1102230246251565e-15
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 95955,
+              "max_abs": 3.2862601528904634e-14
+            },
+            "module": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 166504,
+              "max_abs": 1.1548921541315593e-15
+            },
+            "optimizer": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 374031,
+              "max_abs": 4.683753385137379e-17
+            },
+            "losses": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 191,
+              "max_abs": 5.125023669338979e-16
+            }
+          },
+          "exact_recovery": "failed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 82.95960423117504
+        }
+      },
+      "probability_check": "passed"
+    },
+    {
+      "domain": "mixed",
+      "torch": "2.15.0+cu132",
+      "arguments": {
+        "device": "cuda:1",
+        "policy": "eager",
+        "discrete": [
+          3
+        ],
+        "continuous": 6,
+        "layers": 4,
+        "units": 512,
+        "batch_size": 1000,
+        "bulk_size": 100000,
+        "warmup": 100,
+        "iterations": 30,
+        "inference_iterations": 100,
+        "bulk_iterations": 10,
+        "repeats": 3,
+        "resume": null,
+        "output": "/tmp/glnis-native-6d-diagnostics/mixed-eager.json"
+      },
+      "hardware": "NVIDIA A30",
+      "cache_dir": "/tmp/glnis-native-6d-diagnostics/mixed-eager-cache",
+      "construct_s": 1.1585393440909684,
+      "process_start_to_ready_s": 3.3745468389242887,
+      "parameters": 4045233,
+      "training_before": {
+        "first_s": 1.4874745360575616,
+        "median_s": 0.040974833397194745,
+        "repeats_s": [
+          0.04121659840457141,
+          0.040974833397194745,
+          0.038823842024430635
+        ]
+      },
+      "prepare_partial_s": 0.00944217899814248,
+      "snapshot_s": 0.4178057936951518,
+      "snapshot_bytes": 114761809,
+      "snapshot_rng_unchanged": true,
+      "continuation_draw_s": 0.013214334845542908,
+      "continuation_feedback_s": 0.03427788382396102,
+      "training_after": {
+        "first_s": 0.03723285626620054,
+        "median_s": 0.038475026935338975,
+        "repeats_s": [
+          0.04037629887461662,
+          0.038475026935338975,
+          0.03680008586185674
+        ]
+      },
+      "inference": {
+        "first_s": 0.019983354955911636,
+        "median_s": 0.00786468842998147,
+        "repeats_s": [
+          0.00795403070282191,
+          0.00786468842998147,
+          0.007850122270174325
+        ]
+      },
+      "bulk_inference": {
+        "first_s": 0.24343792209401727,
+        "median_s": 0.23895103260874748,
+        "repeats_s": [
+          0.23769398028962313,
+          0.23895103260874748,
+          0.23939142553135753
+        ]
+      },
+      "recovery": {
+        "reused": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:1",
+            "policy": "eager",
+            "discrete": [
+              3
+            ],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-ka798r_b/bundle.json",
+            "output": "/tmp/glnis-native-compile-ka798r_b/reused.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-6d-diagnostics/mixed-eager-cache",
+          "restore_load_s": 1.7223625648766756,
+          "process_start_to_ready_s": 3.7234368501231074,
+          "parameters": 4045233,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 1.0852613188326359,
+          "continuation_feedback_s": 0.3785879900678992,
+          "training_after": {
+            "first_s": 0.04286123113706708,
+            "median_s": 0.04248234109642605,
+            "repeats_s": [
+              0.045679735190545516,
+              0.03712082059743504,
+              0.04248234109642605
+            ]
+          },
+          "inference": {
+            "first_s": 0.023085817229002714,
+            "median_s": 0.008768449942581356,
+            "repeats_s": [
+              0.008342399448156356,
+              0.008875119392760098,
+              0.008768449942581356
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 0.24159322399646044,
+            "median_s": 0.23864140161313116,
+            "repeats_s": [
+              0.23864140161313116,
+              0.23795425868593156,
+              0.23874961212277412
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 26.90360231883824
+        },
+        "empty": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:1",
+            "policy": "eager",
+            "discrete": [
+              3
+            ],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-ka798r_b/bundle.json",
+            "output": "/tmp/glnis-native-compile-ka798r_b/empty.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-compile-ka798r_b/empty-cache",
+          "restore_load_s": 1.9121174048632383,
+          "process_start_to_ready_s": 3.949432784691453,
+          "parameters": 4045233,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 1.1057940358296037,
+          "continuation_feedback_s": 0.3639135090634227,
+          "training_after": {
+            "first_s": 0.04099681228399277,
+            "median_s": 0.0446455575991422,
+            "repeats_s": [
+              0.0446455575991422,
+              0.047562424543624124,
+              0.04213192470682164
+            ]
+          },
+          "inference": {
+            "first_s": 0.02283239597454667,
+            "median_s": 0.008325796793214976,
+            "repeats_s": [
+              0.008670467729680241,
+              0.00829261244740337,
+              0.008325796793214976
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 0.24567470280453563,
+            "median_s": 0.23896688320674003,
+            "repeats_s": [
+              0.23896688320674003,
+              0.2388531138189137,
+              0.23911857693456112
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 27.481512831058353
+        }
+      },
+      "probability_check": "passed"
+    },
+    {
+      "domain": "mixed",
+      "torch": "2.15.0+cu132",
+      "arguments": {
+        "device": "cuda:1",
+        "policy": "default",
+        "discrete": [
+          3
+        ],
+        "continuous": 6,
+        "layers": 4,
+        "units": 512,
+        "batch_size": 1000,
+        "bulk_size": 100000,
+        "warmup": 100,
+        "iterations": 30,
+        "inference_iterations": 100,
+        "bulk_iterations": 10,
+        "repeats": 3,
+        "resume": null,
+        "output": "/tmp/glnis-native-6d-diagnostics/mixed-default.json"
+      },
+      "hardware": "NVIDIA A30",
+      "cache_dir": "/tmp/glnis-native-6d-diagnostics/mixed-default-cache",
+      "construct_s": 1.9631469659507275,
+      "process_start_to_ready_s": 4.034573355689645,
+      "parameters": 4045233,
+      "training_before": {
+        "first_s": 123.80559126893058,
+        "median_s": 0.017905447026714684,
+        "repeats_s": [
+          0.017913083406165244,
+          0.017905447026714684,
+          0.017479984260474642
+        ]
+      },
+      "prepare_partial_s": 0.003422813955694437,
+      "snapshot_s": 0.4313668431714177,
+      "snapshot_bytes": 114765905,
+      "snapshot_rng_unchanged": true,
+      "continuation_draw_s": 0.0031225825659930706,
+      "continuation_feedback_s": 0.01691256044432521,
+      "training_after": {
+        "first_s": 0.0178640428930521,
+        "median_s": 0.02001321643280486,
+        "repeats_s": [
+          0.020457013277336955,
+          0.019297011801972984,
+          0.02001321643280486
+        ]
+      },
+      "inference": {
+        "first_s": 45.37614181544632,
+        "median_s": 0.0027246282901614905,
+        "repeats_s": [
+          0.0027191559690982105,
+          0.002736746841110289,
+          0.0027246282901614905
+        ]
+      },
+      "bulk_inference": {
+        "first_s": 0.1342929359525442,
+        "median_s": 0.1318443634081632,
+        "repeats_s": [
+          0.13176416289061307,
+          0.13233350943773986,
+          0.1318443634081632
+        ]
+      },
+      "recovery": {
+        "reused": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:1",
+            "policy": "default",
+            "discrete": [
+              3
+            ],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-k9sxhx5k/bundle.json",
+            "output": "/tmp/glnis-native-compile-k9sxhx5k/reused.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-6d-diagnostics/mixed-default-cache",
+          "restore_load_s": 2.0395621629431844,
+          "process_start_to_ready_s": 3.9186384198255837,
+          "parameters": 4045233,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 15.196959594264627,
+          "continuation_feedback_s": 2.5834751739166677,
+          "training_after": {
+            "first_s": 0.021329497918486595,
+            "median_s": 0.016326515392089885,
+            "repeats_s": [
+              0.016753559124966462,
+              0.016326515392089885,
+              0.015670471002037327
+            ]
+          },
+          "inference": {
+            "first_s": 3.159183645155281,
+            "median_s": 0.0025453216722235083,
+            "repeats_s": [
+              0.002493508150801063,
+              0.002556470497511327,
+              0.0025453216722235083
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 0.13402042584493756,
+            "median_s": 0.13191702426411211,
+            "repeats_s": [
+              0.13225042973645032,
+              0.13182797990739345,
+              0.13191702426411211
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 37.04187823692337
+        },
+        "empty": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:1",
+            "policy": "default",
+            "discrete": [
+              3
+            ],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-k9sxhx5k/bundle.json",
+            "output": "/tmp/glnis-native-compile-k9sxhx5k/empty.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-compile-k9sxhx5k/empty-cache",
+          "restore_load_s": 2.461209734901786,
+          "process_start_to_ready_s": 4.4606486121192575,
+          "parameters": 4045233,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 34.438027177006006,
+          "continuation_feedback_s": 34.28851630585268,
+          "training_after": {
+            "first_s": 0.019896662794053555,
+            "median_s": 0.0180192609783262,
+            "repeats_s": [
+              0.0180192609783262,
+              0.017424887837842108,
+              0.019768967231114706
+            ]
+          },
+          "inference": {
+            "first_s": 26.89056634483859,
+            "median_s": 0.0029000986693426965,
+            "repeats_s": [
+              0.0028296505799517034,
+              0.0029000986693426965,
+              0.002941276151686907
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 0.13529147394001484,
+            "median_s": 0.13202230469323695,
+            "repeats_s": [
+              0.13202230469323695,
+              0.13204850791953504,
+              0.13198341270908714
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 112.71128650614992
+        }
+      },
+      "probability_check": "passed"
+    },
+    {
+      "domain": "mixed",
+      "torch": "2.15.0+cu132",
+      "arguments": {
+        "device": "cuda:1",
+        "policy": "reduce-overhead",
+        "discrete": [
+          3
+        ],
+        "continuous": 6,
+        "layers": 4,
+        "units": 512,
+        "batch_size": 1000,
+        "bulk_size": 100000,
+        "warmup": 100,
+        "iterations": 30,
+        "inference_iterations": 100,
+        "bulk_iterations": 10,
+        "repeats": 3,
+        "resume": null,
+        "output": "/tmp/glnis-native-6d-diagnostics/mixed-reduce-overhead.json"
+      },
+      "hardware": "NVIDIA A30",
+      "cache_dir": "/tmp/glnis-native-6d-diagnostics/mixed-reduce-overhead-cache",
+      "construct_s": 1.6663525798358023,
+      "process_start_to_ready_s": 3.646709398832172,
+      "parameters": 4045233,
+      "training_before": {
+        "first_s": 110.58690903102979,
+        "median_s": 0.015448994856948653,
+        "repeats_s": [
+          0.015448994856948653,
+          0.015698252261305848,
+          0.015437857154756785
+        ]
+      },
+      "prepare_partial_s": 40.417277947068214,
+      "snapshot_s": 0.5479861409403384,
+      "snapshot_bytes": 114765201,
+      "snapshot_rng_unchanged": true,
+      "continuation_draw_s": 0.01584121584892273,
+      "continuation_feedback_s": 0.021284428890794516,
+      "training_after": {
+        "first_s": 0.0228080446831882,
+        "median_s": 0.016444030109172066,
+        "repeats_s": [
+          0.016444030109172066,
+          0.016225022512177625,
+          0.01783385790574054
+        ]
+      },
+      "inference": {
+        "first_s": 32.20327062206343,
+        "median_s": 0.002519743535667658,
+        "repeats_s": [
+          0.002259813752025366,
+          0.002519743535667658,
+          0.0025547060882672667
+        ]
+      },
+      "bulk_inference": {
+        "first_s": 43.62259190808982,
+        "median_s": 0.13138195308856665,
+        "repeats_s": [
+          0.13121646950021387,
+          0.13138195308856665,
+          0.13150435760617257
+        ]
+      },
+      "recovery": {
+        "reused": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:1",
+            "policy": "reduce-overhead",
+            "discrete": [
+              3
+            ],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-5schci93/bundle.json",
+            "output": "/tmp/glnis-native-compile-5schci93/reused.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-6d-diagnostics/mixed-reduce-overhead-cache",
+          "restore_load_s": 2.2432667249813676,
+          "process_start_to_ready_s": 4.035198568832129,
+          "parameters": 4045233,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 5.809234919957817,
+          "continuation_feedback_s": 2.647413659375161,
+          "training_after": {
+            "first_s": 2.188735308125615,
+            "median_s": 0.014799099989856283,
+            "repeats_s": [
+              0.014696160533155004,
+              0.01511694233243664,
+              0.014799099989856283
+            ]
+          },
+          "inference": {
+            "first_s": 2.13355326699093,
+            "median_s": 0.0022050135396420954,
+            "repeats_s": [
+              0.0022050135396420954,
+              0.0022155059780925514,
+              0.0021565062319859863
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 2.159689397085458,
+            "median_s": 0.13133347118273378,
+            "repeats_s": [
+              0.13091729846782982,
+              0.1314175755251199,
+              0.13133347118273378
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_continuous": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "module": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "optimizer": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "losses": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            }
+          },
+          "exact_recovery": "passed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 30.767668418120593
+        },
+        "empty": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:1",
+            "policy": "reduce-overhead",
+            "discrete": [
+              3
+            ],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-5schci93/bundle.json",
+            "output": "/tmp/glnis-native-compile-5schci93/empty.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-compile-5schci93/empty-cache",
+          "restore_load_s": 2.340384936891496,
+          "process_start_to_ready_s": 4.324182038195431,
+          "parameters": 4045233,
+          "loaded_state_exact": true,
+          "continuation_draw_s": 20.251278670039028,
+          "continuation_feedback_s": 31.57488066703081,
+          "training_after": {
+            "first_s": 16.543680923990905,
+            "median_s": 0.01615995611064136,
+            "repeats_s": [
+              0.01615995611064136,
+              0.016073331066096822,
+              0.01623127542746564
+            ]
+          },
+          "inference": {
+            "first_s": 20.47739218780771,
+            "median_s": 0.0024392959335818886,
+            "repeats_s": [
+              0.002368711940944195,
+              0.0024392959335818886,
+              0.002568710083141923
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 17.53184710070491,
+            "median_s": 0.13099131379276513,
+            "repeats_s": [
+              0.1308774223085493,
+              0.13099131379276513,
+              0.13115268847905098
+            ]
+          },
+          "recovery_tolerance": {
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "discrete": "exact"
+          },
+          "recovery_differences": {
+            "continuation.xs_continuous": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 1875,
+              "max_abs": 6.661338147750939e-16
+            },
+            "continuation.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "continuation.weights": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 485,
+              "max_abs": 4.973799150320701e-14
+            },
+            "inference.xs_continuous": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 4307,
+              "max_abs": 8.881784197001252e-16
+            },
+            "inference.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "inference.weights": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 969,
+              "max_abs": 9.14823772291129e-14
+            },
+            "bulk.xs_continuous": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 400139,
+              "max_abs": 1.3322676295501878e-15
+            },
+            "bulk.xs_discrete": {
+              "exact": true,
+              "within_tolerance": true,
+              "different_elements": 0,
+              "max_abs": 0.0
+            },
+            "bulk.weights": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 96134,
+              "max_abs": 1.4921397450962104e-13
+            },
+            "module": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 268417,
+              "max_abs": 1.294103713078698e-15
+            },
+            "optimizer": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 608740,
+              "max_abs": 4.456070928915423e-17
+            },
+            "losses": {
+              "exact": false,
+              "within_tolerance": true,
+              "different_elements": 192,
+              "max_abs": 5.765787153277913e-16
+            }
+          },
+          "exact_recovery": "failed",
+          "numerical_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 122.8904835069552
+        }
+      },
+      "probability_check": "passed"
+    }
+  ],
+  "initial_strict_cuda_graph_failures": [
+    {
+      "domain": "continuous",
+      "torch": "2.15.0+cu132",
+      "arguments": {
+        "device": "cuda:0",
+        "policy": "reduce-overhead",
+        "discrete": [],
+        "continuous": 6,
+        "layers": 4,
+        "units": 512,
+        "batch_size": 1000,
+        "bulk_size": 100000,
+        "warmup": 100,
+        "iterations": 30,
+        "inference_iterations": 100,
+        "bulk_iterations": 10,
+        "repeats": 3,
+        "resume": null,
+        "output": "/tmp/glnis-native-6d/continuous-reduce-overhead.json"
+      },
+      "hardware": "NVIDIA A30",
+      "cache_dir": "/tmp/glnis-native-6d/continuous-reduce-overhead-cache",
+      "construct_s": 1.506681984756142,
+      "process_start_to_ready_s": 3.3906186749227345,
+      "parameters": 3450414,
+      "training_before": {
+        "first_s": 83.22322749719024,
+        "median_s": 0.013262877721960347,
+        "repeats_s": [
+          0.01287634326145053,
+          0.013262877721960347,
+          0.013383925535405676
+        ]
+      },
+      "prepare_partial_s": 31.21689548669383,
+      "snapshot_s": 0.34730428270995617,
+      "snapshot_bytes": 97846101,
+      "continuation_draw_s": 0.013011360075324774,
+      "continuation_feedback_s": 0.01415526494383812,
+      "training_after": {
+        "first_s": 0.014178745914250612,
+        "median_s": 0.013194286466265718,
+        "repeats_s": [
+          0.01385348099283874,
+          0.01271873526275158,
+          0.013194286466265718
+        ]
+      },
+      "inference": {
+        "first_s": 1.6465200912207365,
+        "median_s": 0.0018746840208768844,
+        "repeats_s": [
+          0.0018746840208768844,
+          0.0018342663487419487,
+          0.001900921519845724
+        ]
+      },
+      "bulk_inference": {
+        "first_s": 36.49647200712934,
+        "median_s": 0.10635671140626073,
+        "repeats_s": [
+          0.1063235831912607,
+          0.10635671140626073,
+          0.10647183689288794
+        ]
+      },
+      "recovery": {
+        "reused": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:0",
+            "policy": "reduce-overhead",
+            "discrete": [],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-e_v3lazg/bundle.json",
+            "output": "/tmp/glnis-native-compile-e_v3lazg/reused.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-6d/continuous-reduce-overhead-cache",
+          "restore_load_s": 2.1636853679083288,
+          "process_start_to_ready_s": 4.076473197899759,
+          "parameters": 3450414,
+          "continuation_draw_s": 4.439399075228721,
+          "continuation_feedback_s": 2.1144861429929733,
+          "training_after": {
+            "first_s": 2.287416045088321,
+            "median_s": 0.011752446896086137,
+            "repeats_s": [
+              0.011908372833083073,
+              0.011752446896086137,
+              0.011568002868443727
+            ]
+          },
+          "inference": {
+            "first_s": 1.575903382152319,
+            "median_s": 0.0017598211206495762,
+            "repeats_s": [
+              0.0017598211206495762,
+              0.0017574888095259666,
+              0.00176609065849334
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 2.0704218801110983,
+            "median_s": 0.10635623480193317,
+            "repeats_s": [
+              0.10633768979460001,
+              0.10635623480193317,
+              0.10650165248662233
+            ]
+          },
+          "exact_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 25.32353958999738
+        },
+        "empty": {
+          "error": "Traceback (most recent call last):\n  File \"/shared/codex-2/nfink/gammaboard_nis/benchmarks/orchestrator_compile.py\", line 209, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/shared/codex-2/nfink/gammaboard_nis/benchmarks/orchestrator_compile.py\", line 171, in main\n    np.testing.assert_array_equal(getattr(state[name], field), getattr(expected[name], field))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/shared/codex-2/nfink/gammaboard_nis/.venv/lib/python3.13/site-packages/numpy/testing/_private/utils.py\", line 1128, in assert_array_equal\n    assert_array_compare(operator.__eq__, actual, desired, err_msg=err_msg,\n    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                         verbose=verbose, header='Arrays are not equal',\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                         strict=strict)\n                         ^^^^^^^^^^^^^^\n  File \"/shared/codex-2/nfink/gammaboard_nis/.venv/lib/python3.13/site-packages/numpy/testing/_private/utils.py\", line 988, in assert_array_compare\n    raise AssertionError(msg)\nAssertionError: \nArrays are not equal\n\nMismatched elements: 1494 / 3000 (49.8%)\nFirst 5 mismatches are at indices:\n [0, 2]: 0.71447272062804 (ACTUAL), 0.7144727206280399 (DESIRED)\n [0, 5]: 0.8407231146139604 (ACTUAL), 0.8407231146139603 (DESIRED)\n [1, 0]: 0.923162541506314 (ACTUAL), 0.9231625415063139 (DESIRED)\n [1, 1]: 0.46503007676766456 (ACTUAL), 0.4650300767676646 (DESIRED)\n [1, 2]: 0.2548175036856378 (ACTUAL), 0.25481750368563777 (DESIRED)\nMax absolute difference among violations: 5.55111512e-16\nMax relative difference among violations: 8.4563097e-16\n ACTUAL: array([[0.329672, 0.988033, 0.714473, 0.523554, 0.863712, 0.840723],\n       [0.923163, 0.46503 , 0.254818, 0.531245, 0.215959, 0.30461 ],\n       [0.741018, 0.799288, 0.252766, 0.817784, 0.992594, 0.783323],...\n DESIRED: array([[0.329672, 0.988033, 0.714473, 0.523554, 0.863712, 0.840723],\n       [0.923163, 0.46503 , 0.254818, 0.531245, 0.215959, 0.30461 ],\n       [0.741018, 0.799288, 0.252766, 0.817784, 0.992594, 0.783323],...\n",
+          "stdout": "Restoring reduce-overhead cuda:0\nMeasuring post-checkpoint training/inference reduce-overhead cuda:0\n",
+          "worker_wall_s": 87.2822705800645
+        }
+      },
+      "probability_check": "passed"
+    },
+    {
+      "domain": "mixed",
+      "torch": "2.15.0+cu132",
+      "arguments": {
+        "device": "cuda:1",
+        "policy": "reduce-overhead",
+        "discrete": [
+          3
+        ],
+        "continuous": 6,
+        "layers": 4,
+        "units": 512,
+        "batch_size": 1000,
+        "bulk_size": 100000,
+        "warmup": 100,
+        "iterations": 30,
+        "inference_iterations": 100,
+        "bulk_iterations": 10,
+        "repeats": 3,
+        "resume": null,
+        "output": "/tmp/glnis-native-6d/mixed-reduce-overhead.json"
+      },
+      "hardware": "NVIDIA A30",
+      "cache_dir": "/tmp/glnis-native-6d/mixed-reduce-overhead-cache",
+      "construct_s": 1.477676133159548,
+      "process_start_to_ready_s": 3.303115278016776,
+      "parameters": 4045233,
+      "training_before": {
+        "first_s": 103.98442663438618,
+        "median_s": 0.014839124974484245,
+        "repeats_s": [
+          0.01458535430332025,
+          0.014839124974484245,
+          0.01520098107866943
+        ]
+      },
+      "prepare_partial_s": 38.91098662931472,
+      "snapshot_s": 0.4405327602289617,
+      "snapshot_bytes": 114764625,
+      "continuation_draw_s": 0.015464400872588158,
+      "continuation_feedback_s": 0.016121264081448317,
+      "training_after": {
+        "first_s": 0.017865290865302086,
+        "median_s": 0.016364924671749274,
+        "repeats_s": [
+          0.016172008278469246,
+          0.016364924671749274,
+          0.016499201223875087
+        ]
+      },
+      "inference": {
+        "first_s": 33.34460289403796,
+        "median_s": 0.0023003222700208425,
+        "repeats_s": [
+          0.0023003222700208425,
+          0.002348245871253312,
+          0.002270420962013304
+        ]
+      },
+      "bulk_inference": {
+        "first_s": 40.12095506489277,
+        "median_s": 0.1315578613895923,
+        "repeats_s": [
+          0.1318949606269598,
+          0.1315578613895923,
+          0.1312116310931742
+        ]
+      },
+      "recovery": {
+        "reused": {
+          "torch": "2.15.0+cu132",
+          "arguments": {
+            "device": "cuda:1",
+            "policy": "reduce-overhead",
+            "discrete": [
+              3
+            ],
+            "continuous": 6,
+            "layers": 4,
+            "units": 512,
+            "batch_size": 1000,
+            "bulk_size": 100000,
+            "warmup": 100,
+            "iterations": 30,
+            "inference_iterations": 100,
+            "bulk_iterations": 10,
+            "repeats": 3,
+            "resume": "/tmp/glnis-native-compile-5qrsqlep/bundle.json",
+            "output": "/tmp/glnis-native-compile-5qrsqlep/reused.json"
+          },
+          "hardware": "NVIDIA A30",
+          "cache_dir": "/tmp/glnis-native-6d/mixed-reduce-overhead-cache",
+          "restore_load_s": 1.959409998729825,
+          "process_start_to_ready_s": 4.010185021907091,
+          "parameters": 4045233,
+          "continuation_draw_s": 5.071946679614484,
+          "continuation_feedback_s": 2.5202741473913193,
+          "training_after": {
+            "first_s": 2.131165857426822,
+            "median_s": 0.015174540923908353,
+            "repeats_s": [
+              0.015174540923908353,
+              0.015219421467433374,
+              0.015014373666296403
+            ]
+          },
+          "inference": {
+            "first_s": 2.193123138975352,
+            "median_s": 0.002347091129049659,
+            "repeats_s": [
+              0.0024501474387943743,
+              0.002338610803708434,
+              0.002347091129049659
+            ]
+          },
+          "bulk_inference": {
+            "first_s": 2.567771148867905,
+            "median_s": 0.1311776453629136,
+            "repeats_s": [
+              0.13099961252883077,
+              0.1311776453629136,
+              0.13149679359048605
+            ]
+          },
+          "exact_recovery": "passed",
+          "probability_check": "passed",
+          "worker_wall_s": 29.578671019989997
+        },
+        "empty": {
+          "error": "Traceback (most recent call last):\n  File \"/shared/codex-2/nfink/gammaboard_nis/benchmarks/orchestrator_compile.py\", line 209, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/shared/codex-2/nfink/gammaboard_nis/benchmarks/orchestrator_compile.py\", line 171, in main\n    np.testing.assert_array_equal(getattr(state[name], field), getattr(expected[name], field))\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/shared/codex-2/nfink/gammaboard_nis/.venv/lib/python3.13/site-packages/numpy/testing/_private/utils.py\", line 1128, in assert_array_equal\n    assert_array_compare(operator.__eq__, actual, desired, err_msg=err_msg,\n    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                         verbose=verbose, header='Arrays are not equal',\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                         strict=strict)\n                         ^^^^^^^^^^^^^^\n  File \"/shared/codex-2/nfink/gammaboard_nis/.venv/lib/python3.13/site-packages/numpy/testing/_private/utils.py\", line 988, in assert_array_compare\n    raise AssertionError(msg)\nAssertionError: \nArrays are not equal\n\nMismatched elements: 3779 / 6000 (63%)\nFirst 5 mismatches are at indices:\n [0, 1]: 0.8128414999419661 (ACTUAL), 0.812841499941966 (DESIRED)\n [0, 2]: 0.9106670702791901 (ACTUAL), 0.9106670702791904 (DESIRED)\n [1, 0]: 0.08068836317909199 (ACTUAL), 0.08068836317909196 (DESIRED)\n [1, 4]: 0.046671104186095685 (ACTUAL), 0.04667110418609568 (DESIRED)\n [1, 5]: 0.025314343555104125 (ACTUAL), 0.02531434355510413 (DESIRED)\nMax absolute difference among violations: 6.66133815e-16\nMax relative difference among violations: 1.0884209e-15\n ACTUAL: array([[0.436363, 0.812841, 0.910667, 0.981927, 0.073012, 0.194119],\n       [0.080688, 0.163918, 0.820087, 0.979929, 0.046671, 0.025314],\n       [0.792223, 0.442917, 0.530712, 0.086433, 0.914969, 0.484431],...\n DESIRED: array([[0.436363, 0.812841, 0.910667, 0.981927, 0.073012, 0.194119],\n       [0.080688, 0.163918, 0.820087, 0.979929, 0.046671, 0.025314],\n       [0.792223, 0.442917, 0.530712, 0.086433, 0.914969, 0.484431],...\n",
+          "stdout": "Restoring reduce-overhead cuda:1\nMeasuring post-checkpoint training/inference reduce-overhead cuda:1\n",
+          "worker_wall_s": 121.00249432213604
+        }
+      },
+      "probability_check": "passed"
+    }
+  ]
+}

@@ -10,6 +10,10 @@ continuous dimensions and larger MLPs, comparing a continuous-only proposal with
 one that also samples a three-way discrete choice. It measures proposal execution
 and training costs. Production defaults to eager, with compilation available
 through [orchestrator execution settings](../configuration/orchestrators.md#execution-and-compilation).
+The follow-up [native execution and recovery report](compilation-native-6d.md)
+measures this architecture through the public adapter and includes checkpoint
+creation and fresh-worker recovery. This page preserves the earlier tensor-method
+measurements.
 
 ## Models and measurement
 

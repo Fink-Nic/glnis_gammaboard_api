@@ -67,9 +67,9 @@ settings is rejected during exact recovery. Configuration-less metadata require
 metadata key is read as the combined pending mapping weights; new snapshots write
 `pending_mapping_weights`.
 
-Restoring on the same device/precision setup retains the tested numerical
-continuation. Device or precision overrides can change numerical results; they
-are not a promise of bit-identical cross-device execution.
+Restoring retains the saved numerical state and RNG states. Subsequent bitwise
+continuation also depends on the execution environment, including compiler
+artifacts. Device or precision overrides can change numerical results.
 
 Execution callables are runtime objects, outside the serialized module. Saving a
 checkpoint retains the raw module and training state without compilation. Restore
@@ -78,6 +78,10 @@ last; compilation happens lazily on first use and may reuse compatible PyTorch
 caches. Switching eager/compiled policies or compiler settings can change random
 streams and arithmetic and is not a promise of bitwise-identical continuation.
 No compiler cache is required to read the checkpoint.
+The [native six-dimensional benchmark](compilation-native-6d.md) recovered
+bitwise with reused compiler artifacts. With an empty Inductor cache, some CUDA
+graph runs differed at floating-point roundoff despite exactly restored state;
+fresh compilation is not a guarantee of bitwise continuation.
 The checkpoint is initially read on CPU; module/buffer placement and optimizer
 loading then move the appropriate tensors, preserving Adam's CPU step counters.
 

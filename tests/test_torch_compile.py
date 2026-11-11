@@ -14,7 +14,7 @@ from glnis.core.nn.sampler_module import MixedFlow, SamplerModule
 @pytest.mark.parametrize("cardinalities,continuous", [((), 3), ((2, 3), 3), ((2, 3), 0)])
 def test_compiled_methods_preserve_conditioned_probabilities_and_gradients(
         sampler_settings, discrete_first, cardinalities, continuous):
-    settings = deepcopy(sampler_settings["sampler"])
+    settings = deepcopy(sampler_settings["module"])
     settings.pop("kind")
     model = MixedFlow(RectangularDomain(cardinalities, continuous), dims_c=2,
                       discrete_dims_first=discrete_first, **settings)
@@ -44,7 +44,7 @@ def test_compiled_methods_preserve_conditioned_probabilities_and_gradients(
 
 
 def test_support_changes_do_not_change_graph_shape(sampler_settings):
-    settings = deepcopy(sampler_settings["sampler"])
+    settings = deepcopy(sampler_settings["module"])
     settings.pop("kind")
     model = MixedFlow(RectangularDomain((), 3), **settings)
     graphs = []
@@ -79,7 +79,7 @@ def test_spline_outside_rows_have_identity_gradients(inverse):
 
 
 def test_compiled_callables_stay_outside_snapshot(sampler_settings):
-    settings = deepcopy(sampler_settings["sampler"])
+    settings = deepcopy(sampler_settings["module"])
     settings.pop("kind")
     model = MixedFlow(RectangularDomain((2, 3), 3), **settings)
     # Simulate a checkpoint written before integer coordinate indices existed.

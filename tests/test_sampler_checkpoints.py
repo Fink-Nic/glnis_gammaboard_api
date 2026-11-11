@@ -158,3 +158,27 @@ def test_stage_normalizes_legacy_loss_and_scheduler_overrides(tmp_path, sampler_
                                          init_args={"orchestrator": {"loss_type": "variance", "use_scheduler": False}})
     assert stage.orchestrator.cfg.loss == {"kind": "variance"}
     assert stage.orchestrator.scheduler is None
+
+
+def test_legacy_module_names_migrate_only_when_reading_checkpoints(tmp_path, sampler_settings):
+    source = GammaBoardSampler(domain=RectangularDomain((2,), 2), save_path=str(tmp_path / "old.pt"), **sampler_settings)
+    batch = source.generate(3)
+    snapshot = source.snapshot()
+    snapshot["config"]["sampler"] = snapshot["config"].pop("module")
+    saved = snapshot["orchestrator_snapshot"]["cfg_kwargs"]
+    saved["sampler_kwargs"] = saved.pop("module_kwargs")
+    original = deepcopy(snapshot)
+    restored = GammaBoardSampler.from_snapshot(snapshot=snapshot, domain=source.domain)
+    assert snapshot == original
+    assert restored.cfg.module == source.cfg.module
+    assert restored.orchestrator.cfg.module_kwargs == source.cfg.module
+    restored.feedback(Feedback(values(batch)))
+    rewritten = restored.snapshot()
+    assert "sampler" not in rewritten["config"]
+    assert "sampler_kwargs" not in rewritten["orchestrator_snapshot"]["cfg_kwargs"]
+    stage = GammaBoardSampler.from_stage(source_state=snapshot, source_args={}, init_args={}, domain=source.domain)
+    assert stage.cfg.module == source.cfg.module
+    assert stage.orchestrator.training_status.num_generated == 0
+    with pytest.raises(ValueError, match="module"):
+        GammaBoardSampler.from_snapshot(snapshot=snapshot, domain=source.domain,
+            init_args={"module": {"flow": {"subnet": {"units": 16}}}})

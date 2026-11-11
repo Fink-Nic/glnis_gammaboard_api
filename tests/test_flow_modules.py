@@ -43,7 +43,7 @@ def test_transformer_generation_equals_probability_and_prefix_sums(dimensions, c
 @pytest.mark.parametrize("subnet", ["mlp", "mlp fully conditioned"])
 @pytest.mark.parametrize("discrete_first", [True, False])
 def test_mixed_flow_external_conditioning(sampler_settings, subnet, discrete_first):
-    settings = sampler_settings["sampler"]
+    settings = sampler_settings["module"]
     settings.pop("kind")
     settings["flow"]["subnet"]["kind"] = subnet
     settings["discrete"]["subnet"]["kind"] = subnet

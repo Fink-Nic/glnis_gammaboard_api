@@ -8,7 +8,7 @@ TOML has no null literal.
 ## Two nesting conventions
 
 GammaBoard's sampler process `args` object is passed directly to
-`GammaBoardSampler(domain=..., evaluator_metadata=..., **args)`. Its `sampler`
+`GammaBoardSampler(domain=..., evaluator_metadata=..., **args)`. Its `module`
 key selects the proposal module and its `orchestrator` key selects orchestration.
 GammaBoard supplies the domain separately.
 
@@ -17,13 +17,14 @@ arguments, alongside `[integrand]` and `[aggregator]`:
 
 ```text
 sampler                         GammaBoardSampler arguments
-  sampler                       proposal module
+  module                        proposal module
     flow                        continuous flow
       subnet, spline            coupling-network and spline configuration
     discrete                    discrete proposal
       subnet                    transformer output network
   orchestrator                  generation and training
     loss, scheduler             training components
+    execution                   eager/compiled runtime policy
   mapping, parser,
   graph_properties,
   evaluator_metadata            optional coordinate mapping inputs
@@ -31,7 +32,7 @@ integrand                       local numerical integrand
 aggregator                      local execution and evaluation settings
 ```
 
-The reference pages use local TOML paths such as `sampler.sampler.flow`.
+The reference pages use local TOML paths such as `sampler.module.flow`.
 Remove only the outer `sampler` level when constructing a process `args` object
 or passing keyword arguments directly to the Python sampler.
 
@@ -43,13 +44,14 @@ current defaults for the sampler stack:
 | Table | Default `kind` | Reference |
 | --- | --- | --- |
 | `sampler.orchestrator` | `rectangular` | [Orchestrators](orchestrators.md) |
-| `sampler.sampler` | `mixed flow` | [Models](models.md) |
-| `sampler.sampler.flow` | `coupling` | [Models](models.md#continuous-flow) |
-| `sampler.sampler.flow.spline` | `rqs` | [Models](models.md#spline) |
-| Flow/transformer `subnet` | `mlp` | [Models](models.md#subnets) |
-| `sampler.sampler.discrete` | `transformer` | [Models](models.md#discrete-flow) |
+| `sampler.module` | `mixed flow` | [Modules](modules.md) |
+| `sampler.module.flow` | `coupling` | [Modules](modules.md#continuous-flow) |
+| `sampler.module.flow.spline` | `rqs` | [Modules](modules.md#spline) |
+| Flow/transformer `subnet` | `mlp` | [Modules](modules.md#subnets) |
+| `sampler.module.discrete` | `transformer` | [Modules](modules.md#discrete-flow) |
 | `sampler.orchestrator.loss` | `kl_divergence` | [Losses](orchestrators.md#losses) |
 | `sampler.orchestrator.scheduler` | `cosineannealing` | [Schedulers](orchestrators.md#schedulers) |
+| `sampler.orchestrator.execution` | `eager` | [Execution](orchestrators.md#execution-and-compilation) |
 
 Mapping layers require an explicit `kind`. The adapter itself accepts only
 `kind="default"`; this is distinct from the proposal module's `kind`.

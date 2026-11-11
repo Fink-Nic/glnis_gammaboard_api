@@ -1,14 +1,14 @@
-# Proposal models
+# Proposal modules
 
 These paths assume local TOML nesting. Direct sampler construction uses the
-contents of `sampler.sampler` as its `sampler` argument. Dimensions and external
+contents of `sampler.module` as its `module` argument. Dimensions and external
 conditioning widths are supplied by the caller/domain, not repeated in these tables.
 
 ## Mixed flow
 
 Source: [MixedFlowConfig](../../src/glnis/core/nn/sampler_module.py).
 
-| Option under `sampler.sampler` | Type | Default | Meaning |
+| Option under `sampler.module` | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `kind` | string | `mixed flow` | Registered rectangular sampler module |
 | `discrete_dims_first` | boolean | `true` | Factorize as discrete proposal followed by a conditionally continuous proposal |
@@ -23,7 +23,7 @@ dimensions are present. Purely continuous and purely discrete domains are suppor
 
 Source: [FlowConfig](../../src/glnis/core/nn/flow/continuous_flow.py).
 
-| Option under `sampler.sampler.flow` | Type | Default | Meaning / constraint |
+| Option under `sampler.module.flow` | Type | Default | Meaning / constraint |
 | --- | --- | --- | --- |
 | `kind` | string | `coupling` | Coupling-block flow |
 | `permutations` | `log`, `random`, or `exchange` | `log` | Strategy for selecting conditioning coordinates |
@@ -41,7 +41,7 @@ The latent distribution is uniform on the unit cube. The retired
 
 Source: [TransformerConfig](../../src/glnis/core/nn/flow/discrete_flow.py).
 
-| Option under `sampler.sampler.discrete` | Type | Default | Meaning |
+| Option under `sampler.module.discrete` | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `kind` | string | `transformer` | Autoregressive discrete transformer |
 | `embedding_dim` | integer | `64` | Embedding width; must be compatible with `heads` |
@@ -84,7 +84,7 @@ channel routing. Its caller must honor its supported channel/batch layout.
 
 Source: [RQSConfig](../../src/glnis/core/nn/flow/spline_transform.py).
 
-| Option under `sampler.sampler.flow.spline` | Default | Meaning |
+| Option under `sampler.module.flow.spline` | Default | Meaning |
 | --- | --- | --- |
 | `kind` | `rqs` | Rational quadratic spline |
 | `bins` | `10` | Number of bins |

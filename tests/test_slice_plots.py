@@ -46,9 +46,9 @@ def comparison(tmp_path_factory):
             "integrand": {"kind": "sine", "continuous_dims": 2, "omega": 2, "offset": 0.1},
             "aggregator": {"inference_samples": 16, "evaluation_batch_size": 4, "log_every": 0},
             "sampler": {"orchestrator": {"training_steps": 1, "training_batch_size": 16, "max_batch_size": 8, "use_gpu": False},
-                        "sampler": {"flow": {"subnet": {"layers": 2, "units": 8}, "spline": {"bins": 4}}}},
-            "samplers": [{"name": "default"}, {"name": "small", "sampler": {"flow": {"subnet": {"units": 4}}}},
-                         {"name": "large", "sampler": {"flow": {"subnet": {"units": 16}}}}],
+                        "module": {"flow": {"subnet": {"layers": 2, "units": 8}, "spline": {"bins": 4}}}},
+            "samplers": [{"name": "default"}, {"name": "small", "module": {"flow": {"subnet": {"units": 4}}}},
+                         {"name": "large", "module": {"flow": {"subnet": {"units": 16}}}}],
             **slice_settings(),
         })
     finally:
@@ -165,7 +165,7 @@ def test_mapped_pdf_slices_use_physical_coordinates_outside_unit_cube(tmp_path):
     run_config = {
         "sampler": {
             "orchestrator": {"use_gpu": False, "training_steps": 0, "max_batch_size": 4},
-            "sampler": {"flow": {"subnet": {"layers": 2, "units": 8}, "spline": {"bins": 4}}},
+            "module": {"flow": {"subnet": {"layers": 2, "units": 8}, "spline": {"bins": 4}}},
             "mapping": {"layer_cfgs": [{"kind": "spherical"}]},
             "graph_properties": {"edge_masses": [0.0], "edge_momentum_shifts": [[0.0, 0.0, 0.0]],
                                  "graph_signature": [[1]], "lmb_edges": [[0]], "generation_lmb_edges": [0]},

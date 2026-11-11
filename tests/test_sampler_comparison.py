@@ -43,7 +43,7 @@ def settings(tmp_path):
         "integrand": {"kind": "sine", "continuous_dims": 2, "offset": 2.0},
         "aggregator": {"inference_samples": 7, "log_every": 0},
         "sampler": {"orchestrator": {"use_gpu": False, "training_steps": 2, "training_batch_size": 4, "max_batch_size": 3},
-                    "sampler": {"flow": {"subnet": {"layers": 2, "units": 8}, "spline": {"bins": 4}}}},
+                    "module": {"flow": {"subnet": {"layers": 2, "units": 8}, "spline": {"bins": 4}}}},
         "samplers": [{"name": "narrow", "orchestrator": {"seed": 1}},
                      {"name": "wide", "orchestrator": {"seed": 2, "training_batch_size": 6}}],
     }
@@ -197,10 +197,10 @@ training_steps = 1
 training_batch_size = 5
 max_batch_size = 3
 use_gpu = false
-[sampler.sampler.flow.subnet]
+[sampler.module.flow.subnet]
 layers = 2
 units = 8
-[sampler.sampler.flow.spline]
+[sampler.module.flow.spline]
 bins = 4
 [[samplers]]
 name = "first"
@@ -272,7 +272,7 @@ def test_completed_checkpoints_restore_proposals_and_survive_relocation(tmp_path
     config["sampler"]["orchestrator"].update(training_steps=1, training_batch_size=64, max_batch_size=32)
     config["samplers"] = [
         {"name": "../default label"},
-        {"name": "small", "sampler": {"flow": {"subnet": {"units": 4}}}},
+        {"name": "small", "module": {"flow": {"subnet": {"units": 4}}}},
         {"name": "variance", "orchestrator": {"loss": {"kind": "variance"}}},
     ]
     expected = []

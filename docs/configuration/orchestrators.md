@@ -4,6 +4,10 @@ The current orchestrator is `kind="rectangular"`. Options below belong under
 `[sampler.orchestrator]` in local TOML. Source:
 [RectangularOrchestratorConfig](../../src/glnis/core/nn/orchestrator.py).
 
+Direct orchestrator construction accepts `module_kwargs` for the proposal
+configuration. Through `GammaBoardSampler`, set the adapter's `module` argument
+(`[sampler.module]` in local TOML); the adapter routes it to `module_kwargs`.
+
 | Option | Type | Default | Meaning / constraint |
 | --- | --- | --- | --- |
 | `kind` | string | `rectangular` | Registered orchestrator implementation |
@@ -67,8 +71,9 @@ Training generation uses `no_grad`; completed runs use `eval` and
 Execution settings are saved as metadata and may be overridden on restore;
 compiled callables are rebuilt outside the serialized module. Saving a checkpoint
 does not compile or warm up anything. See [recovery semantics](../implementation/checkpoints-and-stages.md)
-and the [six-dimensional performance report](../implementation/compilation-6d.md)
-for startup costs and the observed float32 gradient discrepancy.
+and the [native six-dimensional report](../implementation/compilation-native-6d.md)
+for checkpoint/recovery costs. The earlier [tensor-method report](../implementation/compilation-6d.md)
+also covers the observed float32 gradient discrepancy.
 
 ## Losses
 

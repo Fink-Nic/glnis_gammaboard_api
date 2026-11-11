@@ -24,7 +24,7 @@ from glnis.utils.types import BuildFromKind, Config, RectangularTrainingStatus
 @dataclass
 class OrchestratorConfig(Config):
     save_path: str | None = None
-    sampler_kwargs: dict = field(default_factory=dict)
+    module_kwargs: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -32,6 +32,14 @@ class OrchestratorSnapshot:
     kind: str
     save_path: str
     cfg_kwargs: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.cfg_kwargs = deepcopy(self.cfg_kwargs)
+        if "sampler_kwargs" in self.cfg_kwargs:
+            legacy = self.cfg_kwargs.pop("sampler_kwargs")
+            if "module_kwargs" in self.cfg_kwargs and self.cfg_kwargs["module_kwargs"] != legacy:
+                raise ValueError("conflicting module_kwargs in checkpoint")
+            self.cfg_kwargs["module_kwargs"] = legacy
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -87,11 +95,11 @@ class RectangularOrchestratorConfig(OrchestratorConfig):
             raise ValueError("orchestrator.seed must be a nonnegative integer or None")
         if not np.isfinite(self.learning_rate) or self.learning_rate <= 0:
             raise ValueError("orchestrator.learning_rate must be positive and finite")
-        if not isinstance(self.sampler_kwargs, dict) or not isinstance(self.loss, dict) or not isinstance(self.execution, dict):
-            raise ValueError("sampler_kwargs, loss and execution must be configuration tables")
+        if not isinstance(self.module_kwargs, dict) or not isinstance(self.loss, dict) or not isinstance(self.execution, dict):
+            raise ValueError("module_kwargs, loss and execution must be configuration tables")
         if self.scheduler is not None and not isinstance(self.scheduler, dict):
             raise ValueError("scheduler must be a configuration table or None")
-        self.sampler_kwargs = deepcopy(self.sampler_kwargs)
+        self.module_kwargs = deepcopy(self.module_kwargs)
         self.loss = deepcopy(self.loss)
         self.scheduler = deepcopy(self.scheduler)
         self.execution = deepcopy(self.execution)
@@ -179,7 +187,7 @@ class RectangularOrchestrator(Orchestrator):
             if self.cfg.seed is not None:
                 torch.manual_seed(self.cfg.seed)
             self.module = RectangularSamplerModule.from_kwargs(
-                domain=domain, dims_c=dims_c, **self.cfg.sampler_kwargs)
+                domain=domain, dims_c=dims_c, **self.cfg.module_kwargs)
         else:
             self.module = RectangularSamplerModule.from_snapshot(snapshot_data.module_snapshot)
             if self.module.domain.require_rectangular_shape() != domain.require_rectangular_shape():
@@ -264,7 +272,7 @@ class RectangularOrchestrator(Orchestrator):
     def _from_stage(cls, domain, snapshot, cfg=None, **kwargs):
         saved = RectangularOrchestratorConfig.from_kwargs(**snapshot.cfg_kwargs)
         effective = cfg or RectangularOrchestratorConfig.from_kwargs(**{**saved.to_dict(), **kwargs})
-        if effective.sampler_kwargs != saved.sampler_kwargs:
+        if effective.module_kwargs != saved.module_kwargs:
             raise ValueError("stage handoff cannot change the sampler module architecture")
         return cls(domain=domain, cfg=effective, snapshot=snapshot, fresh_training=True)
 

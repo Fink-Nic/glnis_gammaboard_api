@@ -57,7 +57,7 @@ def _merge_config(base: dict, overrides: dict) -> dict:
 @dataclass
 class GammaBoardSamplerConfig(Config):
     save_path: str | None = None
-    sampler: dict[str, Any] | None = None
+    module: dict[str, Any] | None = None
     orchestrator: dict[str, Any] | None = None
     evaluator_metadata: dict[str, Any] | None = None
     parser: dict[str, Any] | None = None
@@ -65,13 +65,15 @@ class GammaBoardSamplerConfig(Config):
     graph_properties: dict[str, Any] | None = None
 
     def __post_init__(self):
-        for name in ("sampler", "orchestrator", "evaluator_metadata", "parser", "mapping", "graph_properties"):
+        for name in ("module", "orchestrator", "evaluator_metadata", "parser", "mapping", "graph_properties"):
             value = getattr(self, name)
             if value is not None and not isinstance(value, dict):
                 raise ValueError(f"{name} must be a configuration table")
             setattr(self, name, deepcopy(value))
-        self.sampler = self.sampler or {}
+        self.module = self.module or {}
         self.orchestrator = self.orchestrator or {}
+        if "module_kwargs" in self.orchestrator:
+            raise ValueError("configure the proposal through module, not orchestrator.module_kwargs")
 
 
 @dataclass
@@ -83,11 +85,17 @@ class GammaBoardSamplerSnapshot:
     domain: dict[str, Any] | None = None
 
     @classmethod
-    def from_dict(cls, snapshot: dict[str, Any]) -> Self:
-        values = deepcopy(snapshot)
+    def from_dict(cls, snapshot: dict[str, Any] | Self) -> Self:
+        values = asdict(snapshot) if isinstance(snapshot, cls) else deepcopy(snapshot)
         # Older checkpoints called the combined Jacobian/partition factor a Jacobian.
         if "pending_mapping_jac" in values:
             values.setdefault("pending_mapping_weights", values.pop("pending_mapping_jac"))
+        config = values.get("config") or {}
+        if "sampler" in config:
+            legacy = config.pop("sampler")
+            if "module" in config and config["module"] != legacy:
+                raise ValueError("conflicting module configuration in checkpoint")
+            config["module"] = legacy
         return cls(**values)
 
 
@@ -95,7 +103,7 @@ class GammaBoardSampler(Sampler):
     KIND = "default"
 
     def __init__(self, *, domain: Domain, save_path: str | None = None,
-                 evaluator_metadata: dict | None = None, sampler: dict | None = None,
+                 evaluator_metadata: dict | None = None, module: dict | None = None,
                  orchestrator: dict | None = None, parser: dict | None = None,
                  mapping: dict | None = None, graph_properties: dict | None = None,
                  cfg: GammaBoardSamplerConfig | None = None,
@@ -107,7 +115,7 @@ class GammaBoardSampler(Sampler):
         self.domain = domain
         self.discrete_cardinalities, self.continuous_dims = domain.require_rectangular_shape()
         self.cfg = deepcopy(cfg) if cfg is not None else GammaBoardSamplerConfig(
-            save_path=save_path, sampler=sampler, orchestrator=orchestrator, parser=parser,
+            save_path=save_path, module=module, orchestrator=orchestrator, parser=parser,
             mapping=mapping, graph_properties=graph_properties, evaluator_metadata=evaluator_metadata)
         self._input_discrete_cardinalities = list(self.discrete_cardinalities)
         self._input_continuous_dims = self.continuous_dims
@@ -133,7 +141,7 @@ class GammaBoardSampler(Sampler):
             strata_dims=int(sum(i < getattr(domain, "strata_dims", 0) for i in self._sampled_discrete_indices)))
         kwargs: dict[str, Any] = deepcopy(self.cfg.orchestrator or {})
         orchestrator_kind = kwargs.pop("kind", Orchestrator.DEFAULT_KIND)
-        kwargs.update(sampler_kwargs=self.cfg.sampler, save_path=self.cfg.save_path)
+        kwargs.update(module_kwargs=self.cfg.module, save_path=self.cfg.save_path)
         if snapshot is None:
             self.orchestrator = Orchestrator.from_kind(orchestrator_kind, domain=self.orchestrator_domain, **kwargs)
         else:
@@ -147,7 +155,7 @@ class GammaBoardSampler(Sampler):
             self.orchestrator: Orchestrator = factory(snapshot=snapshot.orchestrator_snapshot, domain=self.orchestrator_domain, **kwargs) # type: ignore
         self.cfg.orchestrator = {"kind": self.orchestrator.KIND, **self.orchestrator.cfg.to_dict()} # type: ignore
         self.cfg.orchestrator.pop("save_path", None)
-        self.cfg.orchestrator.pop("sampler_kwargs", None)
+        self.cfg.orchestrator.pop("module_kwargs", None)
         self.pending_mapping_weights = (list(snapshot.pending_mapping_weights)
                                     if snapshot is not None and not fresh_training else [])
 
@@ -173,7 +181,7 @@ class GammaBoardSampler(Sampler):
         generation chunk size. Changing the proposal, mapping, or training settings requires a new stage.
         The checkpoint is read from its recorded source path regardless of the new output path.
         """
-        snapshot = GammaBoardSamplerSnapshot.from_dict(snapshot) if isinstance(snapshot, dict) else deepcopy(snapshot)
+        snapshot = GammaBoardSamplerSnapshot.from_dict(snapshot)
         if not snapshot.config:
             if not init_args:
                 raise ValueError("checkpoint has no configuration; supply init_args")
@@ -181,7 +189,7 @@ class GammaBoardSampler(Sampler):
             snapshot.config.pop("kind", None)
         cfg = cls._checkpoint_config(snapshot, init_args, evaluator_metadata)
         saved = GammaBoardSamplerConfig(**snapshot.config)
-        for name in ("sampler", "mapping", "graph_properties", "parser"):
+        for name in ("module", "mapping", "graph_properties", "parser"):
             if getattr(cfg, name) != getattr(saved, name):
                 raise ValueError(f"cannot override {name} during restore; use from_stage")
         return cls(domain=domain, cfg=cfg, snapshot=snapshot)
@@ -195,13 +203,14 @@ class GammaBoardSampler(Sampler):
         precedence. Optimizer, scheduler, RNG seed, counters, and pending feedback
         belong to the new stage. The proposal architecture and mapping stay compatible.
         """
-        snapshot = GammaBoardSamplerSnapshot.from_dict(source_state) if isinstance(source_state, dict) else deepcopy(source_state)
+        snapshot = GammaBoardSamplerSnapshot.from_dict(source_state)
         if not snapshot.config:
             snapshot.config = deepcopy(source_args)
             snapshot.config.pop("kind", None)
+            snapshot = GammaBoardSamplerSnapshot.from_dict(snapshot)
         cfg = cls._checkpoint_config(snapshot, init_args, evaluator_metadata)
         saved = GammaBoardSamplerConfig(**snapshot.config)
-        for name in ("sampler", "mapping", "graph_properties", "parser"):
+        for name in ("module", "mapping", "graph_properties", "parser"):
             if getattr(cfg, name) != getattr(saved, name):
                 raise ValueError(f"stage handoff cannot change {name}")
         return cls(domain=domain, cfg=cfg, snapshot=snapshot, fresh_training=True)

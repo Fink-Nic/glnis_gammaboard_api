@@ -29,6 +29,8 @@
   before configuration construction. Do not add parallel string-dispatch systems.
 - Keep configuration in the corresponding dataclasses. Preserve caller-owned
   configuration dictionaries, coordinate arrays, and feedback arrays.
+- Route local `[sampler.module]` / adapter `module` to orchestrator `module_kwargs`.
+  The adapter owns that routing; legacy names are accepted only in checkpoints.
 - Public sample dimensions include singleton discrete axes. Internal proposal
   dimensions omit singleton axes and may add hidden mapping channels. Keep
   generation, density queries, and discrete constraints consistent about this.

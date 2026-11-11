@@ -86,6 +86,12 @@ The [six-dimensional follow-up](implementation/compilation-6d.md) uses
 `--discrete 3`. Benchmark JSON includes parameter counts, coupling-block counts,
 and peak CUDA allocation during measurement.
 
+[benchmarks/orchestrator_compile.py](../benchmarks/orchestrator_compile.py)
+repeats that workload through the native execution policy and public adapter,
+including interrupted training-window recovery in separate workers. See the
+[native report](implementation/compilation-native-6d.md) for complete timings
+and bitwise versus numerical recovery checks.
+
 [Execution tests](../tests/test_execution.py) use the eager compiler backend by
 default. To exercise real Inductor compilation and restore pending feedback in a
 fresh process on CPU, set `GLNIS_TEST_COMPILE_BACKEND=inductor`. For CUDA graphs:
@@ -99,7 +105,9 @@ GLNIS_TEST_COMPILE_MODE=reduce-overhead .venv/bin/python -m pytest -q \
 
 The check compares subsequent draws, trained parameters, optimizer and scheduler
 states exactly within the same execution/device setup. Eager/compiled switching
-is a runtime override with different numerical/RNG behavior. The test fixture
+is a runtime override with different numerical/RNG behavior. Fresh code generation
+can also change roundoff; the native benchmark records exact and numerical
+agreement separately instead of weakening the execution test. The test fixture
 clears compiler caches between tests so unrelated architectures do not exhaust
 the per-function variant limit.
 

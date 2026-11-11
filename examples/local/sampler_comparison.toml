@@ -35,12 +35,12 @@ training_batch_size = 256
 max_batch_size = 64
 use_gpu = false
 
-[sampler.sampler.flow.subnet]
+[sampler.module.flow.subnet]
 kind = "mlp"
 layers = 2
 units = 16
 
-[sampler.sampler.flow.spline]
+[sampler.module.flow.spline]
 kind = "rqs"
 bins = 4
 
@@ -50,6 +50,6 @@ name = "small-flow"
 [[samplers]]
 name = "large-flow"
 
-[samplers.sampler.flow.subnet]
+[samplers.module.flow.subnet]
 layers = 4
 units = 128

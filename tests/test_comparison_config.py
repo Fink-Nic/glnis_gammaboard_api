@@ -8,7 +8,7 @@ from glnis.scripts.comparison_config import ComparisonConfig
 
 def settings(sampler_settings):
     return {"integrand": {"kind": "sine", "continuous_dims": 2}, "sampler": sampler_settings,
-            "samplers": [{"name": "small"}, {"name": "large", "sampler": {"flow": {"subnet": {"units": 16}}}}]}
+            "samplers": [{"name": "small"}, {"name": "large", "module": {"flow": {"subnet": {"units": 16}}}}]}
 
 
 def test_nested_component_overrides_preserve_sibling_settings(sampler_settings):
@@ -16,9 +16,9 @@ def test_nested_component_overrides_preserve_sibling_settings(sampler_settings):
     original = deepcopy(config)
     result = ComparisonConfig.from_dict(config)
     first, second = [run for _, run in result.named_runs]
-    assert first.sampler["sampler"]["flow"]["subnet"]["units"] == 8
-    assert second.sampler["sampler"]["flow"]["subnet"]["units"] == 16
-    assert second.sampler["sampler"]["flow"]["spline"]["bins"] == 4
+    assert first.sampler["module"]["flow"]["subnet"]["units"] == 8
+    assert second.sampler["module"]["flow"]["subnet"]["units"] == 16
+    assert second.sampler["module"]["flow"]["spline"]["bins"] == 4
     assert config == original
 
 

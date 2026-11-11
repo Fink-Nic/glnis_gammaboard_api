@@ -16,7 +16,7 @@ from gammaboard_sampler import GammaBoardSampler
 @pytest.mark.parametrize("discrete_first", [True, False])
 def test_sample_density_agreement_before_and_after_training(sampler_settings, cardinalities, continuous_dims, discrete_first):
     settings = deepcopy(sampler_settings)
-    settings["sampler"]["discrete_dims_first"] = discrete_first
+    settings["module"]["discrete_dims_first"] = discrete_first
     if not cardinalities and not continuous_dims:
         settings["orchestrator"]["training_steps"] = 0
     sampler = GammaBoardSampler(domain=RectangularDomain(cardinalities, continuous_dims), **settings)
@@ -77,7 +77,7 @@ def test_constraints_marginalize_singletons_and_holes(sampler_settings):
 
 
 def test_continuous_first_discrete_marginal_is_explicitly_unavailable(sampler_settings):
-    sampler_settings["sampler"]["discrete_dims_first"] = False
+    sampler_settings["module"]["discrete_dims_first"] = False
     sampler = GammaBoardSampler(domain=RectangularDomain((2,), 2), **sampler_settings)
     assert sampler.discrete_mass([{}]) == [1.]
     assert sampler.discrete_mass([{0: 0}]) == [None]

@@ -27,7 +27,7 @@ def torch_runtime():
 @pytest.fixture
 def sampler_settings():
     return {
-        "sampler": {
+        "module": {
             "kind": "mixed flow",
             "flow": {"kind": "coupling", "spline": {"kind": "rqs", "bins": 4},
                      "subnet": {"kind": "mlp", "layers": 2, "units": 8}},

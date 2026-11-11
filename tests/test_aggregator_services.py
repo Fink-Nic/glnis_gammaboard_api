@@ -26,7 +26,7 @@ def run_config():
     return {
         "sampler": {
             "orchestrator": {"use_gpu": False, "training_steps": 1, "training_batch_size": 32, "max_batch_size": 8},
-            "sampler": {"flow": {"subnet": {"layers": 2, "units": 8}, "spline": {"bins": 4}}},
+            "module": {"flow": {"subnet": {"layers": 2, "units": 8}, "spline": {"bins": 4}}},
         },
         "integrand": {"kind": "sine", "continuous_dims": 2, "offset": 0.1},
         "aggregator": {"inference_samples": 16, "log_every": 0},
@@ -34,7 +34,8 @@ def run_config():
 
 
 @pytest.mark.parametrize("typed_config", [False, True])
-def test_completed_run_pdf_and_checkpoint_recovery(tmp_path, typed_config):
+@pytest.mark.parametrize("legacy_module_names", [False, True])
+def test_completed_run_pdf_and_checkpoint_recovery(tmp_path, typed_config, legacy_module_names):
     config = run_config()
     aggregator = SamplerAggregator.from_config(config)
     aggregator.run()
@@ -56,8 +57,15 @@ def test_completed_run_pdf_and_checkpoint_recovery(tmp_path, typed_config):
 
     # Recovery constructs only the saved model; no freshly initialized flow is
     # necessary. Both accepted configuration representations restore the run.
+    saved_config = RunConfig.from_dict(config) if typed_config else deepcopy(config)
+    if legacy_module_names:
+        settings = saved_config.sampler if typed_config else saved_config["sampler"]
+        settings["sampler"] = settings.pop("module")
+        checkpoint["config"]["sampler"] = checkpoint["config"].pop("module")
+        kwargs = checkpoint["orchestrator_snapshot"]["cfg_kwargs"]
+        kwargs["sampler_kwargs"] = kwargs.pop("module_kwargs")
     recovered = SamplerAggregator.from_snapshot(
-        checkpoint, RunConfig.from_dict(config) if typed_config else config,
+        checkpoint, saved_config,
         accumulator=aggregator.accumulator,
     )
     assert type(recovered.sampler) is type(aggregator.sampler)

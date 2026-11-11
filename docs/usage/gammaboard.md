@@ -46,7 +46,7 @@ contains arguments accepted by `GammaBoardSampler`, for example this JSON object
     "training_batch_size": 128,
     "loss": {"kind": "kl_divergence"}
   },
-  "sampler": {"kind": "mixed flow"}
+  "module": {"kind": "mixed flow"}
 }
 ```
 
