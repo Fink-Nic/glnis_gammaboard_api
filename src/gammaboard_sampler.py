@@ -10,7 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from gammaboard_process import Domain, Feedback, GenerationStatus, SampleBatch, Sampler, RectangularDomain
-from glnis.core.nn.orchestrator import Orchestrator, RectangularOrchestrator, RectangularOrchestratorConfig
+from glnis.core.nn.orchestrator import Orchestrator
 from glnis.utils.types import Config
 
 
@@ -78,24 +78,19 @@ class GammaBoardSamplerConfig(Config):
 
 @dataclass
 class GammaBoardSamplerSnapshot:
-    kind: str = "default"
-    config: dict[str, Any] = field(default_factory=dict)
-    orchestrator_snapshot: dict[str, Any] = field(default_factory=dict)
-    pending_mapping_weights: list[float] = field(default_factory=list)
-    domain: dict[str, Any] | None = None
+    kind: str
+    config: dict[str, Any]
+    orchestrator_snapshot: dict[str, Any]
+    pending_mapping_weights: list[float]
+    domain: dict[str, Any]
+
+    def __post_init__(self):
+        if not isinstance(self.config, dict) or not self.config:
+            raise ValueError("checkpoint must include its configuration")
 
     @classmethod
     def from_dict(cls, snapshot: dict[str, Any] | Self) -> Self:
         values = asdict(snapshot) if isinstance(snapshot, cls) else deepcopy(snapshot)
-        # Older checkpoints called the combined Jacobian/partition factor a Jacobian.
-        if "pending_mapping_jac" in values:
-            values.setdefault("pending_mapping_weights", values.pop("pending_mapping_jac"))
-        config = values.get("config") or {}
-        if "sampler" in config:
-            legacy = config.pop("sampler")
-            if "module" in config and config["module"] != legacy:
-                raise ValueError("conflicting module configuration in checkpoint")
-            config["module"] = legacy
         return cls(**values)
 
 
@@ -147,7 +142,7 @@ class GammaBoardSampler(Sampler):
         else:
             if snapshot.kind != self.KIND:
                 raise ValueError("checkpoint sampler kind does not match requested kind")
-            if snapshot.domain is not None and snapshot.domain != domain.to_dict():
+            if snapshot.domain != domain.to_dict():
                 raise ValueError("checkpoint public domain does not match requested domain")
             if orchestrator_kind != snapshot.orchestrator_snapshot["kind"]:
                 raise ValueError("cannot change orchestrator kind while transferring a checkpoint")
@@ -164,9 +159,6 @@ class GammaBoardSampler(Sampler):
         args = deepcopy(args or {})
         if args.pop("kind", cls.KIND) != cls.KIND:
             raise ValueError("unknown sampler kind")
-        implementation = Orchestrator.subclass_for_kind(snapshot.orchestrator_snapshot["kind"])
-        if issubclass(implementation, RectangularOrchestrator) and args.get("orchestrator") is not None:
-            args["orchestrator"] = RectangularOrchestratorConfig.normalize_kwargs(**args["orchestrator"])
         config = _merge_config(snapshot.config, args)
         if evaluator_metadata is not None:
             config["evaluator_metadata"] = deepcopy(evaluator_metadata)
@@ -182,11 +174,6 @@ class GammaBoardSampler(Sampler):
         The checkpoint is read from its recorded source path regardless of the new output path.
         """
         snapshot = GammaBoardSamplerSnapshot.from_dict(snapshot)
-        if not snapshot.config:
-            if not init_args:
-                raise ValueError("checkpoint has no configuration; supply init_args")
-            snapshot.config = deepcopy(init_args)
-            snapshot.config.pop("kind", None)
         cfg = cls._checkpoint_config(snapshot, init_args, evaluator_metadata)
         saved = GammaBoardSamplerConfig(**snapshot.config)
         for name in ("module", "mapping", "graph_properties", "parser"):
@@ -204,10 +191,6 @@ class GammaBoardSampler(Sampler):
         belong to the new stage. The proposal architecture and mapping stay compatible.
         """
         snapshot = GammaBoardSamplerSnapshot.from_dict(source_state)
-        if not snapshot.config:
-            snapshot.config = deepcopy(source_args)
-            snapshot.config.pop("kind", None)
-            snapshot = GammaBoardSamplerSnapshot.from_dict(snapshot)
         cfg = cls._checkpoint_config(snapshot, init_args, evaluator_metadata)
         saved = GammaBoardSamplerConfig(**snapshot.config)
         for name in ("module", "mapping", "graph_properties", "parser"):

@@ -19,9 +19,8 @@ def parameters(sampler):
 
 
 @pytest.mark.parametrize("mapped", [False, True])
-@pytest.mark.parametrize("legacy_pending", [False, True])
 @pytest.mark.parametrize("compiled", [False, True])
-def test_interrupted_checkpoint_resumes_exactly(tmp_path, sampler_settings, graph_settings, mapped, legacy_pending, compiled):
+def test_interrupted_checkpoint_resumes_exactly(tmp_path, sampler_settings, graph_settings, mapped, compiled):
     if compiled:
         sampler_settings["orchestrator"]["execution"] = {"kind": "torch_compile", "backend": "eager"}
     if mapped:
@@ -33,8 +32,6 @@ def test_interrupted_checkpoint_resumes_exactly(tmp_path, sampler_settings, grap
     sampler.feedback(Feedback(values(consumed)))
     outstanding = sampler.generate(4)
     checkpoint = json.loads(json.dumps(sampler.snapshot()))
-    if legacy_pending:
-        checkpoint["pending_mapping_jac"] = checkpoint.pop("pending_mapping_weights")
     expected = sampler.generate(2)
     sampler.feedback(Feedback(values(outstanding)))
     sampler.feedback(Feedback(values(expected)))
@@ -140,45 +137,35 @@ def test_failed_snapshot_preserves_last_checkpoint(tmp_path, sampler_settings, m
     assert not (tmp_path / "sampler.pt.tmp").exists()
 
 
-def test_restore_metadata_without_config_uses_init_args(tmp_path, sampler_settings):
+def test_restore_and_stage_require_snapshot_configuration(tmp_path, sampler_settings):
     settings = {**sampler_settings, "save_path": str(tmp_path / "sampler.pt")}
     sampler = GammaBoardSampler(domain=RectangularDomain((2,), 2), **settings)
     checkpoint = sampler.snapshot()
     checkpoint.pop("config")
-    with pytest.raises(ValueError, match="init_args"):
-        GammaBoardSampler.from_snapshot(snapshot=checkpoint, domain=sampler.domain)
-    restored = GammaBoardSampler.from_snapshot(snapshot=checkpoint, domain=sampler.domain, init_args=settings)
-    for name, expected in parameters(sampler).items():
-        torch.testing.assert_close(restored.orchestrator.module.state_dict()[name], expected, rtol=0, atol=0)
+    with pytest.raises(TypeError, match="config"):
+        GammaBoardSampler.from_snapshot(snapshot=checkpoint, domain=sampler.domain, init_args=settings)
+    with pytest.raises(TypeError, match="config"):
+        GammaBoardSampler.from_stage(source_state=checkpoint, source_args=settings, domain=sampler.domain, init_args={})
 
 
-def test_stage_normalizes_legacy_loss_and_scheduler_overrides(tmp_path, sampler_settings):
+def test_stage_overrides_loss_and_disables_scheduler(tmp_path, sampler_settings):
     sampler = GammaBoardSampler(domain=RectangularDomain((2,), 2), save_path=str(tmp_path / "sampler.pt"), **sampler_settings)
     stage = GammaBoardSampler.from_stage(source_state=sampler.snapshot(), source_args={}, domain=sampler.domain,
-                                         init_args={"orchestrator": {"loss_type": "variance", "use_scheduler": False}})
+                                         init_args={"orchestrator": {"loss": {"kind": "variance"}, "scheduler": False}})
     assert stage.orchestrator.cfg.loss == {"kind": "variance"}
     assert stage.orchestrator.scheduler is None
 
 
-def test_legacy_module_names_migrate_only_when_reading_checkpoints(tmp_path, sampler_settings):
+@pytest.mark.parametrize("location", ["config", "orchestrator", "pending"])
+def test_checkpoint_field_names_are_strict(tmp_path, sampler_settings, location):
     source = GammaBoardSampler(domain=RectangularDomain((2,), 2), save_path=str(tmp_path / "old.pt"), **sampler_settings)
-    batch = source.generate(3)
     snapshot = source.snapshot()
-    snapshot["config"]["sampler"] = snapshot["config"].pop("module")
-    saved = snapshot["orchestrator_snapshot"]["cfg_kwargs"]
-    saved["sampler_kwargs"] = saved.pop("module_kwargs")
-    original = deepcopy(snapshot)
-    restored = GammaBoardSampler.from_snapshot(snapshot=snapshot, domain=source.domain)
-    assert snapshot == original
-    assert restored.cfg.module == source.cfg.module
-    assert restored.orchestrator.cfg.module_kwargs == source.cfg.module
-    restored.feedback(Feedback(values(batch)))
-    rewritten = restored.snapshot()
-    assert "sampler" not in rewritten["config"]
-    assert "sampler_kwargs" not in rewritten["orchestrator_snapshot"]["cfg_kwargs"]
-    stage = GammaBoardSampler.from_stage(source_state=snapshot, source_args={}, init_args={}, domain=source.domain)
-    assert stage.cfg.module == source.cfg.module
-    assert stage.orchestrator.training_status.num_generated == 0
-    with pytest.raises(ValueError, match="module"):
-        GammaBoardSampler.from_snapshot(snapshot=snapshot, domain=source.domain,
-            init_args={"module": {"flow": {"subnet": {"units": 16}}}})
+    if location == "config":
+        snapshot["config"]["sampler"] = snapshot["config"].pop("module")
+    elif location == "orchestrator":
+        saved = snapshot["orchestrator_snapshot"]["cfg_kwargs"]
+        saved["sampler_kwargs"] = saved.pop("module_kwargs")
+    else:
+        snapshot["pending_mapping_jac"] = snapshot.pop("pending_mapping_weights")
+    with pytest.raises(TypeError, match="sampler|pending_mapping_jac"):
+        GammaBoardSampler.from_snapshot(snapshot=snapshot, domain=source.domain)

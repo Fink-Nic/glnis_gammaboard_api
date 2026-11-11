@@ -224,12 +224,6 @@ class Flow(nn.Module, Distribution, BuildFromKind):
         self._condition_indices = tuple(mask.nonzero().flatten().tolist() for mask in masks)
         self._transform_indices = tuple((~mask).nonzero().flatten().tolist() for mask in masks)
 
-    def __setstate__(self, state):
-        super().__setstate__(state)
-        # Modules are also stored as complete objects in existing checkpoints.
-        if not hasattr(self, "_condition_indices"):
-            self._set_coordinate_indices()
-
     def _load_from_state_dict(self, *args, **kwargs):
         super()._load_from_state_dict(*args, **kwargs)
         self._set_coordinate_indices()

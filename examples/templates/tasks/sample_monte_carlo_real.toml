@@ -1,0 +1,7 @@
+# Append ordinary scalar sampling to a scalar-compatible integration.
+[[task_queue]]
+name = "sample"
+kind = "sample"
+stop_condition = { max_samples = 16384 }
+accumulator = { config = "scalar" }
+sampler = { config = { kind = "naive_monte_carlo", seed = 51 } }

@@ -34,8 +34,7 @@ def run_config():
 
 
 @pytest.mark.parametrize("typed_config", [False, True])
-@pytest.mark.parametrize("legacy_module_names", [False, True])
-def test_completed_run_pdf_and_checkpoint_recovery(tmp_path, typed_config, legacy_module_names):
+def test_completed_run_pdf_and_checkpoint_recovery(tmp_path, typed_config):
     config = run_config()
     aggregator = SamplerAggregator.from_config(config)
     aggregator.run()
@@ -58,12 +57,6 @@ def test_completed_run_pdf_and_checkpoint_recovery(tmp_path, typed_config, legac
     # Recovery constructs only the saved model; no freshly initialized flow is
     # necessary. Both accepted configuration representations restore the run.
     saved_config = RunConfig.from_dict(config) if typed_config else deepcopy(config)
-    if legacy_module_names:
-        settings = saved_config.sampler if typed_config else saved_config["sampler"]
-        settings["sampler"] = settings.pop("module")
-        checkpoint["config"]["sampler"] = checkpoint["config"].pop("module")
-        kwargs = checkpoint["orchestrator_snapshot"]["cfg_kwargs"]
-        kwargs["sampler_kwargs"] = kwargs.pop("module_kwargs")
     recovered = SamplerAggregator.from_snapshot(
         checkpoint, saved_config,
         accumulator=aggregator.accumulator,

@@ -38,15 +38,12 @@ Use [module configuration](modules.md), [orchestrator configuration](orchestrato
 and [mapping configuration](mappings.md) for their nested options. For array
 shapes and feedback ownership, read [sampling and feedback](../implementation/sampling-and-feedback.md).
 
-## Compatibility
+## Configuration schema
 
 Current run files use `sampler.module`; direct Python/GammaBoard arguments use
-`module`. The old proposal `sampler` key and orchestrator `sampler_kwargs` key
-are migrated when reading checkpoint metadata. New snapshots write only `module`
-and `module_kwargs`. Set proposal options in the adapter's `module` table;
+`module`. Snapshots use the same schema; previous field names are not migrated.
+Set proposal options in the adapter's `module` table;
 duplicating them in `orchestrator.module_kwargs` is rejected.
 
-The current adapter is `GammaBoardSampler`. Older `MadnisSampler` classes,
-`madnis` adapter spelling, and `sgn_strat_naive`/`sgn_strat_full` kinds are not
-available. A new stratum-specific implementation belongs behind an orchestrator
+The adapter is `GammaBoardSampler`. A new stratum-specific implementation belongs behind an orchestrator
 `kind`; see [extending components](../implementation/extending.md#orchestrators-and-strata).

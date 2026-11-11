@@ -1,0 +1,25 @@
+# Append a complete native +, -, +i, -i workflow to a complex GammaLoop run.
+[[task_queue]]
+name = "train-extra"
+kind = "sample"
+publish_result = false
+stop_condition = { max_samples = 16384 }
+accumulator = { config = "gammaloop" }
+[task_queue.sampler.config]
+kind = "havana_training"
+seed = 51
+bins = 32
+samples_for_update = 2048
+initial_training_rate = 0.5
+final_training_rate = 0.1
+[task_queue.sampler.config.stratification]
+kind = "voronoi"
+domain = { rectangular = { strata_dims = 2, discrete_cardinalities = [2,2], continuous_dims = 0 } }
+centers = { "0,0" = [1.0,0.0], "0,1" = [-1.0,0.0], "1,0" = [0.0,1.0], "1,1" = [0.0,-1.0] }
+[[task_queue]]
+name = "inference-extra"
+kind = "sample"
+estimator = "stratified"
+stop_condition = { max_samples = 65536 }
+accumulator = { config = "gammaloop" }
+sampler = { from_stage = "train-extra", config = { kind = "havana_inference", seed = 52 } }

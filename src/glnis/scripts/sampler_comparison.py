@@ -84,9 +84,7 @@ class TrainingProgress:
 class SamplerCompData:
     """Comparison results keyed by configured labels.
 
-    Existing result/progress fields and the class's import location are retained
-    for saved data. Graph and old integrator metadata are optional legacy fields;
-    new runs record their full configuration in ``run_configs``. Optional sampler
+    Runs record their full configuration in ``run_configs``. Optional sampler
     checkpoint metadata lives in ``integrator_states``; results contain no live
     models or GPU tensors. Checkpoints are relative to the comparison file.
     """
@@ -94,24 +92,18 @@ class SamplerCompData:
     def __init__(
         self,
         integrator_identifiers: list[str],
-        graph_properties: Any = None,
         target: Result | None = None,
         settings: dict[str, Any] | None = None,
-        madnis_kwargs: dict[str, Any] | None = None,
         madnis_info: dict[str, Any] | None = None,
         integrand_kwargs: dict[str, Any] | None = None,
-        param_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self.result: dict[str, Result] = {name: Result() for name in integrator_identifiers}
         self.observables: dict[str, dict[str, Any]] = {name: {} for name in integrator_identifiers}
         self.training_progress = {name: TrainingProgress() for name in integrator_identifiers}
-        self.graph_properties = graph_properties
         self.target = deepcopy(target)
         self.settings = deepcopy(settings or {})
         self.madnis_info = deepcopy(madnis_info or {})
-        self.madnis_kwargs = deepcopy(madnis_kwargs or {})
         self.integrand_kwargs = deepcopy(integrand_kwargs or {})
-        self.param_kwargs = deepcopy(param_kwargs or {})
         self.integrator_states: dict[str, Any] = {name: None for name in integrator_identifiers}
         self.run_configs: dict[str, dict[str, Any]] = {}
         self.training_histories: dict[str, list[dict[str, Any]]] = {}
@@ -119,17 +111,6 @@ class SamplerCompData:
         self.output_file: Path | None = None
         self._source_file: Path | None = None
         self.artifact_paths: list[Path] = []
-
-    def __setstate__(self, state: dict[str, Any]) -> None:
-        defaults = SamplerCompData([]).__dict__
-        defaults.update(state)
-        self.__dict__.update(defaults)
-        self.result = {
-            name: value if isinstance(value, Result) else Result.from_legacy(value)
-            for name, value in self.result.items()
-        }
-        if self.target is not None and not isinstance(self.target, Result):
-            self.target = Result.from_legacy(self.target)
 
     def restore_aggregator(self, name: str, *, use_gpu: bool | None = None) -> SamplerAggregator:
         """Restore a completed run's sampler and integrand (trusted checkpoints only).

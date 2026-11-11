@@ -103,7 +103,7 @@ def test_compiled_checkpoint_in_fresh_process(tmp_path, sampler_settings):
     options = {"dynamic": False}
     if backend == "inductor":
         options["mode"] = mode
-    sampler_settings["orchestrator"].update(use_gpu=device.startswith("cuda"), cuda_id=0,
+    sampler_settings["orchestrator"].update(use_gpu=device.startswith("cuda"), gpu_id=0,
                                             max_batch_size=8, execution={"kind": "torch_compile",
                                                 "backend": backend, "sample": options, "prob": options})
     sampler = GammaBoardSampler(domain=RectangularDomain((2,), 2), save_path=str(tmp_path / "checkpoint.pt"), **sampler_settings)

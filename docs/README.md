@@ -48,6 +48,6 @@ is in [AGENTS.md](../AGENTS.md); HPC build instructions remain in the
 
 The current runnable examples are [ghostbumps](../examples/local/ghostbumps.toml),
 [sine](../examples/local/sine.toml), [mapped Gaussian](../examples/local/gaussian.toml),
-and [sampler comparison](../examples/local/sampler_comparison.toml). Older sign-strategy
-examples and deployment templates need migration; their presence does not imply
-that the retired sampler implementations are available.
+and [sampler comparison](../examples/local/sampler_comparison.toml). Current
+[GammaBoard cards](../examples/templates/) use the same sampler schema, including
+automatic GPU selection and optional native compilation.

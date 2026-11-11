@@ -57,15 +57,11 @@ class Slice:
 
 class SlicePlotData:
     def __init__(
-        self, graph_properties=None, settings=None, madnis_kwargs=None,
-        integrand_kwargs=None, param_kwargs=None, slices1d=None, slices2d=None,
+        self, settings=None, integrand_kwargs=None, slices1d=None, slices2d=None,
         itg: float | None = None, EPS: float = 1e-6,
     ):
-        self.graph_properties = graph_properties
         self.settings = deepcopy(settings or {})
-        self.madnis_kwargs = deepcopy(madnis_kwargs or {})
         self.integrand_kwargs = deepcopy(integrand_kwargs or {})
-        self.param_kwargs = deepcopy(param_kwargs or {})
         self.slices1d: list[Slice] = list(slices1d or [])
         self.slices2d: list[Slice] = list(slices2d or [])
         self.EPS = EPS
@@ -73,11 +69,6 @@ class SlicePlotData:
         self.skipped: dict[str, dict[str, str]] = {}
         self.output_file: Path | None = None
         self.artifact_paths: list[Path] = []
-
-    def __setstate__(self, state):
-        defaults = SlicePlotData().__dict__
-        defaults.update(state)
-        self.__dict__.update(defaults)
 
 
 def _real_vector(value, path):
@@ -244,8 +235,7 @@ def _compatibility(slice_: Slice, aggregator) -> str | None:
 def _domain_mask(points, aggregator, config):
     domain = config.domain
     if domain == "auto":
-        sampler = getattr(aggregator.sampler, "madnis_1", aggregator.sampler)
-        mapping = getattr(sampler, "mapping", None)
+        mapping = getattr(aggregator.sampler, "mapping", None)
         if mapping is not None:
             domain = "unit_cube" if mapping.mappings[-1].output_space.name == "HCUBE" else "unbounded"
         else:

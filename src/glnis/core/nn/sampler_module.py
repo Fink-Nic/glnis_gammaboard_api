@@ -178,12 +178,6 @@ class MixedFlow(RectangularSamplerModule):
             **self.cfg.flow,
         )
 
-        self.max_dim_discrete = max(self.discrete_cardinalities) if self.discrete_cardinalities else 0
-        # Retain this buffer for compatibility with existing state dictionaries.
-        one_hot_mask = []
-        for dim in self.discrete_cardinalities:
-            one_hot_mask.extend([True] * dim + [False] * (self.max_dim_discrete - dim))
-        self.register_buffer("one_hot_mask", torch.tensor(one_hot_mask, dtype=torch.bool))
         self.register_buffer("dummy", torch.tensor([0.0]))
 
 

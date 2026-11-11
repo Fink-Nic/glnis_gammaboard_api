@@ -82,9 +82,6 @@ def test_compiled_callables_stay_outside_snapshot(sampler_settings):
     settings = deepcopy(sampler_settings["module"])
     settings.pop("kind")
     model = MixedFlow(RectangularDomain((2, 3), 3), **settings)
-    # Simulate a checkpoint written before integer coordinate indices existed.
-    del model.continuous_flow._condition_indices
-    del model.continuous_flow._transform_indices
     restored = SamplerModule.from_snapshot(model.snapshot())
     sample = torch.compile(restored.sample, backend="eager", fullgraph=True)
     with torch.no_grad():

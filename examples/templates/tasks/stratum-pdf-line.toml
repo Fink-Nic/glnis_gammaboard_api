@@ -1,0 +1,6 @@
+# Append to a tetrahedron example; reuse its frozen inference sampler.
+[[task_queue]]
+name = "pdf-line"
+kind = "pdf_adaptation_plot_line"
+sampler = { from_name = "inference" }
+geometry = { offset = [0.0,0.125], direction = [1.0,0.75], linspace = { start = 0.0, stop = 1.0, count = 1025 } }

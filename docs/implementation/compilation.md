@@ -33,8 +33,8 @@ Three changes allow full-graph capture and Inductor lowering of the mixed flow:
   Its existing rule that an outside coordinate makes the entire row inactive is
   preserved.
 
-Coordinate indices are rebuilt when loading older module snapshots or replacing
-mask buffers through `load_state_dict()`. Parameters, mapping Jacobians, feedback
+Coordinate indices are rebuilt when replacing mask buffers through
+`load_state_dict()`. Current module snapshots retain those indices. Parameters, mapping Jacobians, feedback
 corrections, checkpoint contents, and configuration defaults retain their roles.
 
 The benchmark keeps compiled callables outside the serialized proposal. Saving a
@@ -197,7 +197,7 @@ recovery. That integration is now covered separately by
 [Compilation tests](../../tests/test_torch_compile.py) exercise graph capture,
 conditional probabilities and gradients after parameter updates, both
 factorization orders, pure domains, support changes without new graph shapes,
-outside-spline gradients, and legacy module loading. The default tests use the
+outside-spline gradients, and current module snapshots. The default tests use the
 eager compiler backend; actual Inductor correctness is checked by the benchmark.
 Checkpoint and feedback tests cover eager and compiled execution policies.
 

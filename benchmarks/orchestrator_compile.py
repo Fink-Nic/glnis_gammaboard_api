@@ -129,7 +129,7 @@ def main():
                                      "subnet": {"layers": args.layers, "units": args.units}}},
                 orchestrator={"seed": 42, "training_steps": steps, "training_batch_size": args.batch_size,
                               "max_batch_size": max(args.batch_size, args.bulk_size), "use_f64": True,
-                              "use_gpu": device.type == "cuda", "cuda_id": device.index or 0,
+                              "use_gpu": device.type == "cuda", "gpu_id": device.index or 0,
                               "execution": execution}), device)
         assert sampler.orchestrator.device == device
         result["process_start_to_ready_s"] = time.perf_counter() - PROCESS_START

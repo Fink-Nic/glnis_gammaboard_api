@@ -30,7 +30,11 @@
 - Keep configuration in the corresponding dataclasses. Preserve caller-owned
   configuration dictionaries, coordinate arrays, and feedback arrays.
 - Route local `[sampler.module]` / adapter `module` to orchestrator `module_kwargs`.
-  The adapter owns that routing; legacy names are accepted only in checkpoints.
+  The adapter owns that routing. Support only the current configuration and
+  snapshot schema; do not add aliases, legacy-field migrations, or pickle repairs.
+- GPU selection belongs to the orchestrator. `gpu_id="auto"` prefers the first
+  unused visible GPU, then the most free VRAM. Respect CUDA visibility/order;
+  automatic selection is a point-in-time decision, not a GPU reservation.
 - Public sample dimensions include singleton discrete axes. Internal proposal
   dimensions omit singleton axes and may add hidden mapping channels. Keep
   generation, density queries, and discrete constraints consistent about this.

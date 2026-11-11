@@ -1,35 +1,32 @@
 # Standalone GammaLoop ttH integration; campaign bindings can select graph groups.
-replacements = { 
-    state_folder = "../../gammaloop_os_ct/gammaboard_states/distributions_comparison/NLO/state_NLO_MSbar",
-    run_name = "epem_a_ttxh",
-    integrand_name = "NLO_MSbar",
-    graph_group = 10, 
-    seed = 0, 
-    target_real = -2.5040e-06,
-    target_imag = 0.0,
-    samples_for_update = 10_000,
-    sample_samples = 100_000_000,
-    train_steps = 2_000,
-    train_batch_size = 10_000,
-    # Must equal train_steps * train_batch_size
-    train_samples = 20_000_000,
-    cuda_id = 0,
-    max_batch_size = 32_768,
-    max_generation_size = 262_144,
-    flow_layers = 4,
-    flow_units = 1_000,
-    rqs_bins = 10,
-    rqs_bin_width = 3e-4,
-    rqs_bin_height = 5e-4,
-    rqs_bin_derivative = 1e-4,
-}
-
-name = 'madnis_NLO_GL02_sign_stratified'
+name = 'madnis_NLO_GL02_OS_sgn_stratified'
 target = { kind = "vector", components = { real = "$(target_real:-1.1848e-04)", imag = "$(target_imag:0.0)" } }
+
+[replacements]
+state_folder = "../../gammaloop_os_ct/gammaboard_states/distributions_comparison/NLO/state_NLO_OS"
+integrand_name = "NLO_OS"
+graph_group = 10
+seed = 0
+target_real = -2.5040e-06
+target_imag = 0.0
+sample_samples = 100_000_000
+train_steps = 1_000
+train_batch_size = 10_000
+# Must equal train_steps * train_batch_size
+train_samples = 10_000_000
+gpu_id = "auto"
+max_batch_size = 32_768
+max_generation_size = 262_144
+flow_layers = 4
+flow_units = 1_000
+rqs_bins = 10
+rqs_bin_width = 3e-4
+rqs_bin_height = 5e-4
+rqs_bin_derivative = 1e-4
 
 [evaluator]
 kind = "gammaloop"
-state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)"
+state_folder = "$(state_folder:../../gammaloop_os_ct/gammaboard_states/epem_a_ttxh/NLO/state)"
 integrand_name = "$(integrand_name:NLO_GL30)"
 momentum_space = false
 graph_groups = ["$(graph_group:0)"]
@@ -43,7 +40,7 @@ name = "madnis-train"
 kind = "sample"
 estimator = "pooled"
 publish_result = false
-stop_condition = { max_samples = "$(train_samples:20_000_000)" }
+stop_condition = { max_samples = "$(train_samples:10_000_000)" }
 accumulator = { config = "gammaloop" }
 
 [task_queue.sampler.config]
@@ -53,16 +50,19 @@ cwd = "$resources/.."
 # SampleBatch.training_remaining requests feedback only while training.
 
 [task_queue.sampler.config.args]
+save_path = 'integrations/madnis_checkpoints/madnis_NLO_GL02_OS_sgn_strat'
+
+[task_queue.sampler.config.args.orchestrator]
 seed = "$(seed:0)"
-training_steps = "$(train_steps:2_000)"
+training_steps = "$(train_steps:1_000)"
 training_batch_size = "$(train_batch_size:10_000)"
 use_gpu = true
-cuda_id = "$(cuda_id:0)"
-save_path = 'integrations/madnis_checkpoints/madnis_NLO_GL02_stratified'
+gpu_id = '$(gpu_id:"auto")'
 
-[task_queue.sampler.config.args.flow_config]
+[task_queue.sampler.config.args.module.flow.subnet]
 layers = "$(flow_layers:4)"
 units = "$(flow_units:1_000)"
+[task_queue.sampler.config.args.module.flow.spline]
 bins = "$(rqs_bins:10)"
 min_bin_width = "$(rqs_bin_width:3e-4)"
 min_bin_height = "$(rqs_bin_height:5e-4)"
@@ -82,7 +82,7 @@ scales = [1.0, 0.001]
 name = "madnis-sample"
 kind = "sample"
 estimator = "stratified"
-stop_condition = { max_samples = "$(sample_samples:1_000_000_000)" }
+stop_condition = { max_samples = "$(sample_samples:100_000_000)" }
 sampler = { from_name = "madnis-train" }
 accumulator = { config = "gammaloop" }
 

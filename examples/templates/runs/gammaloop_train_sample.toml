@@ -1,0 +1,154 @@
+# GammaLoop training followed by inference, adapted from gammaboard_os_ct's
+# madnis_gammaloop_train_sample card. Paths are relative to GammaBoard resources.
+name = '$(run_name:"epem_a_ttxh")_$(integrand_name:"NLO_MSbar")_$(seed:0)_$(graph_group:8)'
+target = { kind = "vector", components = { real = "$(target_real:-1.1848e-04)", imag = "$(target_imag:0.0)" } }
+
+[replacements]
+run_name = "epem_a_ttxh"
+state_folder = "../../gammaloop_os_ct/gammaboard_states/distributions_comparison/NLO/state_NLO_MSbar"
+integrand_name = "NLO_MSbar"
+graph_group = 8
+target_real = -1.1848e-04
+target_imag = 0.0
+seed = 0
+train_steps = 1_000
+train_batch_size = 10_000
+# Keep train_samples equal to train_steps * train_batch_size.
+train_samples = 10_000_000
+sample_samples = 1_000_000_000
+use_gpu = true
+gpu_id = "auto"
+use_f64 = true
+learning_rate = 0.001
+model_batch_size = 32_768
+evaluator_batch_size = 32_768
+max_generation_size = 262_144
+discrete_dims_first = true
+flow_permutations = "log"
+# Used for exchange/random permutations; log derives its block count from dims.
+flow_blocks = 6
+flow_layers = 4
+flow_units = 512
+rqs_bins = 10
+rqs_bin_width = 3e-4
+rqs_bin_height = 5e-4
+rqs_bin_derivative = 1e-4
+discrete_embedding_dim = 64
+discrete_feedforward_dim = 64
+discrete_heads = 4
+discrete_layers = 1
+discrete_subnet_layers = 4
+discrete_subnet_units = 512
+loss = { kind = "kl_divergence", threshold = 30.0, normalize_across_training_steps = true }
+# T_max defaults to train_steps; scheduler = false disables it.
+scheduler = { kind = "cosineannealing", eta_min = 0.0 }
+execution = { kind = "eager" }
+# To compile, replace the execution line above with this complete table:
+# execution = { kind = "torch_compile", backend = "inductor", sample = { fullgraph = true, dynamic = true, mode = "default" }, prob = { fullgraph = true, dynamic = false, mode = "default" } }
+# Set either method to false to keep it eager. Static CUDA graphs use
+# sample = { fullgraph = true, dynamic = false, mode = "reduce-overhead" }
+# and the same mode for prob. Shapes/modes may each trigger compilation.
+# GammaBoard currently hardcodes 300 seconds PER REQUEST, with no card override.
+# Compilation is lazy (first generation/feedback), and must fit that deadline.
+# Reuse a persistent TORCHINDUCTOR_CACHE_DIR in the worker environment, or keep
+# eager execution if a cold compilation would exceed it. See docs/usage/gammaboard.md.
+
+[evaluator]
+kind = "gammaloop"
+state_folder = "$(state_folder:../../gammaloop_os_ct/gammaboard_states/distributions_comparison/NLO/state_NLO_MSbar)"
+integrand_name = "$(integrand_name:NLO_MSbar)"
+momentum_space = false
+graph_groups = ["$(graph_group:8)"]
+
+[evaluator.preprocessing]
+read_only = true
+commands = []
+
+[[task_queue]]
+name = "train"
+kind = "sample"
+publish_result = false
+stop_condition = { max_samples = "$(train_samples:10_000_000)" }
+accumulator = { config = "gammaloop" }
+
+[task_queue.sampler.config]
+kind = "process_sampler"
+command = ["$resources/../../glnis_gammaboard_api/.venv/bin/glnis-gammaboard-sampler"]
+cwd = "$resources/.."
+# Domain/evaluator_metadata are provided by GammaBoard, not args.
+
+[task_queue.sampler.config.args]
+save_path = 'integrations/madnis_checkpoints/$(run_name:"epem_a_ttxh")_$(integrand_name:"NLO_MSbar")_$(seed:0)_$(graph_group:8).pt'
+
+[task_queue.sampler.config.args.orchestrator]
+kind = "rectangular"
+seed = "$(seed:0)"
+training_steps = "$(train_steps:1_000)"
+training_batch_size = "$(train_batch_size:10_000)"
+max_batch_size = "$(model_batch_size:32_768)"
+use_gpu = "$(use_gpu:true)"
+gpu_id = '$(gpu_id:"auto")'
+use_f64 = "$(use_f64:true)"
+learning_rate = "$(learning_rate:0.001)"
+loss = '$(loss:{kind="kl_divergence"})'
+scheduler = '$(scheduler:{kind="cosineannealing"})'
+execution = '$(execution:{kind="eager"})'
+
+[task_queue.sampler.config.args.module]
+kind = "mixed flow"
+discrete_dims_first = "$(discrete_dims_first:true)"
+
+[task_queue.sampler.config.args.module.flow]
+kind = "coupling"
+permutations = '$(flow_permutations:"log")'
+blocks = "$(flow_blocks:6)"
+# For a fixed dimension, condition_masks can replace the permutation strategy.
+
+[task_queue.sampler.config.args.module.flow.subnet]
+kind = "mlp"
+layers = "$(flow_layers:4)"
+units = "$(flow_units:512)"
+
+[task_queue.sampler.config.args.module.flow.spline]
+kind = "rqs"
+bins = "$(rqs_bins:10)"
+min_bin_width = "$(rqs_bin_width:3e-4)"
+min_bin_height = "$(rqs_bin_height:5e-4)"
+min_bin_derivative = "$(rqs_bin_derivative:1e-4)"
+
+[task_queue.sampler.config.args.module.discrete]
+kind = "transformer"
+embedding_dim = "$(discrete_embedding_dim:64)"
+feedforward_dim = "$(discrete_feedforward_dim:64)"
+heads = "$(discrete_heads:4)"
+layers = "$(discrete_layers:1)"
+
+[task_queue.sampler.config.args.module.discrete.subnet]
+kind = "mlp"
+layers = "$(discrete_subnet_layers:4)"
+units = "$(discrete_subnet_units:512)"
+
+# With momentum_space=false the evaluator already parameterizes the hypercube.
+# For a momentum-space evaluator, enable an appropriate mapping explicitly:
+# [task_queue.sampler.config.args.mapping]
+# input_space = "HCUBE"
+# use_f128 = false
+# layer_cfgs = [{kind="spherical", conformal_scale=1.0}]
+# Graph data is then read from evaluator_metadata by the optional GammaLoop parser.
+
+[task_queue.queue_tuning]
+max_batch_size = "$(evaluator_batch_size:32_768)"
+max_generation_size = "$(max_generation_size:262_144)"
+
+[[task_queue]]
+name = "sample"
+kind = "sample"
+stop_condition = { max_samples = "$(sample_samples:1_000_000_000)" }
+# from_name restores the completed module, optimizer/status and RNG. This is
+# inference because the training horizon is complete; no fresh stage is needed.
+sampler = { from_name = "train" }
+accumulator = { config = "gammaloop" }
+
+[task_queue.queue_tuning]
+max_batch_size = "$(evaluator_batch_size:32_768)"
+max_generation_size = "$(max_generation_size:262_144)"

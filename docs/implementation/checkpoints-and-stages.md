@@ -51,7 +51,7 @@ overridden through `init_args`:
 | --- | --- | --- |
 | `save_path` | adapter | Future checkpoint destination |
 | `use_gpu` | orchestrator | Device preference |
-| `cuda_id` | orchestrator | Device index |
+| `gpu_id` | orchestrator | Visible device index or automatic selection |
 | `use_f64` | orchestrator | Model and training-buffer precision |
 | `max_batch_size` | orchestrator | Generation/forward-pass chunk limit |
 | `execution` | orchestrator | Eager/compiled policy and per-method compiler settings |
@@ -62,10 +62,9 @@ update that source reference. Comparison restoration resolves its relative
 checkpoint references automatically.
 
 Changing proposal architecture, mapping, parser/graph configuration, or training
-settings is rejected during exact recovery. Configuration-less metadata require
-`init_args` to supply the missing configuration. The old `pending_mapping_jac`
-metadata key is read as the combined pending mapping weights; new snapshots write
-`pending_mapping_weights`.
+settings is rejected during exact recovery. Metadata must contain the current
+configuration, domain, and `pending_mapping_weights` fields. There are no
+configuration aliases, field migrations, or repairs for previous snapshots.
 
 Restoring retains the saved numerical state and RNG states. Subsequent bitwise
 continuation also depends on the execution environment, including compiler
@@ -117,13 +116,14 @@ it to training mode and creates new execution callables.
 Proposal architecture, mapping, parser/graph configuration, public domain, and
 orchestrator kind remain compatible. In particular, this factory does not
 convert a rectangular orchestrator into a different orchestrator implementation.
-`source_args` supply fallback configuration when the source metadata lack it.
+`source_args` remains part of the GammaBoard stage-handoff protocol; the sampler
+inherits configuration from the required snapshot metadata.
 
 ## Verification and local services
 
 [Checkpoint tests](../../tests/test_sampler_checkpoints.py) cover pending feedback,
 JSON metadata, precise continuation, runtime/precision overrides, atomic writes,
-legacy field reads, and resetting a new stage. [Factory tests](../../tests/test_losses_and_schedulers.py)
+strict field names, and resetting a new stage. [Factory tests](../../tests/test_losses_and_schedulers.py)
 cover registered custom components through both lifecycle factories.
 
 The [local aggregator](../usage/local-runs.md#read-only-services) can save and

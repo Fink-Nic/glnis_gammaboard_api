@@ -104,14 +104,6 @@ class SamplerAggregator:
         from gammaboard_sampler import GammaBoardSampler
 
         values = asdict(config) if isinstance(config, RunConfig) else deepcopy(config)
-        arguments = values["sampler"]
-        # Saved local/comparison settings are checkpoint metadata too. Current
-        # run files stay strict about the module spelling.
-        if "sampler" in arguments:
-            legacy = arguments.pop("sampler")
-            if "module" in arguments and arguments["module"] != legacy:
-                raise ValueError("conflicting module configuration in saved run")
-            arguments["module"] = legacy
         configuration = RunConfig.from_dict(values)
         integrand = Integrand.from_config(configuration.integrand)
         initialization = dict(configuration.sampler)

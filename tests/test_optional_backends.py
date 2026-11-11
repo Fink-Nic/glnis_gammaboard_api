@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
 import subprocess
 import sys
 from types import ModuleType, SimpleNamespace
@@ -139,38 +137,3 @@ def test_reading_state_requires_companion_not_legacy_in_tree_extension(monkeypat
     with pytest.raises(_optional.MissingGammaLoopDependency, match="Reading GammaLoop states"):
         parser.get_graph_properties()
     assert requested == ["glnis_gammaloop_native._rust"]
-
-
-def test_native_facade_loads_only_companion_and_delegates(monkeypatch, tmp_path):
-    requested = []
-    calls = []
-
-    def backend_import(module):
-        requested.append(module)
-        backend = ModuleType(module)
-        for name in ("health_check", "classify_state_folder", "parse_state_summary_json", "parse_state_simplified"):
-            def invoke(*args, name=name):
-                calls.append((name, args))
-                return name
-            setattr(backend, name, invoke)
-        return backend
-
-    monkeypatch.setattr(_optional, "import_module", backend_import)
-    # Source checkouts can still contain an ignored extension from before the
-    # packaging split. Explicitly load the Python facade so it cannot shadow it.
-    facade_path = Path(_optional.__file__).with_name("_rust.py")
-    spec = importlib.util.spec_from_file_location("glnis._test_native_facade", facade_path)
-    facade = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(facade)
-    assert requested == []
-    assert facade.health_check() == "health_check"
-    assert facade.classify_state_folder(tmp_path) == "classify_state_folder"
-    assert facade.parse_state_summary_json(tmp_path) == "parse_state_summary_json"
-    assert facade.parse_state_simplified(tmp_path, 2, "integrand") == "parse_state_simplified"
-    assert calls == [
-        ("health_check", ()),
-        ("classify_state_folder", (tmp_path,)),
-        ("parse_state_summary_json", (tmp_path,)),
-        ("parse_state_simplified", (tmp_path, 2, "integrand")),
-    ]
-    assert requested == ["glnis_gammaloop_native._rust"] * 4

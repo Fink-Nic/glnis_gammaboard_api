@@ -86,8 +86,7 @@ if __name__ == "__main__":
         orchestrator=dict(
             training_steps=training_steps,
             training_batch_size=training_batch_size,
-            loss_type="kl_divergence",
-            loss_kwargs={"threshold": 30.0, "normalize_across_training_steps": True}
+            loss={"kind": "kl_divergence", "threshold": 30.0, "normalize_across_training_steps": True}
         )
     )
     init_args.pop("kind", None)

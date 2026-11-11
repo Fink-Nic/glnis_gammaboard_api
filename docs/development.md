@@ -132,9 +132,8 @@ backends/fixtures can skip tests. Failures inside an installed backend, such as
 binary loading or license errors, should propagate rather than be treated as
 an absent feature.
 
-The native namespace is `glnis_gammaloop_native._rust`. Older checkouts may contain
-ignored `src/glnis/_rust*.so` binaries that shadow the compatibility facade;
-current state parsing imports the companion directly. Explicit graph mappings
+The native namespace is `glnis_gammaloop_native._rust`; state parsing imports
+the companion directly. Explicit graph mappings
 remain core-only and do not need state parsing.
 
 ## Updating dependencies
@@ -175,6 +174,8 @@ include the files under `glnis/core/nn`.
 compiler tools, and Triton compatibility for worker processes. Keep those concerns
 in the bootstrap/runtime layer rather than adding environment mutations to
 sampler math. Device and floating-point choices belong to the orchestrator.
+GPU selection tests cover visible-device ordering, occupied devices, free-memory
+fallbacks, explicit indices, and CPU selection without requiring actual GPUs.
 
 Apptainer uses Nix inside its image build and exposes normal executables in the
 resulting SIF. The [UBELIX guide](../ops/ubelix/README.md) is the canonical source
