@@ -1,0 +1,116 @@
+# Each named entry overrides the shared sampler table, recursively.
+# Runs are independent and execute sequentially in the order below.
+[comparison]
+run_name = "sine_sgn_strat"
+output_dir = "../../outputs/sine_sgn_strat/sampler_comparison"
+comment = "Compare two flow sizes on the same integrand and seed."
+save_data = true
+plot = true
+save_checkpoints = true
+
+[comparison.plotting]
+dpi = 150
+figsize = [10, 8]
+
+[integrand]
+kind = "sine"
+continuous_dims = 2
+omega = 2
+offset = 0.0001
+
+[aggregator]
+mode = "train_then_infer"
+inference_samples = 100000
+training_phase = "real"
+evaluation_workers = 2
+evaluation_batch_size = 256
+max_in_flight_batches = 4
+log_every = 50
+
+[sampler]
+seed = 42
+training_steps = 500
+training_batch_size = 512
+max_batch_size = 10000
+use_gpu = true
+
+[sampler.flow_config]
+layers = 3
+units = 256
+bins = 12
+
+[[samplers]]
+name = "default"
+
+[[samplers]]
+name = "naive"
+kind = "sgn_strat_naive"
+
+[[samplers]]
+name = "naive frozen"
+kind = "sgn_strat_naive"
+freeze_discrete_model = true
+
+[[samplers]]
+name = "full"
+kind = "sgn_strat_full"
+
+# Use the saved comparison .pkl as the slice script's input. Its stored settings
+# include this table. For a standalone slice TOML, also set comparison_file.
+[slice_plot]
+run_name = "sine_slices"
+output_dir = "../../outputs/sine_sgn_strat/slice_plots"
+normalize = true
+batch_size = 1024
+use_gpu = true
+EPS = 1e-6
+
+[slice_plot.plotting]
+plot_singles = false
+plot_comparison = true
+dpi = 150
+cmap_name = "plasma"
+
+[[slice_plot.slices]]
+name = "Unstratified line"
+origin = [0.5, 0.3]
+discrete = []
+dirs = [0]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+[[slice_plot.slices]]
+name = "Positive channel line"
+origin = [0.5, 0.3]
+discrete = [0]
+dirs = [0]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+[[slice_plot.slices]]
+name = "Negative channel line"
+origin = [0.5, 0.3]
+discrete = [1]
+dirs = [0]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+[[slice_plot.slices]]
+name = "Unstratified plane"
+origin = [0.5, 0.5]
+discrete = []
+dirs = [0, 1]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+# These definitions match the sign-stratified samplers only. Their sign channel
+# is the first discrete coordinate; the default sampler has no such coordinate.
+[[slice_plot.slices]]
+name = "Positive channel"
+origin = [0.5, 0.5]
+discrete = [0]
+dirs = [0, 1]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+[[slice_plot.slices]]
+name = "Negative channel"
+origin = [0.5, 0.5]
+discrete = [1]
+dirs = [0, 1]
+grid = [{start = 0.0, stop = 1.0, num = 101}]

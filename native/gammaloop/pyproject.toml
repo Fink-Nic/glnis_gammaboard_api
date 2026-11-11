@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.12,<2"]
+build-backend = "maturin"
+
+[project]
+name = "glnis-gammaloop-native"
+version = "0.1.1"
+description = "Optional GammaLoop native backend for GLNIS"
+requires-python = ">=3.13, <3.14"
+authors = [ { name = "Nic Fink", email = "nic.fink@students.unibe.ch" } ]
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+python-source = "python"
+module-name = "glnis_gammaloop_native._rust"
+bindings = "pyo3"
+locked = true
+editable-profile = "dev"
+# Keep PyO3's interpreter stable across isolated editable installations.
+use-base-python = true

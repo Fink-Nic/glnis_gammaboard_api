@@ -15,8 +15,13 @@ Stage: build
     flake.nix /build-src/glnis_gammaboard_api/flake.nix
     flake.lock /build-src/glnis_gammaboard_api/flake.lock
     pyproject.toml /build-src/glnis_gammaboard_api/pyproject.toml
-    Cargo.toml /build-src/glnis_gammaboard_api/Cargo.toml
-    Cargo.lock /build-src/glnis_gammaboard_api/Cargo.lock
+    README.md /build-src/glnis_gammaboard_api/README.md
+    MANIFEST.in /build-src/glnis_gammaboard_api/MANIFEST.in
+    native/gammaloop/Cargo.toml /build-src/glnis_gammaboard_api/native/gammaloop/Cargo.toml
+    native/gammaloop/Cargo.lock /build-src/glnis_gammaboard_api/native/gammaloop/Cargo.lock
+    native/gammaloop/pyproject.toml /build-src/glnis_gammaboard_api/native/gammaloop/pyproject.toml
+    native/gammaloop/src /build-src/glnis_gammaboard_api/native/gammaloop/src
+    native/gammaloop/python /build-src/glnis_gammaboard_api/native/gammaloop/python
     src /build-src/glnis_gammaboard_api/src
 
 %post
@@ -76,7 +81,7 @@ post-build-hook = /etc/nix/save-build-cache.sh"
     echo 'glnis-build:x:1000:1000:Container build:/build-home:/bin/sh' >> /etc/passwd
     echo 'glnis-build:x:1000:' >> /etc/group
     runtime_path="$("$build_tools/bin/unshare" --user --map-user=1000 --map-group=1000 \
-        nix build .#runtime --no-link --print-out-paths --print-build-logs)"
+        nix build .#runtime-gammaloop --no-link --print-out-paths --print-build-logs)"
 
     mkdir -p /closure/nix/store /closure/opt
     nix-store --query --requisites "${runtime_path}" > /tmp/glnis-runtime-closure

@@ -1,51 +1,47 @@
-from dataclasses import asdict
-
-from madnis_sampler import (
-    MadnisConfig,
-    FlowConfig,
-    TransformerConfig,
-    MadeConfig,
-    MadnisSampler
-)
+from gammaboard_sampler import GammaBoardSampler
+from gammaboard_process import RectangularDomain, Feedback
 import numpy as np
 import json
-import traceback
 from numpy.typing import NDArray
 from pathlib import Path
 
 
 sigma = np.array([0.2, 1.0, 5.0])
+training_steps = 50
+training_batch_size = 1000
 
-config = MadnisConfig(
-    seed=42,
-    training_batch_size=1000,
-    training_steps=10,
-    max_batch_size=10_000,
-    save_path="madnis_blob.pt",
-    flow_config=FlowConfig(
-        uniform_latent=True,
+sampler_config = dict(
+    kind="mixed flow",
+    flow=dict(
         permutations="log",
-        layers=3,
-        units=32,
-        bins=10,
-        min_bin_width=1e-3,
-        min_bin_height=1e-3,
-        min_bin_derivative=1e-3
+        spline=dict(
+            kind="rqs",
+            min_bin_width=1e-3,
+            min_bin_height=1e-3,
+            min_bin_derivative=1e-3,
+            bins=10,
+        ),
+        subnet=dict(
+            kind="mlp",
+            layers=3,
+            units=32,
+        ),
     ),
-    transformer_config=TransformerConfig(
+    discrete=dict(
+        kind="transformer",
         embedding_dim=64,
         feedforward_dim=64,
         heads=4,
-        mlp_units=64,
-        transformer_layers=1
-    ),
-    made_config=MadeConfig(
-        layers=2,
-        nodes_per_feature=16
+        layers=1,
+        subnet=dict(
+            kind="mlp",
+            layers=3,
+            units=64,
+        )
     )
 )
 
-mapping_kwargs = { "layer_cfgs": [ { "kind": "ose" } ] }
+mapping_kwargs = {"layer_cfgs": [{"kind": "ose"}]}
 
 graph_properties = dict(
     edge_masses=[0.0, 0.0],
@@ -57,73 +53,97 @@ graph_properties = dict(
 )
 
 
-def gaussian_eval(discrete: NDArray, momentum: NDArray) -> NDArray:
-    # Spherical param
-
+def gaussian_eval(discrete: NDArray, momentum: NDArray) -> Feedback:
     # Multi Gaussian, normalized to integrate to 1 over the whole space
     norm_factor = np.sum((2*np.pi * sigma ** 2)**(momentum.shape[1]/2))
     sig = sigma[discrete[:, 0]]
 
-    return np.exp(-(momentum**2).sum(axis=1) / sig**2 / 2) / norm_factor
+    return Feedback(np.exp(-(momentum**2).sum(axis=1) / sig**2 / 2) / norm_factor)
 
 
-def train(n: int, batch_size: int, sampler: MadnisSampler) -> None:
+def train(n: int, batch_size: int, sampler: GammaBoardSampler) -> None:
     for _ in range(n):
-        batch_size = sampler.training_samples_remaining() or 0
+        batch_size = sampler.orchestrator._training_samples_remaining() or 0
         samples = sampler.generate(batch_size)
-        res = gaussian_eval(samples.xs_discrete, samples.xs_continuous) * samples.weights
+        res = gaussian_eval(samples.xs_discrete, samples.xs_continuous)
         sampler.feedback(res)
 
 
 if __name__ == "__main__":
     # Testing exposed functionality
-    ddim = [len(sigma)]
+    ddim = (len(sigma), )
     cdim = 3
+    domain = RectangularDomain(discrete_cardinalities=ddim, continuous_dims=cdim)
     from_prepared = True and Path("prepared_state.pkl").exists()
-    init_args = asdict(config)
-    init_args.update(dict(mapping=mapping_kwargs, graph_properties=graph_properties))
-    sampler = MadnisSampler(discrete_cardinalities=ddim, continuous_dims=cdim, **init_args)
-    print(
-        f"sampler.continuous_dims: {sampler.continuous_dims}, sampler.discrete_cardinalities: {sampler.discrete_cardinalities}")
+    if from_prepared:
+        save_path = Path("prepared_state.pkl")
+    else:
+        save_path = Path("saved_state.pkl")
+    init_args = dict(
+        save_path=str(save_path),
+        sampler=sampler_config,
+        orchestrator=dict(
+            training_steps=training_steps,
+            training_batch_size=training_batch_size,
+            loss_type="kl_divergence",
+            loss_kwargs={"threshold": 30.0, "normalize_across_training_steps": True}
+        ),
+        mapping=mapping_kwargs,
+        graph_properties=graph_properties,
+    )
+    init_args.pop("kind", None)
+    sampler = GammaBoardSampler(domain=domain, **init_args)
     snapshot = sampler.snapshot()
-    save_path = Path(snapshot.get("save_path") or "")
     snapshot_path = Path("snapshot.json")
     json.dump(snapshot, snapshot_path.open("w"))
 
-    for run in range(3):
-        print(
-            f"sampler.continuous_dims: {sampler.continuous_dims}, sampler.discrete_cardinalities: {sampler.discrete_cardinalities}")
+    n_runs = 2
+    for run in range(n_runs):
         with snapshot_path.open("rb") as f:
             snapshot = json.load(f)
         print("Testing import of state...")
         if from_prepared:
             snapshot["save_path"] = "prepared_state.pkl"
-        sampler = MadnisSampler.from_snapshot(
+        sampler = GammaBoardSampler.from_snapshot(
             snapshot=snapshot,
-            discrete_cardinalities=ddim,
-            continuous_dims=cdim,
+            domain=domain,
             init_args=init_args,
         )
         print(f"============== STARTING RUN {run+1} ==============")
         print("Getting initial samples...")
-        samples = sampler.generate(sampler.training_samples_remaining() or 0)
-        res = gaussian_eval(samples.xs_discrete, samples.xs_continuous) * samples.weights
+        samples = sampler.generate(sampler.orchestrator._training_samples_remaining() or 0)
+        feedback = gaussian_eval(samples.xs_discrete, samples.xs_continuous)
+        res = feedback.values * samples.weights
         mean, std = res.mean(), res.std()
         print(f"Result before training: {mean} +- {std / np.sqrt(1000)}, RSD={std/mean}     TARGET: 1.0")
-        sampler.feedback(res)
+        sampler.feedback(feedback)
         print("Starting training...")
-        train(n=config.training_steps-1, batch_size=config.training_batch_size, sampler=sampler)
-        samples = sampler.generate(sampler.training_samples_remaining() or 10000)
-        res = gaussian_eval(samples.xs_discrete, samples.xs_continuous) * samples.weights
+        train(n=training_steps-1, batch_size=training_batch_size, sampler=sampler)
+
+        if run == n_runs - 1:
+            snapshot = sampler.snapshot()
+            json.dump(snapshot, snapshot_path.open("w"))
+
+        samples = sampler.generate(sampler.orchestrator._training_samples_remaining() or 10000)
+        res = gaussian_eval(samples.xs_discrete, samples.xs_continuous).values * samples.weights
         mean, std = res.mean(), res.std()
         print(f"Result after training: {mean} +- {std / np.sqrt(1000)}, RSD={std/mean}     TARGET: 1.0")
-        print("Testing PDF evaluation...")
-        try:
-            pdf_values = sampler.pdf(np.arange(6, dtype=np.uint64).reshape(-1, 2) % 2, 0.3 * np.ones((3, sampler.continuous_dims)))
-            print("PDF evaluation successful.")
-        except Exception as e:
-            print(f"Error occurred during PDF evaluation: {e.backtrace() if hasattr(e, 'backtrace') else str(e)}") # pyright: ignore[reportAttributeAccessIssue]
-            traceback.print_exc()
+
+    print(f"============== Testing inference Snapshot ==============")
+    with snapshot_path.open("rb") as f:
+        snapshot = json.load(f)
+    print("Testing import of state...")
+    if from_prepared:
+        snapshot["save_path"] = "prepared_state.pkl"
+    sampler = GammaBoardSampler.from_snapshot(
+        snapshot=snapshot,
+        domain=domain,
+        init_args=init_args,
+    )
+    samples = sampler.generate(sampler.orchestrator._training_samples_remaining() or 10000)
+    res = gaussian_eval(samples.xs_discrete, samples.xs_continuous).values * samples.weights
+    mean, std = res.mean(), res.std()
+    print(f"Result after training: {mean} +- {std / np.sqrt(1000)}, RSD={std/mean}     TARGET: 1.0")
 
     if save_path.exists():
         save_path.unlink()  # Clean up the saved state file

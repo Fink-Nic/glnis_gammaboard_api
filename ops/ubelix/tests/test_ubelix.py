@@ -25,8 +25,13 @@ class UbelixBuildTests(unittest.TestCase):
         shutil.copy2(ROOT / "ubelix.py", self.checkout / "ubelix.py")
         shutil.copy2(ROOT / "ops/ubelix/build.sbatch", self.checkout / "ops/ubelix/build.sbatch")
         for name in ("apptainer.def", "flake.nix", "flake.lock", "pyproject.toml",
-                     "Cargo.toml", "Cargo.lock"):
+                     "README.md", "MANIFEST.in"):
             (self.checkout / name).write_text(f"fixture {name}\n")
+        (self.checkout / "native/gammaloop/src").mkdir(parents=True)
+        for name in ("Cargo.toml", "Cargo.lock", "pyproject.toml", "src/lib.rs"):
+            (self.checkout / "native/gammaloop" / name).write_text(f"fixture {name}\n")
+        (self.checkout / "native/gammaloop/target").mkdir()
+        (self.checkout / "native/gammaloop/target/build-output").write_text("do not snapshot")
         (self.checkout / "src").mkdir()
         (self.checkout / "src/sampler.py").write_text("queued source\n")
         (self.checkout / "src/dev.so").write_bytes(b"do not package a local extension")
@@ -116,6 +121,9 @@ else:
         self.assertTrue((self.checkout / "logs/slurm/build").is_dir())
         snapshot = Path(arguments[1])
         self.assertFalse((snapshot / "src/dev.so").exists())
+        self.assertTrue((snapshot / "native/gammaloop/Cargo.toml").is_file())
+        self.assertTrue((snapshot / "native/gammaloop/src/lib.rs").is_file())
+        self.assertFalse((snapshot / "native/gammaloop/target").exists())
         (self.checkout / "src/sampler.py").write_text("edited after submission\n")
         self.run_job(check=True)
 

@@ -18,11 +18,11 @@
     },
     "crane": {
       "locked": {
-        "lastModified": 1791754810,
-        "narHash": "sha256-cN0Mgk+sQtCJcGWs9H4M0CnLRAuC4I8aCwiBTcBJs6E=",
+        "lastModified": 1793836618,
+        "narHash": "sha256-TREenflwEjxOSq292FYwbc3kEm7TDRtXCZRNWEdjBmg=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "bd63bf1d0a0f6dcacd7549c714a671ee63b0db6a",
+        "rev": "79fd63528501446749c09f08cad486a58c7d173e",
         "type": "github"
       },
       "original": {
@@ -58,11 +58,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1731533236,
-        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
+        "lastModified": 1791914995,
+        "narHash": "sha256-Zf/xfQEAasnwnmEfHqW/4hjDE/s44yn2hD4RuVIZRjA=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
+        "rev": "b7a79d3fea1e214f6d668d521cecec0c01e26544",
         "type": "github"
       },
       "original": {
@@ -74,34 +74,17 @@
     "gammaboard-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1791476199,
-        "narHash": "sha256-nWok5uAP6fEqaVGIt5S3oKEpSKhW3uQIvdqY7Iwscvk=",
+        "lastModified": 1793957996,
+        "narHash": "sha256-b3VaWZvAt8SYGqKt+0/EK9bBSVAtUpqMrIjaoH7tw6k=",
         "owner": "alphal00p",
         "repo": "gammaboard",
-        "rev": "f2a3911a66a9035e16ce9bea2dd28fdc158f8ec9",
+        "rev": "9566304070ab5bba72bbac26c66bb239b0de5246",
         "type": "github"
       },
       "original": {
         "owner": "alphal00p",
         "ref": "main",
         "repo": "gammaboard",
-        "type": "github"
-      }
-    },
-    "madnis-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1781884419,
-        "narHash": "sha256-TRUQuozaAc5ItEqrVnlPsyRVsrVUxUN0oVpqyl4Kkbs=",
-        "owner": "madgraph-ml",
-        "repo": "madnis",
-        "rev": "f16fb71d41271e3078b8ffc9db072a4241c12498",
-        "type": "github"
-      },
-      "original": {
-        "owner": "madgraph-ml",
-        "ref": "main",
-        "repo": "madnis",
         "type": "github"
       }
     },
@@ -128,7 +111,6 @@
         "fenix": "fenix",
         "flake-utils": "flake-utils",
         "gammaboard-src": "gammaboard-src",
-        "madnis-src": "madnis-src",
         "nixpkgs": "nixpkgs"
       }
     },

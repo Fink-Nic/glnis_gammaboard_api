@@ -16,3 +16,4 @@ __pycache__/
 target/
 *cpython*.so
 .vscode/
+outputs/

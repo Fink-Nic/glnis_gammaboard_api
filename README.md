@@ -1,181 +1,91 @@
 # glNIS GammaBoard API
 
-MadNIS sampler implementation for GammaBoard using the
-`gammaboard_process.run_sampler(...)` Python wrapper. Includes support for additional coordinate mappings schemes that allow the direct sampling of momentum space.
+Neural importance sampling for GammaBoard.
+See [the documentation](docs/README.md) for usage, configuration, implementation,
+and development guidance.
 
-## Runtime Options
+## Python installation
 
-Supply your own Symbolica license in the environment used to launch GammaBoard
-or the sampler, including for editable development and Apptainer:
-
-```bash
-export SYMBOLICA_LICENSE='your-license-key'
-```
-
-### Nix
-
-Python is pinned to the same Nixpkgs revision as GammaBoard: Python 3.13.12 with
-the matching PyTorch/CUDA 12 stack. Update both repositories' pins together.
-Rust uses a separate Fenix toolchain because Symbolica 3.0.1 requires Rust 1.96
-or newer. Rerun `glnis-dev` after changing the pin to refresh an editable venv.
-
-Build the project environment:
+Use Python 3.13. The core Python package requires no Rust toolchain, Symbolica
+license, or GammaLoop installation:
 
 ```bash
-nix build .#runtime
+uv venv --python python3.13 .venv
+uv pip install --python .venv/bin/python -e '.[test]'
+source .venv/bin/activate
 ```
 
-This builds a locked runtime with the Rust dependency artifacts cached separately
-from the Python package. `nix run` also
-launches the sampler, and `nix build .#wheel` builds the Nix-native Python wheel.
+Omit the `test` extra when pytest is not needed. GammaLoop state parsing requires
+both the native companion and the `gammaloop` extra, plus a Rust toolchain and
+native libraries. The full Nix development shell supplies those build dependencies:
 
-Use this GammaBoard process command:
-
-```toml
-command = ["$resources/../../glnis_gammaboard_api/result/bin/python", "-u", "-m", "run_sampler"]
-cwd = "$resources/.."
+```bash
+uv pip install --python .venv/bin/python -e ./native/gammaloop -e '.[gammaloop,test]'
 ```
 
-### Apptainer
+The companion is built separately with Maturin; the core wheel remains pure Python.
+Optional-backend runtime setup is covered in the
+[GammaBoard guide](docs/usage/gammaboard.md#gammaloop-inputs).
 
-On UBELIX, clone this repository and run `python3 ubelix.py` to submit a Slurm
-build of the sampler image. See [the UBELIX guide](ops/ubelix/README.md) for
-resource options, build monitoring, and using the image with GammaBoard.
+## Nix builds and editable development
 
-Apptainer/SIF is the portable runtime path for HPC systems that do not provide
-Nix. The definition uses Nix only inside the image build container to reproduce
-`nix build .#runtime`; the final SIF exposes normal executables and does not
-require Nix on the host.
+The flake currently targets Linux x86_64. It pins Python and the scientific
+runtime through [flake.lock](flake.lock).
 
-Build from this directory so the `%files` entries in `apptainer.def` resolve to
-the local checkout:
+```bash
+nix build .#runtime            # core runtime; also the default package
+nix build .#runtime-gammaloop  # runtime with the optional GammaLoop backend
+nix build .#wheel              # pure Python wheel
+nix build .#wheel-gammaloop     # native companion wheel
+```
+
+For an editable checkout:
+
+```bash
+nix develop
+# Use `nix develop .#gammaloop` for the optional native backend.
+glnis-dev
+# Use `glnis-dev --gammaloop` for the optional native backend.
+source .venv/bin/activate
+```
+
+Rerun `glnis-dev` after changing the Nix pin; rerun it with `--gammaloop` after
+Rust changes. See [development](docs/development.md) for environment details,
+dependency updates, and verification commands.
+
+## Apptainer builds
+
+Build from the repository root so the definition's local source paths resolve:
 
 ```bash
 apptainer build --force glnis.sif apptainer.def
 ```
 
-Use this GammaBoard process command:
-
-```toml
-command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/../..:$resources/../..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis-gammaboard-sampler"]
-cwd = "$resources/.."
-```
-
-### Editable development
-
-Enter the development shell and install the checkout in editable mode:
+The image includes the GammaLoop backend and uses Nix inside the build container;
+the host does not need Nix. On UBELIX, submit the build with:
 
 ```bash
-nix develop
-glnis-dev
-source .venv/bin/activate
+python3 ubelix.py
 ```
 
-The shell provides Python 3.13, Rust, and native dependencies without building
-the runtime. `glnis-dev [venv-directory]` creates or updates the venv and records
-the selected native library/compiler paths so its sampler can also run outside
-the shell. Python edits take effect immediately. Rerun `glnis-dev` after Rust or
-dependency changes; Cargo reuses the local `target` directory. Editable builds
-use the development profile; packaged Nix builds use the release profile.
+See the [UBELIX build guide](ops/ubelix/README.md) for prerequisites, submission,
+monitoring, and image deployment.
 
-After updating `flake.lock`, rerun `glnis-dev`. It also refreshes the venv's base
-interpreter in place when the Nix Python changes, keeping Python, glibc, and the
-Rust extension compatible while preserving installed packages.
+## Entry points
 
-An ordinary editable install is also supported inside the shell, or on a Linux
-host with Python 3.13, Rust, a C/C++ compiler, and the required native libraries:
+Activate the environment before invoking installed commands.
 
-```bash
-uv venv --python python3.13 .venv
-uv pip install --python .venv/bin/python -e .
-```
+| Installed command | Python module equivalent | Purpose |
+| --- | --- | --- |
+| `glnis-gammaboard-sampler` | `python -u -m run_sampler` | GammaBoard sampler worker |
+| `glnis-integrate` | `python -m glnis.scripts.run` | Local integration from TOML |
+| `glnis-compare-samplers` | `python -m glnis.scripts.sampler_comparison` | Compare named sampler configurations |
+| `glnis-slice-plot` | `python -m glnis.scripts.slice_plot` | Evaluate or replot saved PDF slices |
 
-On Nix hosts, use `glnis-dev` when the venv must run outside `nix develop`.
+The Nix runtime's Python executable is `result/bin/python` after building the
+selected runtime. `nix run` launches the core sampler; `nix run .#gammaloop`
+launches the worker with the optional backend. Inside an Apptainer image, invoke
+`glnis-gammaboard-sampler` through `apptainer exec`.
 
-Use this GammaBoard process command:
-
-```toml
-command = ["$resources/../../glnis_gammaboard_api/.venv/bin/glnis-gammaboard-sampler"]
-cwd = "$resources/.."
-```
-
-With `cwd = "$resources/.."`, sampler `save_path` values should be relative to
-the GammaBoard workspace, for example:
-
-```toml
-save_path = "integrations/glnis_gammaboard_api/checkpoints/ghost_bump_madnis"
-```
-
-### Updating dependencies
-
-Change a Rust dependency version or Git revision in `Cargo.toml`, then update the
-lockfile using Cargo, for example:
-
-```bash
-nix develop
-cargo update -p gammalooprs
-glnis-dev                 # incremental editable build
-# Or build the deployable runtime:
-nix build .#runtime
-```
-
-Commit `Cargo.toml` and `Cargo.lock` together. Maturin and Nix both build with
-`--locked`. The GammaLoop revision is also used for its embedded assets, with no
-separate source hash to maintain. Cargo uses this project's lockfile, not the
-lockfile inside a Git dependency. GammaLoop `2e22d46` uses Rust Symbolica and
-Numerica 3.0.1, as recorded in `Cargo.lock`.
-
-Use `nix flake update <input-name>` to update a Nix input and commit `flake.lock`.
-The editable Python dependencies use the sources declared in `pyproject.toml`;
-the Nix runtime uses the source revisions in `flake.lock` and Nixpkgs packages.
-The Python Symbolica wheel remains pinned to 3.0.0. When updating the Python
-wheel, update its version in `pyproject.toml`
-and the version, Python ABI tag, and checksum in `flake.nix` using the release
-files published on PyPI.
-
-Changing the Rust dependency set can rebuild Nix's dependency derivation. Local
-editable builds retain Cargo's incremental cache across dependency updates.
-
-
-## Use With GammaBoard
-
-Run templates live in `examples/templates/runs/`. Load them directly from the
-GammaBoard checkout, for example:
-
-```bash
-./gammaboard run create ../glnis_gammaboard_api/examples/templates/runs/ghost_bump_madnis.toml
-```
-
-Campaigns resolve their child template relative to the campaign file. Keep the
-base `madnis_gammaloop_train_sample.toml` beside the campaign when copying files.
-The templates launch the built Nix runtime by default.
-
-Training feedback follows `SampleBatch.training_remaining`; these templates do
-not need `requires_training_values`. Keep the training task's `max_samples`
-equal to `training_steps * training_batch_size` so inference restores a fully
-trained snapshot. Bulk generation is now automatic; `bulk_sample_generation`
-is retired.
-
-The physics templates expose independent `max_batch_size` (32,768 evaluator
-samples) and `max_generation_size` (262,144 samples per sampler draw) replacements.
-Training draws also stop at the minibatch boundary. Leave evaluator batch sizing
-adaptive; try `sampler_aggregator_runner_params.io_threads = 2` or `4` only when
-transport is limiting throughput and those CPU threads are available. The default
-is one I/O thread per active sampler, so account for concurrent campaign children.
-
-For GammaLoop x-space PDF images, every coordinate must be strictly inside
-`(0, 1)`, including coordinates held fixed by a slice. The task template
-`examples/templates/tasks/gg_hhh_1L_x_space_pdf.toml` supplies three interior
-128-by-128 slices with the fixed coordinate at 0.5. Physical-momentum runs use
-the separate slices and spherical mapping in `gg_hhh_1L.toml`.
-
-The sampler command uses `$resources/..` because GammaBoard expands
-`$resources` to the default resource directory. Sampler `args` are passed
-through unchanged, so `save_path` should be relative to the configured process
-`cwd`.
-
-The process entrypoint is:
-
-```bash
-python -u -m run_sampler
-```
+For arguments and workflows, see [GammaBoard usage](docs/usage/gammaboard.md),
+[local runs](docs/usage/local-runs.md), and [analysis](docs/usage/analysis.md).

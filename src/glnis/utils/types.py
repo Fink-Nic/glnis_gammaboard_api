@@ -1,42 +1,16 @@
 # type: ignore
+from collections.abc import Iterator, Mapping
 import functools
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from time import perf_counter
-from typing import Any, Dict, Iterable, List
+from typing import Any, ClassVar, Dict, Iterable, List, Self
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
+import torch
+from torch._tensor import Tensor
 
 from glnis.utils.helpers import chunks
-
-
-@dataclass
-class ParameterisationLayerConfig:
-    """
-    Config for one layer of the parameterisation stack. This is used to construct the
-    'LayeredParameterisation' object used to transform the sampled points before
-    passing to the evaluator.
-    """
-
-    param_type: str
-    param_kwargs: Dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]):
-        config = dict(config_dict)
-        param_type = config.pop("param_type", None)
-        if param_type is None:
-            raise ValueError("Parameterisation config must have a 'param_type' key.")
-        return cls(
-            param_type=param_type,
-            param_kwargs=config or {},
-        )
-
-
-@dataclass
-class ParserConfig:
-    override_lmb_heuristics: bool = False
-    gammaloop_directory: str = ""
 
 
 type LayerResult = NDArray | List | None
@@ -96,7 +70,8 @@ class GraphProperties:
         self.n_orientations = len(self.orientation_ids)
 
         self.channel_masses = self.edge_masses[self.lmb_edges].reshape(self.n_channels, self.n_loops)
-        self.channel_momentum_shifts = self.edge_momentum_shifts[self.lmb_edges].reshape(self.n_channels, 3*self.n_loops)
+        self.channel_momentum_shifts = self.edge_momentum_shifts[self.lmb_edges].reshape(
+            self.n_channels, 3*self.n_loops)
         try:
             # Calculate the inverse lmb transforms, ordered as the LMBs in graph properties
             self.channel_transforms = self.graph_signature[
@@ -214,6 +189,7 @@ class LayerData:
         momenta=4,
         continuous=5,
         discrete=6,
+        strata=7,
     )
 
     def __init__(
@@ -222,6 +198,7 @@ class LayerData:
         n_mom: int = 0,
         n_cont: int = 0,
         n_disc: int = 0,
+        n_strata: int = 0,
         _existing_data: NDArray | None = None,
         _existing_structure: NDArray | None = None,
         _existing_active_structure: NDArray | None = None,
@@ -256,6 +233,7 @@ class LayerData:
             self._structure[LayerData.POSITIONS["momenta"]] = n_mom
             self._structure[LayerData.POSITIONS["continuous"]] = n_cont
             self._structure[LayerData.POSITIONS["discrete"]] = n_disc
+            self._structure[LayerData.POSITIONS["strata"]] = n_strata
             self._data = np.zeros(
                 (self.n_points, self._structure.sum()), dtype=self.dtype
             )
@@ -279,14 +257,14 @@ class LayerData:
         return wrapper_timer
 
     @_timer
-    def update(self, identifier: str = "unspecified") -> None:
+    def update(self, kind: str = "unspecified") -> None:
         """
         Updates state according to data in _pending_data. Will update the processing time of the
-        processing step 'identifier' based on the elapsed time since last update. Will also mask
+        processing step 'kind' based on the elapsed time since last update. Will also mask
         non-finite values and update failures accordingly.
         """
         if len(self._pending_data) == 0:
-            self._update_processing_times(identifier)
+            self._update_processing_times(kind)
             return
 
         next_success = np.ones(self.n_points, dtype=np.bool)
@@ -294,14 +272,15 @@ class LayerData:
             next_success = np.logical_and(next_success, np.isfinite(v).all(axis=1))
 
         new_failures_mask = np.logical_and(self.success, ~next_success)
-        self.success = next_success
+        # A later successful stage cannot recover a sample that failed earlier.
+        self.success = np.logical_and(self.success, next_success)
 
         if new_failures_mask.any():
             caused_failures = self._data[new_failures_mask]
-            if identifier in self.failures:
-                self.failures[identifier + "_"] = caused_failures
+            if kind in self.failures:
+                self.failures[kind] = np.vstack((self.failures[kind], caused_failures))
             else:
-                self.failures[identifier] = caused_failures
+                self.failures[kind] = caused_failures
 
         # Converting from iter to list allows us to remove items during loop
         for name in list(self._pending_data.keys()):
@@ -315,7 +294,7 @@ class LayerData:
         self._data[~self.success] = 0
 
         # Update processing times according to time since last update
-        self._update_processing_times(identifier)
+        self._update_processing_times(kind)
 
     def get_processing_times(self) -> Dict[str, float]:
         if len(self._pending_data) > 0:
@@ -341,6 +320,7 @@ class LayerData:
             self.update("as_chunks")
 
         data_chunks: Iterable[NDArray] = chunks(self._data, n_chunks)
+        offset = 0
         for chunk_id, data_chunk in enumerate(data_chunks):
             chunk = LayerData(
                 _existing_data=data_chunk,
@@ -348,11 +328,13 @@ class LayerData:
                 _existing_active_structure=self._active_structure,
             )
             chunk._t_init = self._t_init
+            chunk.success = self.success[offset:offset + len(data_chunk)].copy()
+            offset += len(data_chunk)
             # We add the metadata to the first chunk, and duplicate the processing time n_cores times
             if chunk_id == 0:
-                chunk.failures = self.failures
+                chunk.failures = {key: value.copy() for key, value in self.failures.items()}
             if chunk_id < n_cores:
-                chunk._processing_times = self._processing_times
+                chunk._processing_times = self._processing_times.copy()
 
             yield chunk
 
@@ -407,11 +389,13 @@ class LayerData:
         if value is None:
             self._set_data("f_real", None)
             self._set_data("f_imag", None)
+            return
         if np.iscomplexobj(value):
             self._set_data("f_real", value.real)
             self._set_data("f_imag", value.imag)
         else:
             self._set_data("f_real", value)
+            self._set_data("f_imag", np.zeros_like(value))
 
     @property
     def continuous(self: "LayerData"):
@@ -428,6 +412,14 @@ class LayerData:
     @discrete.setter
     def discrete(self: "LayerData", value: LayerResult):
         self._set_data("discrete", value)
+
+    @property
+    def strata(self: "LayerData"):
+        return self._get_data("strata").astype(np.uint64)
+
+    @strata.setter
+    def strata(self: "LayerData", value: LayerResult):
+        self._set_data("strata", value)
 
     def _to_layer_data(self: "LayerData", value: LayerResult) -> NDArray:
         """
@@ -452,16 +444,21 @@ class LayerData:
                     "LayerData objects accept only numpy ndarray, list or None."
                 )
 
+        if self.n_points == 0:
+            if output.size:
+                raise ValueError("Cannot assign nonempty data to an empty LayerData.")
+            columns = int(np.prod(output.shape[1:])) if output.ndim > 1 else 1
+            return output.reshape(0, columns)
         return output.reshape(self.n_points, -1)
 
     def _update_processing_times(
-        self: "LayerData", identifier: str = "unspecified"
+        self: "LayerData", kind: str = "unspecified"
     ) -> None:
         processing_time = perf_counter() - self._timestamp
-        if identifier in self._processing_times:
-            self._processing_times[identifier] += processing_time
+        if kind in self._processing_times:
+            self._processing_times[kind] += processing_time
         else:
-            self._processing_times[identifier] = processing_time
+            self._processing_times[kind] = processing_time
         self._timestamp = perf_counter()
 
     @_timer
@@ -520,10 +517,7 @@ class SinglePhaseResult:
 
     @property
     def tvar(self: "SinglePhaseResult") -> float:
-        if self._n == 0:
-            return 0.0
-        time_per_sample = self._total_time / self._n
-        return self.rsd**2 * time_per_sample
+        return self.error**2 * self._total_time
 
     def combine_with(self: "SinglePhaseResult", other: "SinglePhaseResult") -> None:
         total_points = self._n + other._n
@@ -551,11 +545,11 @@ class SinglePhaseResult:
             if total_points > 0
             else 0
         )
-        # Achieves combined.error**2 = self.error**2 + other.error**2
+        # Achieves "combined.variance = self.variance + other.variance"
         self._m2 = (
             (
-                (self._m2 / (self._n - 1) / self._n if self._n > 1 else 0.0)
-                + (other._m2 / (other._n - 1) / other._n if other._n > 1 else 0.0)
+                (self._n / total_points)**2 * self.error**2
+                + (other._n / total_points)**2 * other.error**2
             )
             * (total_points - 1)
             * total_points
@@ -722,95 +716,170 @@ class Result:
 
 
 @dataclass
-class IntegrationResult:
+class RectangularTrainingStatus:
+    sample_dim: int
+    training_batch_size: int
+    num_generated: int = 0
+    num_ingested: int = 0
+    total_trained_samples: int = 0
+    produced_batches: int = 0
+    produced_samples: int = 0
+    step: int = 0
+    last_loss: float | None = None
+    loss_history: List[float | None] = field(default_factory=list)
+    generated_samples: Tensor = None
+    generated_probs: Tensor = None
+    ingested_weights: Tensor = None
+    result: SinglePhaseResult = field(default_factory=SinglePhaseResult)
+    abs_result: SinglePhaseResult = field(default_factory=SinglePhaseResult)
+
+    def __post_init__(self):
+        if self.generated_samples is None:
+            self.generated_samples = torch.empty(
+                (self.training_batch_size, self.sample_dim), dtype=torch.float64
+            )
+        if self.generated_probs is None:
+            self.generated_probs = torch.empty(
+                (self.training_batch_size,), dtype=torch.float64
+            )
+        if self.ingested_weights is None:
+            self.ingested_weights = torch.empty(
+                (self.training_batch_size,), dtype=torch.float64
+            )
+
+    def to(self, device: torch.device, dtype: torch.dtype) -> None:
+        self.generated_samples = self.generated_samples.to(device, dtype=dtype)
+        self.generated_probs = self.generated_probs.to(device, dtype=dtype)
+        self.ingested_weights = self.ingested_weights.to(device, dtype=dtype)
+
+    def add_generation_data(self, samples: Tensor, probs: Tensor) -> None:
+        if samples.shape != (len(probs), self.sample_dim):
+            raise ValueError("generated samples and probabilities have incompatible shapes")
+        n_samples = samples.shape[0]
+        if self.num_generated + n_samples > self.training_batch_size:
+            raise ValueError("generation exceeds the training window")
+        if n_samples == self.training_batch_size:
+            self.generated_samples = samples
+            self.generated_probs = probs
+        else:
+            self.generated_probs[self.num_generated:self.num_generated + n_samples] = probs
+            self.generated_samples[self.num_generated:self.num_generated + n_samples, :] = samples
+        self.num_generated += n_samples
+        self.produced_batches += 1
+
+    def add_feedback_data(self, weights: NDArray) -> None:
+        weights = torch.as_tensor(weights, dtype=self.ingested_weights.dtype, device=self.ingested_weights.device)
+        n_weights = weights.shape[0]
+        if weights.ndim != 1 or self.num_ingested + n_weights > self.num_generated:
+            raise ValueError("feedback exceeds the generated training samples")
+        if n_weights == self.training_batch_size:
+            self.ingested_weights = weights
+        else:
+            self.ingested_weights[self.num_ingested:self.num_ingested + n_weights] = weights
+        self.num_ingested += n_weights
+
+        if self.test_ready_for_training() and n_weights > 0:
+            values = self.ingested_weights.cpu().numpy(force=True) / self.generated_probs.cpu().numpy(force=True)
+            self.result.combine_with(SinglePhaseResult.from_values(
+                values=values,
+            ))
+            self.abs_result.combine_with(SinglePhaseResult.from_values(
+                values=np.abs(values),
+            ))
+
+    def test_ready_for_training(self) -> bool:
+        return self.num_generated == self.training_batch_size and self.num_ingested == self.training_batch_size
+
+    def finish_step(self, loss: float | None) -> None:
+        self.loss_history.append(loss)
+        self.last_loss = loss
+        self.step += 1
+        self.num_generated = 0
+        self.num_ingested = 0
+        self.total_trained_samples += self.training_batch_size
+
+
+class BuildFromKind:
+    KIND: ClassVar[str] = "BuildFromKindBase"
+    DEFAULT_KIND: ClassVar[str] = "BuildFromKindBase"
+
+    def __init__(self, **kwargs: Any) -> None:
+        raise NotImplementedError(
+            "Subclasses must implement __init__ with specific arguments"
+        )
+
+    @classmethod
+    def all_subclasses(cls) -> Iterator[type[Self]]:
+        for subclass in cls.__subclasses__():
+            yield subclass
+            yield from subclass.all_subclasses()
+
+    @classmethod
+    def kind_registry(cls) -> dict[str, type[Self]]:
+        registry: dict[str, type[Self]] = {cls.KIND: cls} if "KIND" in cls.__dict__ else {}
+
+        for subclass in cls.all_subclasses():
+            # Only register subclasses that explicitly define a KIND class attribute.
+            if "KIND" not in subclass.__dict__:
+                continue
+            kind = subclass.KIND
+            previous = registry.get(kind)
+
+            if previous is subclass:
+                # A diamond inheritance hierarchy can reach a class twice.
+                continue
+
+            if previous is not None:
+                raise ValueError(
+                    f"Duplicate KIND {kind!r}: "
+                    f"{previous.__qualname__} and {subclass.__qualname__}"
+                )
+
+            registry[kind] = subclass
+
+        return registry
+
+    @classmethod
+    def subclass_for_kind(cls, kind: str) -> type[Self]:
+        try:
+            return cls.kind_registry()[kind]
+        except KeyError:
+            raise ValueError(f"Unknown kind: {kind!r}") from None
+
+    @classmethod
+    def from_kind(cls, kind: str | None = None, **kwargs: Any) -> Self:
+        if kind is None:
+            kind = cls.DEFAULT_KIND
+        if not isinstance(kind, str):
+            raise ValueError("kind must be a string")
+
+        return cls.subclass_for_kind(kind)(**kwargs)
+
+    @classmethod
+    def from_kwargs(cls, **kwargs: Any) -> Self:
+        kind = kwargs.pop("kind", None)
+        return cls.from_kind(kind, **kwargs)
+
+    @classmethod
+    def from_mapping(cls, config: Mapping[str, Any]) -> Self:
+        return cls.from_kwargs(**config)
+
+
+@dataclass
+class Config:
     """
-    Legacy class, only used as a container now. Should not be used, since the new `Result` class
-    has proper implementation of running error calculation, and is more robust to updates.
+    A base class for configuration objects.
     """
 
-    n_points: int = 0
-    real_mean: float = 0
-    real_error: float = 0
-    imag_mean: float = 0
-    imag_error: float = 0
-    abs_real_mean: float = 0
-    abs_real_error: float = 0
-    abs_imag_mean: float = 0
-    abs_imag_error: float = 0
-    real_rsd: float = 0
-    imag_rsd: float = 0
-    abs_real_rsd: float = 0
-    abs_imag_rsd: float = 0
-    real_tvar: float = 0
-    imag_tvar: float = 0
-    abs_real_tvar: float = 0
-    abs_imag_tvar: float = 0
-    total_time: float = 0
+    @classmethod
+    def from_kwargs(cls, **kwargs) -> Self:
+        """
+        Build a configuration object from keyword arguments. To be overwritten is special logic must be applied.
+        """
+        return cls(**kwargs)
 
-    def __post_init__(self: "IntegrationResult"):
-        """Calculates derived observables such as RSD and time per sample."""
-        time_per_sample = 0
-        # No harm in recalculating these
-        if self.n_points > 0:
-            time_per_sample = self.total_time / self.n_points
-            if self.real_mean:
-                self.real_rsd = self._rsd(
-                    self.real_mean, self.real_error, self.n_points
-                )
-            if self.imag_mean:
-                self.imag_rsd = self._rsd(
-                    self.imag_mean, self.imag_error, self.n_points
-                )
-            if self.abs_real_mean:
-                self.abs_real_rsd = self._rsd(
-                    self.abs_real_mean, self.abs_real_error, self.n_points
-                )
-            if self.abs_imag_mean:
-                self.abs_imag_rsd = self._rsd(
-                    self.abs_imag_mean, self.abs_imag_error, self.n_points
-                )
-
-        # Don't want to overwrite these in case total_time is not provided
-        if time_per_sample > 0:
-            self.real_tvar = self.real_rsd**2 * time_per_sample
-            self.imag_tvar = self.imag_rsd**2 * time_per_sample
-            self.abs_real_tvar = self.abs_real_rsd**2 * time_per_sample
-            self.abs_imag_tvar = self.abs_imag_rsd**2 * time_per_sample
-
-    def combine_with(self: "IntegrationResult", other: "IntegrationResult") -> None:
-        def cc(s_c: float, o_c: float) -> float:
-            return self._combine_mean(self.n_points, other.n_points, s_c, o_c)
-
-        def ce(s_e: float, o_e: float) -> float:
-            return self._combine_error(self.n_points, other.n_points, s_e, o_e)
-
-        self.real_mean = cc(self.real_mean, other.real_mean)
-        self.imag_mean = cc(self.imag_mean, other.imag_mean)
-        self.abs_real_mean = cc(self.abs_real_mean, other.abs_real_mean)
-        self.abs_imag_mean = cc(self.abs_imag_mean, other.abs_imag_mean)
-        self.real_error = ce(self.real_error, other.real_error)
-        self.imag_error = ce(self.imag_error, other.imag_error)
-        self.abs_real_error = ce(self.abs_real_error, other.abs_real_error)
-        self.abs_imag_error = ce(self.abs_imag_error, other.abs_imag_error)
-
-        self.n_points += other.n_points
-        self.total_time += other.total_time
-        self.__post_init__()  # Recalculate derived observables
-
-    def str_report(self: "IntegrationResult") -> str:
-        return f"""Real: {self.real_mean: .5f}  ± {self.real_error: .5f}, Imag: {
-            self.imag_mean: .5f}  ± {self.imag_error: .5f} """
-
-    @staticmethod
-    def _rsd(mean: float, err: float, n_points: int) -> float:
-        if mean == 0:
-            return 0
-        return err / np.abs(mean) * np.sqrt(n_points)
-
-    @staticmethod
-    def _combine_mean(s_n: float, o_n: float, s_c: float, o_c: float) -> float:
-        return (s_n * s_c + o_n * o_c) / (s_n + o_n)
-
-    @staticmethod
-    def _combine_error(s_n: float, o_n: float, s_e: float, o_e: float) -> float:
-        return np.sqrt(s_n**2 * s_e**2 + o_n**2 * o_e**2) / (s_n + o_n)
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Return a dictionary representation of this configuration. 
+        """
+        return asdict(self)

@@ -124,15 +124,16 @@ def _continuous_samples(
 
 
 def _assert_transform_output(
-    output: tuple[NDArray, NDArray],
+    output: tuple[NDArray, NDArray, NDArray],
     n_points: int,
     continuous_dimension: int,
 ) -> None:
-    continuous, weights = output
+    continuous, jacobian, integration_weight = output
     assert continuous.shape == (n_points, continuous_dimension)
-    assert weights.shape == (n_points,)
+    assert jacobian.shape == integration_weight.shape == (n_points,)
     assert np.all(np.isfinite(continuous))
-    assert np.all(np.isfinite(weights))
+    assert np.all(np.isfinite(jacobian))
+    assert np.all(np.isfinite(integration_weight))
 
 
 @pytest.fixture(
@@ -180,7 +181,6 @@ def test_forward_and_backward_transforms(
     n_points = int(case.config.get("n_points", 64))
     rng = np.random.default_rng(int(case.config.get("seed", 0)))
     discrete = generate_discrete_inputs(mapping, n_points, rng)
-    weights = rng.uniform(0.5, 1.5, size=n_points)
 
     input_space = mapping.mappings[0].input_space
     output_space = mapping.mappings[-1].output_space
@@ -191,13 +191,13 @@ def test_forward_and_backward_transforms(
     supports_backward = _supports_transform(mapping, "backward")
 
     if supports_forward:
-        forward_output = mapping.forward(discrete, forward_input, weights)
+        forward_output = mapping.forward(discrete, forward_input)
         _assert_transform_output(
             forward_output, n_points, mapping.continuous_dims_out
         )
     else:
         with pytest.raises(NotImplementedError):
-            mapping.forward(discrete, forward_input, weights)
+            mapping.forward(discrete, forward_input)
         forward_output = None
 
     if supports_backward:
@@ -205,12 +205,11 @@ def test_forward_and_backward_transforms(
             backward_input = _continuous_samples(
                 output_space, n_points, mapping.continuous_dims_out, rng
             )
-            backward_weights = weights
         else:
-            backward_input, backward_weights = forward_output
+            backward_input, _, _ = forward_output
 
         backward_output = mapping.backward(
-            discrete, backward_input, backward_weights
+            discrete, backward_input
         )
         _assert_transform_output(
             backward_output, n_points, mapping.continuous_dims_in
@@ -224,11 +223,11 @@ def test_forward_and_backward_transforms(
             )
         )
         with pytest.raises(NotImplementedError):
-            mapping.backward(discrete, backward_input, weights)
+            mapping.backward(discrete, backward_input)
         backward_output = None
 
     if supports_forward and supports_backward:
-        backward_continuous, backward_weights = backward_output # type: ignore[assignment]
+        backward_continuous, backward_jacobian, backward_weight = backward_output # type: ignore[assignment]
         np.testing.assert_allclose(
             backward_continuous,
             forward_input,
@@ -236,11 +235,12 @@ def test_forward_and_backward_transforms(
             atol=float(expected.get("round_trip_atol", 1.0e-10)),
         )
         np.testing.assert_allclose(
-            backward_weights,
-            weights,
+            backward_jacobian * forward_output[1],
+            np.ones(n_points),
             rtol=float(expected.get("round_trip_rtol", 1.0e-10)),
             atol=float(expected.get("round_trip_atol", 1.0e-10)),
         )
+        np.testing.assert_allclose(backward_weight * forward_output[2], 1., rtol=1e-9, atol=1e-9)
 
 
 def test_discrete_prior_autoregressive_sampling(

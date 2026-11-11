@@ -1,12 +1,22 @@
 # type: ignore
+from __future__ import annotations
+
 import json
-from typing import Dict, List, Set
+from typing import TYPE_CHECKING, Dict, List, Set
 
-import pydot
-from symbolica import E, Expression, S
+if TYPE_CHECKING:
+    import pydot
+    from symbolica import Expression
 
+from glnis._optional import gammaloop_native, require_gammaloop_dependency
 from glnis.core.mappings import LayeredMapping
-from glnis.utils.types import GraphProperties, ParserConfig
+from glnis.utils.types import GraphProperties, dataclass
+
+
+@dataclass
+class ParserConfig:
+    override_lmb_heuristics: bool = False
+    gammaloop_directory: str = ""
 
 
 class MetaDataParser:
@@ -21,6 +31,7 @@ class MetaDataParser:
         self.graph_properties_dict = graph_properties
 
     def get_layered_mapping_instance(self, mapping_config: Dict) -> LayeredMapping:
+        mapping_config = mapping_config.copy()
         return LayeredMapping(
             self.get_graph_properties(), **mapping_config
         )
@@ -29,7 +40,7 @@ class MetaDataParser:
         if self.graph_properties_dict is not None:
             return GraphProperties(**self.graph_properties_dict)
 
-        from madnis_sampler import parse_gammaloop_metadata
+        from gammaboard_sampler import parse_gammaloop_metadata
 
         self.metadata = parse_gammaloop_metadata(self.metadata)
         if self.metadata is None:
@@ -37,9 +48,7 @@ class MetaDataParser:
                 "Graph properties must be supplied via 'graph_properties' config key if not using GammaLoop evaluator."
             )
 
-        from glnis._rust import parse_state_simplified
-
-        integrand_data = json.loads(parse_state_simplified(
+        integrand_data = json.loads(gammaloop_native().parse_state_simplified(
             self.metadata.state_folder, self.metadata.process_id, self.metadata.integrand_name))
         Dot = DotParser(integrand_data["dot_file"], integrand_data["model"], dot_from_string=True)
 
@@ -69,14 +78,16 @@ class MetaDataParser:
 
         graph_properties_list = []
         for graph_group in integrand_data["graph_groups"]:
-            graph_properties = Dot.get_graph_properties(graph_group["master_graph_id"], integrand_data["external_momenta"])
+            graph_properties = Dot.get_graph_properties(
+                graph_group["master_graph_id"],
+                integrand_data["external_momenta"])
             lmbs = graph_group["loop_momentum_bases_edge_ids"]
             # Map edge_ids to {0, ..., n_edges-1}
             gl_internal_edge_ids = set(e_id for lmb in lmbs for e_id in lmb)
             e_id_map: Dict[int, int] = dict()
             for my_e_id, gl_e_id in enumerate(gl_internal_edge_ids):
                 e_id_map[gl_e_id] = my_e_id
-            
+
             graph_properties.lmb_edges = [
                 [e_id_map[e_id] for e_id in lmb] for lmb in lmbs
             ]
@@ -172,6 +183,7 @@ class DotParser:
         dot_from_string: bool = False,
         model_from_string: bool = True,
     ):
+        pydot = require_gammaloop_dependency("pydot", "Reading GammaLoop DOT graphs")
         if dot_from_string:
             self.graph_file = pydot.graph_from_dot_data(dot_file)
         else:
@@ -229,6 +241,10 @@ class DotParser:
         graph_id: int,
         ext_momenta: List[List[float]],
     ) -> GraphProperties:
+        symbolica = require_gammaloop_dependency(
+            "symbolica", "Extracting symbolic GammaLoop graph properties"
+        )
+        E, S = symbolica.E, symbolica.S
 
         # External momenta
         n_ext_mom = len(ext_momenta)

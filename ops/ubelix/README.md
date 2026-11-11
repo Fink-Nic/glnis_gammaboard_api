@@ -1,7 +1,9 @@
 # Build the sampler on UBELIX
 
-This workflow builds only the glNIS GammaBoard sampler image. GammaBoard and
-GammaLoop use their own installation workflows; their builds can run independently.
+This workflow builds the glNIS GammaBoard sampler image with its optional
+GammaLoop native companion and Symbolica support. GammaBoard and the standalone
+GammaLoop evaluator use their own installation workflows; those builds can run
+independently. The project's default Python installation remains core-only.
 
 ## Clone and submit
 
@@ -27,8 +29,10 @@ The helper uses only Python's standard library. It snapshots the current
 checkout's build inputs, including local edits, and immediately submits a Slurm
 job. It does not fetch another repository checkout. Edits and `git checkout`
 after submission do not affect the queued build. Dependency sources are fetched
-according to `flake.lock` and `Cargo.lock` during the image build; compute nodes
-therefore need network access, as with the other image builds.
+according to `flake.lock` and `native/gammaloop/Cargo.lock` during the image build;
+compute nodes therefore need network access, as with the other image builds.
+Snapshots include the companion sources in `native/gammaloop`, excluding local
+native binaries and Cargo build directories.
 
 By default, the job requests one node, one task, four CPUs, 32 GB memory, and
 six hours, using account `gratis` and partition `epyc2`. Override these values
@@ -57,9 +61,10 @@ sstat -j <job-id>.batch --format=JobID,AveCPU,MaxRSS,AveRSS
 ```
 
 The job builds the existing `apptainer.def`, using the allocated CPU count for
-`BUILD_CORES`. Nix runs inside the build container and compiles the Rust
-extension in release mode. It preserves the repository's pinned Python and
-CUDA dependencies. No GPU allocation is needed for the build or its import test.
+`BUILD_CORES`. Nix runs inside the build container, selects `runtime-gammaloop`,
+and compiles the optional Rust extension in release mode. It preserves the
+repository's pinned Python and CUDA dependencies. No GPU allocation is needed
+for the build or its import test.
 The sampler keeps Nix's native libraries ahead of automatically discovered GPU
 driver directories. General system library directories are probed for drivers
 without being added to `LD_LIBRARY_PATH`.
@@ -130,7 +135,9 @@ cwd = "$resources/.."
 Run cards such as `examples/templates/runs/ghost_bump_madnis.toml` and
 `examples/templates/runs/gg_hhh_1L.toml` include this command as a commented
 alternative to their default Nix command. Select the Apptainer command in the
-run card before submitting it. CUDA execution requires a GPU worker allocation
+run card and migrate their older sampler arguments to the
+[current configuration schema](../../docs/configuration/README.md) before
+submitting it. CUDA execution requires a GPU worker allocation
 and `--nv`; it does not require rebuilding the image on a GPU node. Supply your
-Symbolica license in the environment used to launch the sampler, as described
-in the repository README.
+Symbolica license in the environment used to launch the sampler; see
+[GammaLoop inputs](../../docs/usage/gammaboard.md#gammaloop-inputs).

@@ -1,0 +1,106 @@
+[comparison]
+run_name = "sine_slice_comparison"
+output_dir = "../../outputs/sampler_comparison"
+save_checkpoints = true
+plot = true
+
+[integrand]
+kind = "sine"
+continuous_dims = 2
+omega = 2
+offset = 0.1
+
+[aggregator]
+inference_samples = 1024
+evaluation_batch_size = 32
+log_every = 10
+
+[sampler]
+training_steps = 10
+training_batch_size = 128
+max_batch_size = 64
+use_gpu = false
+seed = 42
+
+[sampler.flow_config]
+layers = 2
+units = 16
+bins = 4
+
+[sampler.transformer_config]
+embedding_dim = 16
+feedforward_dim = 16
+heads = 2
+mlp_units = 16
+transformer_layers = 1
+
+[[samplers]]
+name = "default"
+
+[[samplers]]
+name = "naive"
+kind = "sgn_strat_naive"
+
+[[samplers]]
+name = "full"
+kind = "sgn_strat_full"
+
+# Use the saved comparison .pkl as the slice script's input. Its stored settings
+# include this table. For a standalone slice TOML, also set comparison_file.
+[slice_plot]
+run_name = "sine_slices"
+output_dir = "../../outputs/slice_plots"
+normalize = true
+batch_size = 1024
+use_gpu = true
+EPS = 1e-6
+
+[slice_plot.plotting]
+plot_singles = false
+plot_comparison = true
+dpi = 150
+cmap_name = "plasma"
+
+[[slice_plot.slices]]
+name = "Unstratified line"
+origin = [0.5, 0.3]
+discrete = []
+dirs = [0]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+[[slice_plot.slices]]
+name = "Positive channel line"
+origin = [0.5, 0.3]
+discrete = [0]
+dirs = [0]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+[[slice_plot.slices]]
+name = "Negative channel line"
+origin = [0.5, 0.3]
+discrete = [1]
+dirs = [0]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+[[slice_plot.slices]]
+name = "Unstratified plane"
+origin = [0.5, 0.5]
+discrete = []
+dirs = [0, 1]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+# These definitions match the sign-stratified samplers only. Their sign channel
+# is the first discrete coordinate; the default sampler has no such coordinate.
+[[slice_plot.slices]]
+name = "Positive channel"
+origin = [0.5, 0.5]
+discrete = [0]
+dirs = [0, 1]
+grid = [{start = 0.0, stop = 1.0, num = 101}]
+
+[[slice_plot.slices]]
+name = "Negative channel"
+origin = [0.5, 0.5]
+discrete = [1]
+dirs = [0, 1]
+grid = [{start = 0.0, stop = 1.0, num = 101}]

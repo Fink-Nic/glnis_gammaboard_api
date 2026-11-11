@@ -1,6 +1,6 @@
 # type: ignore
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, NamedTuple, Tuple
 from enum import Enum
 from dataclasses import dataclass, field
 
@@ -8,15 +8,27 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-from glnis.utils.types import GraphProperties, LayerData
+from glnis.utils.types import GraphProperties, LayerData, Config, BuildFromKind
 
 type MappingOutput = Tuple[NDArray, NDArray]
 
 type ContinuousDim = int | None
 
 
+class LayeredMappingResult(NamedTuple):
+    """Mapped coordinates with separate geometric and integration factors.
+
+    ``jacobian`` is the absolute coordinate Jacobian. ``integration_weight``
+    contains channel partition factors, with no proposal-density correction.
+    """
+
+    continuous: NDArray
+    jacobian: NDArray
+    integration_weight: NDArray
+
+
 @dataclass
-class MappingConfig:
+class MappingConfig(Config):
     kind: str
     kwargs: Dict[str, Any] = field(default_factory=dict)
 
@@ -42,13 +54,14 @@ class Space(Enum):
         return Space.HCUBE
 
 
-class Mapping(ABC):
+class Mapping(ABC, BuildFromKind):
     """
     Abstract class for a mapping layer in the parameterisation chain. 
     """
+    KIND = "ABCMapping"
+    DEFAULT_KIND = "spherical"
 
     N_SPATIAL_DIMS = 3
-    IDENTIFIER = "ABCMapping"
     TRANSFORMS_SPACE = True
     CONSUMES_NEXT_N_PARAMS = 0
 
@@ -59,6 +72,8 @@ class Mapping(ABC):
         cfg: Dict[str, Any] | None = None,
         **uncaught_kwargs,
     ):
+        if isinstance(input_space, str):
+            input_space = Space[input_space.upper()]
         self.input_space = input_space
         self.output_space = self._get_output_space()
         self.gp = graph_properties
@@ -69,14 +84,26 @@ class Mapping(ABC):
         self.num_discrete_dims = len(self.discrete_cardinalities)
 
     def forward(self, continuous: NDArray, discrete: NDArray) -> MappingOutput:
+        """Return the coordinate Jacobian and transformed coordinates."""
         if self.input_space is Space.HCUBE:
             return self._map_from_hcube(continuous, discrete)
         return self._map_from_momentum(continuous, discrete)
 
     def backward(self, continuous: NDArray, discrete: NDArray) -> MappingOutput:
+        """Return the inverse coordinate Jacobian and original coordinates."""
         if self.output_space is Space.MOMENTUM:
             return self._map_from_momentum(continuous, discrete)
         return self._map_from_hcube(continuous, discrete)
+
+    def integration_weight(
+        self, continuous_in: NDArray, continuous_out: NDArray, discrete: NDArray
+    ) -> NDArray:
+        """Integration correction for a forward transform, separate from its Jacobian.
+
+        Both endpoints use the configured forward direction. Ordinary mappings
+        have no correction; multichannel layers supply their partition factors.
+        """
+        return np.ones((len(continuous_in),), dtype=continuous_in.dtype)
 
     def _map_from_hcube(self, continuous: NDArray, discrete: NDArray) -> MappingOutput:
         """
@@ -87,7 +114,7 @@ class Mapping(ABC):
             parameterised continuous output, jacobians
         """
         raise NotImplementedError(
-            f"Mapping '{self.IDENTIFIER}' has not implemented the unit hypercube transform."
+            f"Mapping '{self.KIND}' has not implemented the unit hypercube transform."
         )
 
     def _map_from_momentum(self, momentum: NDArray, discrete: NDArray) -> MappingOutput:
@@ -99,7 +126,7 @@ class Mapping(ABC):
             parameterised continuous output, jacobians
         """
         raise NotImplementedError(
-            f"Mapping '{self.IDENTIFIER}' has not implemented the momentum space transform."
+            f"Mapping '{self.KIND}' has not implemented the momentum space transform."
         )
 
     def _prior_prob_function(self, discrete: NDArray) -> NDArray:
@@ -130,44 +157,6 @@ class Mapping(ABC):
             return self.input_space.inverse()
         return self.input_space
 
-    @classmethod
-    def all_subclasses(cls):
-        for subclass in cls.__subclasses__():
-            yield subclass
-            yield from subclass.all_subclasses()
-
-    @classmethod
-    def mapping_registry(cls) -> Dict[str, type["Mapping"]]:
-        registry = {}
-
-        for subclass in cls.all_subclasses():
-            identifier = subclass.IDENTIFIER
-
-            if identifier in registry:
-                raise ValueError(
-                    f"Duplicate Mapping class IDENTIFIER {identifier!r}: "
-                    f"{registry[identifier].__name__} and {subclass.__name__}"
-                )
-
-            registry[identifier] = subclass
-
-        return registry
-
-    @classmethod
-    def from_kind(cls, kind: str, graph_properties: GraphProperties, input_space=Space.HCUBE, **kwargs):
-        registry = cls.mapping_registry()
-
-        try:
-            subclass = registry[kind]
-        except KeyError:
-            raise ValueError(f"Unknown kind: {kind!r}") from None
-
-        return subclass(graph_properties=graph_properties, input_space=input_space, **kwargs)
-
-    @classmethod
-    def from_kwargs(cls, **kwargs):
-        return cls.__init__(**kwargs)
-
 
 class LayeredMapping:
 
@@ -180,7 +169,11 @@ class LayeredMapping:
         **uncaught_kwargs,
     ):
         self.use_f128 = use_f128
+        if isinstance(input_space, str):
+            input_space = Space[input_space.upper()]
         layer_cfgs = layer_cfgs if isinstance(layer_cfgs, list) else [layer_cfgs]
+        if not layer_cfgs:
+            raise ValueError("layer_cfgs must contain at least one mapping")
         layer_cfgs: List[MappingConfig] = [MappingConfig.from_dict(cfg) for cfg in layer_cfgs]
         self.mappings: List[Mapping] = []
         next_input_space = input_space
@@ -215,41 +208,44 @@ class LayeredMapping:
         self,
         discrete: NDArray | None,
         continuous: NDArray,
-        wgt: NDArray,
-    ) -> MappingOutput:
-        return self._apply_mappings(discrete, continuous, wgt, inverse=False)
+    ) -> LayeredMappingResult:
+        return self._apply_mappings(discrete, continuous, inverse=False)
 
     def backward(
         self,
         discrete: NDArray | None,
         continuous: NDArray,
-        wgt: NDArray,
-    ) -> MappingOutput:
-        return self._apply_mappings(discrete, continuous, wgt, inverse=True)
+    ) -> LayeredMappingResult:
+        return self._apply_mappings(discrete, continuous, inverse=True)
 
     def _apply_mappings(
         self,
         discrete: NDArray | None,
         continuous: NDArray,
-        wgt: NDArray,
         inverse: bool = False,
-    ) -> MappingOutput:
+    ) -> LayeredMappingResult:
         """
         Args:
             discrete: shape (n_samples, n_discrete_dims)
             continuous: shape (n_samples, n_continuous_dim)
-            wgt: shape (n_samples,)
         Returns:
-            untransformed discrete input: shape (n_samples, n_discrete_dims - len(self.discrete_dims))
             parameterised continuous output: shape (n_samples, n_continuous_out)
-            wgt * jacobian: shape (n_samples,)
+            coordinate Jacobian: shape (n_samples,)
+            integration correction: shape (n_samples,); excludes the Jacobian
         """
         if discrete is None:
             discrete = np.zeros((continuous.shape[0], 0), dtype=np.uint64)
 
+        mappings = list(reversed(self.mappings)) if inverse else self.mappings
+        width = capacity = continuous.shape[1]
+        for mapping in mappings:
+            n_in = mapping.continuous_dims_out if inverse else mapping.continuous_dims_in
+            n_out = mapping.continuous_dims_in if inverse else mapping.continuous_dims_out
+            width += (n_out or width) - (n_in or width)
+            capacity = max(capacity, width)
         layer_input = LayerData(
             n_points=continuous.shape[0],
-            n_cont=continuous.shape[1],
+            n_cont=capacity,
             n_disc=discrete.shape[1],
             dtype=np.float128 if self.use_f128 else np.float64
         )
@@ -265,8 +261,8 @@ class LayeredMapping:
         else:
             layer_input.discrete = discrete
         layer_input.update("sampled input")
+        integration_weight = np.ones((len(continuous),), dtype=layer_input.dtype)
 
-        mappings = self.mappings if not inverse else reversed(self.mappings)
         for mapping in mappings:
             layer_continuous_dims = (
                 mapping.continuous_dims_out
@@ -281,21 +277,27 @@ class LayeredMapping:
             layer_disc, pass_disc = np.hsplit(layer_input.discrete, [mapping.num_discrete_dims])
             if not inverse:
                 jac, cont = mapping.forward(layer_cont, layer_disc)
+                weight = mapping.integration_weight(layer_cont, cont, layer_disc)
             else:
                 jac, cont = mapping.backward(layer_cont, layer_disc)
+                weight = mapping.integration_weight(cont, layer_cont, layer_disc)
+                weight = np.divide(1, weight, out=np.full_like(weight, np.inf), where=weight != 0)
+            integration_weight *= weight
             layer_input.jac *= jac
             layer_input.continuous = np.hstack([cont, pass_cont])
             layer_input.discrete = pass_disc
-            layer_input.update(mapping.IDENTIFIER)
+            layer_input.update(mapping.KIND)
 
         output_jac = np.zeros((layer_input.n_points,), dtype=layer_input.dtype)
         output_jac[layer_input.success] = layer_input.jac.flatten()
         output_cont = np.zeros((layer_input.n_points, layer_input.continuous.shape[1]), dtype=layer_input.dtype)
         output_cont[layer_input.success, :] = layer_input.continuous
 
-        return (
+        integration_weight[~layer_input.success] = 0
+        return LayeredMappingResult(
             output_cont,
-            wgt * output_jac.flatten(),
+            output_jac.flatten(),
+            integration_weight,
         )
 
     def _get_continuous_dims_in(self) -> int:
@@ -321,7 +323,7 @@ class LayeredMapping:
 #     Wrapper for the momtrop sampler (arxiv.org/abs/2504.09613) rust implementation.
 #     """
 
-#     IDENTIFIER = "momtrop"
+#     KIND = "momtrop"
 
 #     def __init__(
 #         self,
@@ -493,7 +495,7 @@ class LayeredMapping:
 
 
 class SphericalMapping(Mapping):
-    IDENTIFIER = "spherical"
+    KIND = "spherical"
 
     def __init__(self, conformal_scale: float = 1.0, **kwargs):
         super().__init__(**kwargs)
@@ -532,7 +534,7 @@ class SphericalMapping(Mapping):
             )
             momentum[:, _start:_end] = ks
             jac *= x**2 / (1 - x) ** 4
-        
+
         if discrete.size == 0:
             discrete = np.empty((momentum.shape[0], 1), dtype=np.uint64)
             discrete.fill(0)
@@ -598,7 +600,7 @@ class SphericalMapping(Mapping):
 
 
 class MadspaceMapping(Mapping):
-    IDENTIFIER = "madspace"
+    KIND = "madspace"
 
     def __init__(
         self,
@@ -693,7 +695,7 @@ class MadspaceMapping(Mapping):
 
 
 class KaapoParameterisation(Mapping):
-    IDENTIFIER = "kaapo"
+    KIND = "kaapo"
 
     def __init__(
         self,
@@ -790,7 +792,7 @@ class KaapoParameterisation(Mapping):
 
 
 class RKaapoParameterisation(Mapping):
-    IDENTIFIER = "reduced kaapo"
+    KIND = "reduced kaapo"
 
     def __init__(
         self,
@@ -904,7 +906,7 @@ class RKaapoParameterisation(Mapping):
 
 
 class SParameterisation(Mapping):
-    IDENTIFIER = "s"
+    KIND = "s"
 
     def __init__(self, exponent: float = 2.0, **kwargs):
         """
@@ -940,9 +942,16 @@ class SParameterisation(Mapping):
         # This mapping does not expose a continuous dimension
         return None
 
+    def backward(self, continuous: NDArray, discrete: NDArray) -> MappingOutput:
+        left = np.power(continuous, 1 / self.exponent)
+        right = np.power(1 - continuous, 1 / self.exponent)
+        original = left / (left + right)
+        jac, _ = self._map_from_hcube(original, discrete)
+        return 1 / jac, original
+
 
 class IdentityParameterisation(Mapping):
-    IDENTIFIER = "identity"
+    KIND = "identity"
 
     def __init__(
         self,
@@ -967,7 +976,7 @@ class IdentityParameterisation(Mapping):
 
     def _map_from_momentum(self, momentum: NDArray, discrete: NDArray) -> MappingOutput:
         # Identity inverse is the same as forward
-        return self._map_from_hcube(continuous, discrete)
+        return self._map_from_hcube(momentum, discrete)
 
     def _get_continuous_dims(self, input_space: Space) -> ContinuousDim:
         if self.force_dim is not None:
@@ -977,26 +986,31 @@ class IdentityParameterisation(Mapping):
 
 
 class MCLayer(Mapping, ABC):
-    IDENTIFIER = "multichanneling"
+    KIND = "multichanneling"
 
     def __init__(self, mapping_kwargs: Dict[str, Any] | None = None, **kwargs):
         self.gp = kwargs["graph_properties"]
         mapping_cfg = MappingConfig.from_dict(mapping_kwargs or {"kind": "spherical"})
-        self.mapping = Mapping.from_kind(mapping_cfg.kind, self.gp, **mapping_cfg.kwargs)
+        self.mapping = Mapping.from_kind(mapping_cfg.kind, graph_properties=self.gp, **mapping_cfg.kwargs)
         super().__init__(**kwargs)
-        self.IDENTIFIER = (
-            f"multichanneling: {self.IDENTIFIER} using {self.mapping.IDENTIFIER}"
+        self.KIND = (
+            f"multichanneling: {self.KIND} using {self.mapping.KIND}"
         )
 
     def _map_from_hcube(self, continuous: NDArray, discrete: NDArray) -> MappingOutput:
-        jac, momentum = self.mapping.forward(continuous, discrete)
-        jac *= self._mc_weight(momentum, discrete).reshape(-1, 1)
-        return jac, momentum
+        return self.mapping.forward(continuous, discrete)
 
     def _map_from_momentum(self, momentum: NDArray, discrete: NDArray) -> MappingOutput:
-        jac, continuous = self.mapping.backward(momentum, discrete.copy())
-        jac /= self._mc_weight(momentum, discrete).reshape(-1, 1)
-        return jac, continuous
+        return self.mapping.backward(momentum, discrete.copy())
+
+    def integration_weight(
+        self, continuous_in: NDArray, continuous_out: NDArray, discrete: NDArray
+    ) -> NDArray:
+        momentum = continuous_out if self.input_space is Space.HCUBE else continuous_in
+        partition = self._mc_weight(momentum, discrete).reshape(-1)
+        if self.input_space is Space.HCUBE:
+            return partition
+        return np.divide(1, partition, out=np.full_like(partition, np.inf), where=partition != 0)
 
     @abstractmethod
     def _mc_weight(self, momentum: NDArray, discrete: NDArray) -> NDArray:
@@ -1019,7 +1033,7 @@ class MCLayer(Mapping, ABC):
 
 
 class OSEMCLayer(MCLayer):
-    IDENTIFIER = "ose"
+    KIND = "ose"
 
     def __init__(self, ose_exponent: float = 1.0, **kwargs):
         super().__init__(**kwargs)
@@ -1029,7 +1043,7 @@ class OSEMCLayer(MCLayer):
         # Need to calculate the e-surface term for all lmbs
         mc_weight = np.prod(  # Multiply for each loop
             np.sum(  # Dot product
-                    self.gp.from_generation_lmb_rep(momentum, discrete).reshape(-1, self.gp.n_loops, 3)** 2,
+                self.gp.from_generation_lmb_rep(momentum, discrete).reshape(-1, self.gp.n_loops, 3) ** 2,
                 axis=2,
             )
             + self.gp.channel_masses[discrete.ravel()] ** 2,
@@ -1066,7 +1080,7 @@ class OSEMCLayer(MCLayer):
 
 
 class FermiMCLayer(MCLayer):
-    IDENTIFIER = "fermi"
+    KIND = "fermi"
 
     def __init__(
         self,
@@ -1119,7 +1133,7 @@ class FermiMCLayer(MCLayer):
             transform = self.gp.channel_transforms[ch] @ self.gp.generation_inv_transform
             shift = self.gp.channel_momentum_shifts[ch]
             mass = self.gp.channel_masses[ch]
-            mu = self.gp.channel_mu[ch]
+            mu = self.channel_mu[ch]
             e_surface_terms = np.sqrt(
                 np.sum(
                     (transform @ momentum.reshape(-1, self.gp.n_loops, 3) + shift) ** 2,
@@ -1150,7 +1164,7 @@ class FermiMCLayer(MCLayer):
 
 
 class JacMCLayer(MCLayer):
-    IDENTIFIER = "jac"
+    KIND = "jac"
 
     def __init__(
         self,
@@ -1168,18 +1182,20 @@ class JacMCLayer(MCLayer):
             return self.mapping._map_from_momentum(momentum, discrete)[0]
 
     def _mc_weight(self, momentum: NDArray, discrete: NDArray) -> NDArray:
+        jacobian = self._jac_from_momentum(momentum, discrete).reshape(-1)
         mc_weight = np.power(
-            self._jac_from_momentum(momentum, discrete).reshape(-1),
+            jacobian,
             self.jac_exponent,
             where=jacobian > 0,
             out=np.zeros_like(jacobian),
         )
         norm_factor = np.zeros_like(mc_weight)
         for ch in range(self.gp.n_channels):
+            jacobian = self._jac_from_momentum(
+                momentum, np.full_like(discrete, ch)
+            ).reshape(-1)
             weight = np.power(
-                self._jac_from_momentum(
-                    momentum, np.full_like(discrete, ch)
-                ).reshape(-1),
+                jacobian,
                 self.jac_exponent,
                 where=jacobian > 0,
                 out=np.zeros_like(jacobian),

@@ -1,0 +1,43 @@
+# Standalone GammaLoop ttH integration; campaign bindings can select graph groups.
+replacements = { 
+    state_folder = "../../gammaloop_os_ct/gammaboard_states/distributions_comparison/LO/state",
+    run_name = "epem_a_ttxh",
+    integrand_name = "LO",
+    graph_group = 0, 
+    seed = 11, 
+    target_real = -1.1848e-04,
+    target_imag = 0.0,
+    samples_for_update = 10_000,
+    train_samples = 20_000_000,
+    sample_samples = 100_000_000,
+    bins = 200,
+}
+
+name = '$(run_name:"epem_a_ttxh")_$(integrand_name:"LO")_$(graph_group:0)_$(seed:0)'
+target = { kind = "vector", components = { real = "$(target_real:-1.1848e-04)", imag = "$(target_imag:0.0)" } }
+
+[evaluator]
+kind = "gammaloop"
+state_folder = "$(state_folder:../../gammaloop/gammaboard_states/epem_a_ttxh/NLO/state)"
+integrand_name = "$(integrand_name:NLO_GL30)"
+momentum_space = false
+graph_groups = ["$(graph_group:0)"]
+
+[evaluator.preprocessing]
+read_only = true
+commands = []
+
+[[task_queue]]
+name = "train"
+kind = "sample"
+publish_result = false
+stop_condition = { max_samples = "$(train_samples:20_000_000)" }
+accumulator = { config = "gammaloop" }
+sampler = { config = { kind = "havana_training", seed = "$(seed:11)", bins = "$(bins:200)", samples_for_update = "$(samples_for_update:10_000)", initial_training_rate = 0.05, final_training_rate = 0.005 } }
+
+[[task_queue]]
+name = "inference"
+kind = "sample"
+stop_condition = { max_samples = "$(sample_samples:100_000_000)" }
+accumulator = { config = "gammaloop" }
+sampler = { config = { kind = "havana_inference", seed = "$(seed:11)" } }
