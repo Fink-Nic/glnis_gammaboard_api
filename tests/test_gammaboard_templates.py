@@ -2,7 +2,10 @@
 from copy import deepcopy
 from pathlib import Path
 import re
-import tomllib
+
+# GammaBoard accepts TOML 1.1, including multiline inline tables. Python 3.13's
+# standard-library parser only implements TOML 1.0.
+import tomli
 
 import pytest
 
@@ -24,7 +27,7 @@ def expand(value, replacements):
     matches = list(re.finditer(pattern, value))
     for match in reversed(matches):
         name, default = match.groups()
-        selected = deepcopy(replacements[name]) if name in replacements else tomllib.loads("value = " + default)["value"]
+        selected = deepcopy(replacements[name]) if name in replacements else tomli.loads("value = " + default)["value"]
         if match.span() == (0, len(value)):
             return selected
         value = value[:match.start()] + str(selected) + value[match.end():]
@@ -33,7 +36,7 @@ def expand(value, replacements):
 
 @pytest.mark.parametrize("path", sorted((TEMPLATES / "runs").glob("*.toml")), ids=lambda path: path.stem)
 def test_run_cards_use_current_sampler_configuration(path):
-    raw = tomllib.loads(path.read_text())
+    raw = tomli.loads(path.read_text())
     card = expand(raw, raw.get("replacements", {}))
     if card.get("kind") == "integration_campaign":
         assert len(card["children"]) == 11
@@ -60,8 +63,9 @@ def test_run_cards_use_current_sampler_configuration(path):
     {"kind": "torch_compile", "sample": False},
 ])
 def test_baseline_accepts_complete_policy_and_scheduler_replacements(execution):
-    raw = tomllib.loads((TEMPLATES / "runs/gammaloop_train_sample.toml").read_text())
-    replacements = {**raw["replacements"], "execution": execution, "scheduler": False, "gpu_id": 2}
+    raw = tomli.loads((TEMPLATES / "runs/gammaloop_train_sample.toml").read_text())
+    replacements = {**raw["replacements"], "execution": execution, "scheduler": False, "gpu_id": 2,
+                    "flow_layers": 3, "flow_units": 256}
     card = expand(raw, replacements)
     config = RunConfig.from_dict({"sampler": card["task_queue"][0]["sampler"]["config"]["args"],
                                   "integrand": {"kind": "sine", "continuous_dims": 6}})
@@ -69,12 +73,12 @@ def test_baseline_accepts_complete_policy_and_scheduler_replacements(execution):
     assert settings["execution"] == execution
     assert settings["scheduler"] is None
     assert settings["gpu_id"] == 2
-    assert config.sampler["module"]["flow"]["subnet"] == {"kind": "mlp", "layers": 4, "units": 512}
+    assert config.sampler["module"]["flow"]["subnet"] == {"kind": "mlp", "layers": 3, "units": 256}
 
 
 @pytest.mark.parametrize("path", sorted((TEMPLATES / "tasks").glob("*.toml")), ids=lambda path: path.stem)
 def test_append_cards_have_named_current_task_definitions(path):
-    card = tomllib.loads(path.read_text())
+    card = tomli.loads(path.read_text())
     names = [task["name"] for task in card["task_queue"]]
     assert len(names) == len(set(names))
     assert all(task["kind"] in {"sample", "pdf_adaptation_image", "pdf_adaptation_plot_line"}

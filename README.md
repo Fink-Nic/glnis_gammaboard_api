@@ -45,12 +45,11 @@ For an editable checkout:
 nix develop
 # Use `nix develop .#gammaloop` for the optional native backend.
 glnis-dev
-# Use `glnis-dev --gammaloop` for the optional native backend.
 source .venv/bin/activate
 ```
 
-Rerun `glnis-dev` after changing the Nix pin; rerun it with `--gammaloop` after
-Rust changes. See [development](docs/development.md) for environment details,
+Rerun `glnis-dev` from the selected shell after changing the Nix pin or Rust
+sources. See [development](docs/development.md) for environment details,
 dependency updates, and verification commands.
 
 ## Apptainer builds
@@ -61,11 +60,14 @@ Build from the repository root so the definition's local source paths resolve:
 apptainer build --force glnis.sif apptainer.def
 ```
 
-The image includes the GammaLoop backend and uses Nix inside the build container;
-the host does not need Nix. On UBELIX, submit the build with:
+The definition installs Python packages directly, including prebuilt CUDA-enabled
+PyTorch wheels. It requires neither Nix nor Docker on the host. The optional
+GammaLoop backend is enabled with `--build-arg WITH_GAMMALOOP=1`.
+On UBELIX, submit the build to a CPU compute node with:
 
 ```bash
 python3 ubelix.py
+# Optional native backend: python3 ubelix.py --with-gammaloop --time 06:00:00
 ```
 
 See the [UBELIX build guide](ops/ubelix/README.md) for prerequisites, submission,
@@ -80,7 +82,7 @@ Activate the environment before invoking installed commands.
 | `glnis-gammaboard-sampler` | `python -u -m run_sampler` | GammaBoard sampler worker |
 | `glnis-integrate` | `python -m glnis.scripts.run` | Local integration from TOML |
 | `glnis-compare-samplers` | `python -m glnis.scripts.sampler_comparison` | Compare named sampler configurations |
-| `glnis-slice-plot` | `python -m glnis.scripts.slice_plot` | Evaluate or replot saved PDF slices |
+| `glnis-slice-plot` | `python -m glnis.scripts.slice_plots` | Evaluate or replot saved PDF slices |
 
 The Nix runtime's Python executable is `result/bin/python` after building the
 selected runtime. `nix run` launches the core sampler; `nix run .#gammaloop`

@@ -1,150 +1,62 @@
 Bootstrap: docker
-From: nixos/nix:2.24.11
-Stage: build
+From: python:3.13-slim-bookworm
 
 %arguments
+    TORCH_VERSION=2.14.1
+    TORCH_INDEX=https://download.pytorch.org/whl/cu126
+    WITH_GAMMALOOP=0
     BUILD_CORES=4
 
-%setup
-    # Writable builds require bind destinations to exist before %post starts.
-    mkdir -p "${APPTAINER_ROOTFS:?}/build-cache"
-
-# Build from the local checkout, not from Git. Run `apptainer build` from this
-# directory so these relative paths resolve to the project files.
+# Run apptainer build from the checkout root. No Nix inputs enter this image.
 %files
-    flake.nix /build-src/glnis_gammaboard_api/flake.nix
-    flake.lock /build-src/glnis_gammaboard_api/flake.lock
-    pyproject.toml /build-src/glnis_gammaboard_api/pyproject.toml
-    README.md /build-src/glnis_gammaboard_api/README.md
-    MANIFEST.in /build-src/glnis_gammaboard_api/MANIFEST.in
-    native/gammaloop/Cargo.toml /build-src/glnis_gammaboard_api/native/gammaloop/Cargo.toml
-    native/gammaloop/Cargo.lock /build-src/glnis_gammaboard_api/native/gammaloop/Cargo.lock
-    native/gammaloop/pyproject.toml /build-src/glnis_gammaboard_api/native/gammaloop/pyproject.toml
-    native/gammaloop/src /build-src/glnis_gammaboard_api/native/gammaloop/src
-    native/gammaloop/python /build-src/glnis_gammaboard_api/native/gammaloop/python
-    src /build-src/glnis_gammaboard_api/src
+    pyproject.toml /build-src/pyproject.toml
+    README.md /build-src/README.md
+    MANIFEST.in /build-src/MANIFEST.in
+    src /build-src/src
+    native/gammaloop/Cargo.toml /build-src/native/gammaloop/Cargo.toml
+    native/gammaloop/Cargo.lock /build-src/native/gammaloop/Cargo.lock
+    native/gammaloop/pyproject.toml /build-src/native/gammaloop/pyproject.toml
+    native/gammaloop/src /build-src/native/gammaloop/src
+    native/gammaloop/python /build-src/native/gammaloop/python
+    ops/check_runtime.py /usr/local/bin/glnis-check
 
 %post
-    set -eux
-
-    # Root-mapped user namespaces cannot switch to the nixbld users provided
-    # by the base image. Run builds as the current container user instead.
-    mkdir -p /etc/nix
-    cat > /etc/nix/nix.conf <<'EOF'
-experimental-features = nix-command flakes
-sandbox = false
-filter-syscalls = false
-accept-flake-config = true
-max-jobs = 1
-cores = {{ BUILD_CORES }}
-build-users-group =
-extra-ignored-acls = system.gpfs_nfs4_acl
-EOF
-
-    export NIX_CONFIG='experimental-features = nix-command flakes
-sandbox = false
-filter-syscalls = false
-accept-flake-config = true
-max-jobs = 1
-cores = {{ BUILD_CORES }}
-build-users-group =
-extra-ignored-acls = system.gpfs_nfs4_acl'
-
-    # The Slurm job binds its private cache here. Cache each completed build so
-    # retries can reuse expensive CUDA libraries even if a later build fails.
-    if [ -d /build-cache ]; then
-        if [ -f /build-cache/nix-cache-info ]; then
-            export NIX_CONFIG="${NIX_CONFIG}
-extra-substituters = file:///build-cache/?trusted=1&priority=10"
-        fi
-        cat > /etc/nix/save-build-cache.sh <<'EOF'
-#!/bin/sh
-set -eu
-set -f
-# Nix supplies space-separated store paths, which cannot contain whitespace.
-exec nix copy --to 'file:///build-cache/?compression=zstd&compression-level=1' $OUT_PATHS
-EOF
-        chmod +x /etc/nix/save-build-cache.sh
-        export NIX_CONFIG="${NIX_CONFIG}
-post-build-hook = /etc/nix/save-build-cache.sh"
-    fi
-
-    cd /build-src/glnis_gammaboard_api
-    export HOME=/build-home
-    export XDG_CACHE_HOME=/build-home/.cache
-    export TMPDIR=/build-tmp
-    mkdir -p "$HOME" "$TMPDIR"
-    build_tools="$(nix build '.#container-build-tools^bin' --no-link --print-out-paths)"
-    # Use a non-root UID in a nested user namespace. All files owned by this
-    # build's root become owned by UID 1000 there, without changing host owners.
-    # GNU tar then skips restoring CUDA archives' original owners.
-    echo 'glnis-build:x:1000:1000:Container build:/build-home:/bin/sh' >> /etc/passwd
-    echo 'glnis-build:x:1000:' >> /etc/group
-    runtime_path="$("$build_tools/bin/unshare" --user --map-user=1000 --map-group=1000 \
-        nix build .#runtime-gammaloop --no-link --print-out-paths --print-build-logs)"
-
-    mkdir -p /closure/nix/store /closure/opt
-    nix-store --query --requisites "${runtime_path}" > /tmp/glnis-runtime-closure
-    while IFS= read -r store_path; do
-        cp -a "${store_path}" /closure/nix/store/
-    done < /tmp/glnis-runtime-closure
-
-    ln -s "${runtime_path}" /closure/opt/glnis-runtime
-
-
-Bootstrap: docker
-From: debian:bookworm-slim
-Stage: final
-
-%setup
-    mkdir -p "${APPTAINER_ROOTFS:?}/build-cache"
-
-%files from build
-    /closure/nix /nix
-    /closure/opt/glnis-runtime /opt/glnis-runtime
-
-%post
-    set -eux
-
-    mkdir -p /usr/local/bin
-
-    cat > /usr/local/bin/glnis-gammaboard-sampler <<'EOF'
-#!/bin/sh
-exec /opt/glnis-runtime/bin/glnis-gammaboard-sampler "$@"
-EOF
-
-    cat > /usr/local/bin/glnis_gammaboard_sampler <<'EOF'
-#!/bin/sh
-exec /opt/glnis-runtime/bin/glnis-gammaboard-sampler "$@"
-EOF
-
-    cat > /usr/local/bin/python <<'EOF'
-#!/bin/sh
-exec /opt/glnis-runtime/bin/python "$@"
-EOF
-
-    chmod +x \
-        /usr/local/bin/glnis-gammaboard-sampler \
-        /usr/local/bin/glnis_gammaboard_sampler \
-        /usr/local/bin/python
+    set -eu
+    export DEBIAN_FRONTEND=noninteractive
+    export PIP_DISABLE_PIP_VERSION_CHECK=1
+    apt-get update
+    # g++ remains available for torch.compile at runtime. Git is needed for
+    # the GammaBoard process API dependency, not for checking out this project.
+    apt-get install -y --no-install-recommends ca-certificates git g++
+    python -m pip install --only-binary=:all: --index-url '{{ TORCH_INDEX }}' 'torch=={{ TORCH_VERSION }}'
+    case '{{ WITH_GAMMALOOP }}' in
+        0) python -m pip install /build-src ;;
+        1)
+            apt-get install -y --no-install-recommends curl make pkg-config m4 libgmp-dev libmpfr-dev libmpc-dev
+            export CARGO_HOME=/build-cargo RUSTUP_HOME=/build-rustup
+            export CARGO_BUILD_JOBS='{{ BUILD_CORES }}'
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup.sh
+            sh /tmp/rustup.sh -y --profile minimal --no-modify-path
+            export PATH="/build-cargo/bin:$PATH"
+            python -m pip install '/build-src[gammaloop]' /build-src/native/gammaloop
+            rm -rf /build-cargo /build-rustup /tmp/rustup.sh
+            ;;
+        *) echo 'WITH_GAMMALOOP must be 0 or 1' >&2; exit 2 ;;
+    esac
+    python -m pip check
+    mkdir -p /usr/local/share/glnis
+    python -m pip freeze > /usr/local/share/glnis/packages.txt
+    chmod +x /usr/local/bin/glnis-check
+    rm -rf /build-src /root/.cache/pip /var/lib/apt/lists/*
 
 %environment
-    export OMP_NUM_THREADS="${OMP_NUM_THREADS:-64}"
     export PYTHONUNBUFFERED=1
-    export UV_PYTHON_DOWNLOADS=never
 
 %runscript
-    exec /usr/local/bin/glnis_gammaboard_sampler "$@"
+    exec glnis-gammaboard-sampler "$@"
 
+# Building needs no GPU or license. GPU/Inductor checks are separate, on an
+# allocated GPU node, using: apptainer exec --nv IMAGE glnis-check --device cuda:0 --compile
 %test
-    python -c '
-import gammaboard_process
-import glnis
-from glnis import _rust
-import madnis
-import madnis_sampler
-import run_sampler
-assert _rust.health_check() == "glnis-gammaboard-api rust extension ok"
-assert callable(run_sampler.main)
-print("glnis gammaboard sampler runtime ok")
-'
+    glnis-check
+    python -c 'import importlib.util; from glnis._optional import gammaloop_native; spec=importlib.util.find_spec("glnis_gammaloop_native"); assert spec is None or gammaloop_native().health_check() == "glnis-gammaboard-api rust extension ok"'

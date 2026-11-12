@@ -1,142 +1,223 @@
-# Build the sampler on UBELIX
+# Build and run the sampler on UBELIX
 
-This workflow builds the glNIS GammaBoard sampler image with its optional
-GammaLoop native companion and Symbolica support. GammaBoard and the standalone
-GammaLoop evaluator use their own installation workflows; those builds can run
-independently. The project's default Python installation remains core-only.
+The image installs the Python sampler and prebuilt CUDA-enabled PyTorch wheels
+on a standard Python 3.13 / Debian Bookworm base. There is no Nix installation,
+CUDA toolkit build, driver installation, or custom library-discovery code in the
+container. The default image is core-only. GammaBoard runs its evaluator in its
+own environment; that does not require a GammaLoop backend in this sampler image.
 
-## Clone and submit
+Use the optional native backend only when the sampler itself reads GammaLoop
+states for coordinate mappings. `--with-gammaloop` adds the Rust companion,
+Symbolica and Pydot. It can take substantially longer to build.
 
-On a UBELIX login node, clone this repository next to the GammaBoard workspace.
-Choose a shared storage directory visible to the login and compute nodes:
+## Submit from the login node
+
+Clone the sampler next to GammaBoard on shared storage:
 
 ```bash
 cd /storage/research/itp_localunitaritydata/<your-parent-directory>
 git clone https://github.com/Fink-Nic/glnis_gammaboard_api.git
 cd glnis_gammaboard_api
-# Optional: select a branch, tag, or exact commit before submitting.
-# git checkout <branch-tag-or-commit>
+module load Python
+python3 --version  # Python 3.11.8 or newer for the submission helper
+python3 ubelix.py --dry-run
 python3 ubelix.py
 ```
 
-Use a revision containing `ubelix.py`. Python 3.9 or newer and Slurm's `sbatch`
-are needed on the login node. The job also needs `apptainer` and `flock` on its
-PATH; use the same Apptainer environment as for the GammaBoard builds. The
-Python interpreter used to submit must also be accessible on the compute node.
-No sampler Python packages, host Nix, or host Rust installation are required.
+The login node only freezes source files and calls `sbatch`. Image creation is
+performed by the batch job on a CPU compute node. As in GammaBoard's
+`ops/ubelix/gbops/builds.py`, the queued build uses an immutable source archive
+and a frozen copy of the build helper; edits and branch changes after submission
+do not affect it. Unpacking and container assembly use the job's `TMPDIR`, or
+local `/tmp` when unset. Only source archives, records, downloads and finished
+images are stored alongside the shared checkout.
 
-The helper uses only Python's standard library. It snapshots the current
-checkout's build inputs, including local edits, and immediately submits a Slurm
-job. It does not fetch another repository checkout. Edits and `git checkout`
-after submission do not affect the queued build. Dependency sources are fetched
-according to `flake.lock` and `native/gammaloop/Cargo.lock` during the image build;
-compute nodes therefore need network access, as with the other image builds.
-Snapshots include the companion sources in `native/gammaloop`, excluding local
-native binaries and Cargo build directories.
+The helper needs only the Python standard library and `sbatch`. Apptainer must
+be available on the compute node; UBELIX normally provides it without loading a
+module. No GPU allocation is needed to build or perform the CPU smoke test.
+Compute nodes need access to Docker Hub, PyPI, the PyTorch wheel index and GitHub.
+See the official [container guide](https://hpc-unibe-ch.github.io/runjobs/scheduled-jobs/container-jobs/).
 
-By default, the job requests one node, one task, four CPUs, 32 GB memory, and
-six hours, using account `gratis` and partition `epyc2`. Override these values
-when submitting, for example:
+Defaults are account `gratis`, partition `epyc2`, four CPUs, 32 GB RAM and two
+hours. Override the allocation or output as needed:
 
 ```bash
-python3 ubelix.py --cpus 8 --mem 64G --time 12:00:00
+python3 ubelix.py --cpus 8 --mem 64G --time 04:00:00
 python3 ubelix.py --account <account> --partition <partition> --qos <qos>
-python3 ubelix.py --dry-run
+python3 ubelix.py --with-gammaloop --time 06:00:00 --output glnis-gammaloop.sif
 ```
 
-`--dry-run` prints the submission command without copying files or submitting a
-job. `python3 ubelix.py --help` lists all options. The helper locates the checkout
-from its own path, so it can also be invoked from another working directory.
+Relative output/cache paths resolve against the checkout. `--cache` changes the
+Apptainer download cache; it caches base-image downloads, not pip or Rust build
+artifacts. `python3 ubelix.py --help` lists the options. Source snapshots include
+local edits but exclude compiled Python/native artifacts. They do not include
+Nix files, a virtual environment, generated physics states, or credentials.
 
-## Monitor the build
+## Monitor and publish
 
-The helper prints the job ID and log paths. Substitute the returned job ID:
+Submission prints the job ID and exact build-record path. For example:
 
 ```bash
 squeue -j <job-id>
 tail -f logs/slurm/build/glnis-build-<job-id>.out
 tail -f logs/slurm/build/glnis-build-<job-id>.err
 sacct -j <job-id> --format=JobID,State,ExitCode,Elapsed,MaxRSS
-sstat -j <job-id>.batch --format=JobID,AveCPU,MaxRSS,AveRSS
+cat artifacts/ubelix/build-<identifier>/build.json
 ```
 
-The job builds the existing `apptainer.def`, using the allocated CPU count for
-`BUILD_CORES`. Nix runs inside the build container, selects `runtime-gammaloop`,
-and compiles the optional Rust extension in release mode. It preserves the
-repository's pinned Python and CUDA dependencies. No GPU allocation is needed
-for the build or its import test.
-The sampler keeps Nix's native libraries ahead of automatically discovered GPU
-driver directories. General system library directories are probed for drivers
-without being added to `LD_LIBRARY_PATH`.
+The record moves from `submitted` to `running`, then `completed` or `failed`.
+Slurm remains authoritative for jobs killed before Python can update the record.
+The build log prints its scratch directory and normal apt/pip/compiler output.
 
-CUDA dependencies such as the Python bindings, NCCL, and NVSHMEM can compile from
-source. These steps can take tens of minutes each, with only a `building ...drv`
-line in the log until the step finishes. Use `sstat` to check activity and memory
-use during these quiet phases. A fresh build may take several hours.
-Nix build logs are streamed to the Slurm error log. Completed local builds are
-saved automatically in `<scratch>/nix-cache` and reused by later submissions,
-including retries after a failed build. This private file cache is trusted only
-inside the build container; no host Nix configuration is changed.
+The job runs `apptainer test --cleanenv` with a temporary writable home and `/tmp`.
+Its smoke test trains a small six-dimensional mixed proposal, checks densities,
+and restores a checkpoint. Native builds also check the companion import.
+An image is published only after these checks succeed: a temporary copy on the
+output filesystem is atomically renamed to `glnis.sif`. Failed builds/tests leave
+an existing image untouched. An output lock rejects concurrent builds of the
+same image. The record retains the source SHA-256, selected PyTorch profile and
+final image SHA-256. Installed package versions are recorded inside the image at
+`/usr/local/share/glnis/packages.txt`.
 
-The job uses `--ignore-fakeroot-command` to avoid injecting UBELIX's host
-`fakeroot` executable into the Nix image, where its loader/libraries are not
-available. Apptainer still uses a root-mapped user namespace. The definition sets
-Nix's `build-users-group` to an empty value so it does not attempt to switch to
-unmapped `nixbld` user IDs. No administrator changes to UID mappings are needed.
-For the runtime build it remaps that single UID to UID 1000 in a nested user
-namespace. Archive tools then behave as for an ordinary user, avoiding attempts
-to restore unmapped owners from CUDA source archives. The `unshare` tool comes
-from the pinned Nix package set, not a host installation.
-The Rust helpers, Rust builds, and project Python build use Nixpkgs'
-`writableTmpDirAsHomeHook` to keep home-directory caches in their build directory.
-This prevents creation of `/homeless-shelter`, whose existence makes Nix reject
-unsandboxed builds.
-It also adds GPFS's `system.gpfs_nfs4_acl` to Nix's ignored ACLs, keeping Nix
-from trying to remove this filesystem-managed attribute when its store is on
-UBELIX shared storage. This extends Nix's existing ignored ACL list.
-
-After building, the job runs the definition's `%test` with a clean environment
-to check the sampler imports and Rust extension. Only a successful image replaces
-`glnis.sif`. A failed build or smoke test leaves an existing image in place.
-The smoke test uses a temporary home and cache inside the build staging directory,
-so imports do not write caches or Symbolica permit locks into your home directory.
-Concurrent jobs targeting the same output cannot build over one another: a
-second job exits with an explanatory log message.
-
-Default files, relative to the checkout:
+Files created by this workflow:
 
 ```text
-glnis.sif                          # sampler runtime
-glnis.sif.meta.json                # commit, source hash, resources, image hash, timing
-glnis.sif.lock                     # persistent build lock; no action needed
-artifacts/ubelix/build-*/source/   # retained build-input snapshots
-artifacts/ubelix/build-*/submission.json
+glnis.sif                         # image after a successful build
+glnis.sif.lock                    # persistent output lock; leave it in place
+artifacts/ubelix/build-*/build.py # frozen job helper
+artifacts/ubelix/build-*/source.tar
+artifacts/ubelix/build-*/build.json
+artifacts/ubelix/downloads/        # Apptainer base-image download cache
 logs/slurm/build/glnis-build-<job-id>.{out,err}
 ```
 
-Use `--output <path>` to select another image and `--scratch <directory>` to
-change Apptainer's scratch/cache location. Relative paths resolve against the
-checkout. The default scratch root is
-`/scratch/network/users/$USER/glnis-apptainer`, with a shared download cache and
-Nix build cache, plus separate temporary directories cleaned up after each job.
-Retained source snapshots can be removed after their jobs finish; do not remove
-queued or running jobs' snapshots.
+Remove old build directories only after their jobs finish. The archive and
+helper remain available to diagnose or reproduce the source used by a job.
+The Python base tag and unpinned Python/Git dependencies can change between
+builds; the record and installed-package manifest describe what was actually
+built. This is not a fully locked package environment.
 
-## Use from GammaBoard
+For a local build on a machine with working Apptainer, run from the checkout:
 
-With the GammaBoard workspace and `glnis_gammaboard_api` as siblings, the existing
-Apptainer command examples point to the default output:
+```bash
+apptainer build glnis.sif apptainer.def
+# Optional backend:
+apptainer build --build-arg WITH_GAMMALOOP=1 glnis-gammaloop.sif apptainer.def
+```
+
+Do not run those build commands on a cluster login node. Use `ubelix.py` there.
+The definition uses Apptainer's normal fakeroot handling; it does not remap UIDs
+itself or override the cluster's fakeroot setup.
+
+## GPU runtime: what is needed
+
+A working host driver is necessary, but the Python application also needs a
+CUDA-enabled PyTorch build. The image supplies the latter from PyTorch's official
+wheel index. The current default is PyTorch 2.14.1 with CUDA 12.6. No CUDA/cuDNN
+module needs to be loaded for this image. The host driver and GPU architecture
+must support the selected wheel; confirm this during the first GPU allocation.
+Use `--torch-version` and `--torch-index` to select another supported combination
+when building. Local builds use the corresponding `TORCH_VERSION` and
+`TORCH_INDEX` build arguments. See [PyTorch's wheel combinations](https://pytorch.org/get-started/previous-versions/).
+
+At execution, `apptainer exec --nv` provides the host's driver libraries and GPU
+devices. Let Apptainer manage these bindings and its library path. Do not bind
+an entire host CUDA installation, add host system library directories, or set
+`TRITON_LIBCUDA_PATH` for the image. Its standard library loader and installed
+C++ compiler are sufficient. This follows [Apptainer's GPU setup](https://apptainer.org/docs/user/latest/gpu.html).
+
+With `--cleanenv`, explicitly forward Slurm's assigned device mask in the worker
+job, after the allocation starts:
+
+```bash
+export APPTAINERENV_CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:?request a Slurm GPU first}"
+if [ -n "${CUDA_DEVICE_ORDER:-}" ]; then
+    export APPTAINERENV_CUDA_DEVICE_ORDER="$CUDA_DEVICE_ORDER"
+fi
+export APPTAINERENV_OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export APPTAINERENV_TORCHINDUCTOR_COMPILE_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+# Only when the sampler needs the optional native backend:
+# export APPTAINERENV_SYMBOLICA_LICENSE="$SYMBOLICA_LICENSE"
+```
+
+This preserves the allocated devices and their ordering. Sampler `gpu_id="auto"`
+chooses within that set; it does not allocate GPUs or bypass Slurm.
+The thread settings keep numerical work and compiler workers within the CPU
+allocation.
+The application does not force 64 CPU threads at startup. The Inductor policy
+sets `TRITON_DEFAULT_FP_FUSION=1` only when unset, avoiding Triton's warning about
+its changing default while preserving the measured arithmetic. An explicit
+`APPTAINERENV_TRITON_DEFAULT_FP_FUSION=0` is honored.
+
+## Data and compiler-cache bindings
+
+UBELIX network-storage paths must be bound explicitly. Resolve symlinks and bind
+the actual project directory, rather than just `/scratch` or `/storage`. See
+[UBELIX's filesystem-binding instructions](https://hpc-unibe-ch.github.io/runjobs/scheduled-jobs/container-jobs/#binding-network-file-systems-in-the-container).
+
+For a GammaBoard workspace and sampler checkout that are siblings, use:
 
 ```toml
-command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/../..:$resources/../..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis-gammaboard-sampler"]
+command = ["apptainer", "exec", "--cleanenv", "--nv", "--bind", "$resources/../..:$resources/../..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis-gammaboard-sampler"]
 cwd = "$resources/.."
 ```
 
-The [GammaLoop baseline](../../examples/templates/runs/gammaloop_train_sample.toml)
-uses the virtual-environment entry point by default. Replace its process command
-with the Apptainer command above to use the image; its sampler arguments already
-use the [current configuration schema](../../docs/configuration/README.md).
-CUDA execution requires a GPU worker allocation
-and `--nv`; it does not require rebuilding the image on a GPU node. Supply your
-Symbolica license in the environment used to launch the sampler; see
-[GammaLoop inputs](../../docs/usage/gammaboard.md#gammaloop-inputs).
+Resolve/adjust the parent path for the actual cluster layout. Bind any physics
+states or checkpoint directories outside that parent separately. The
+[baseline card](../../examples/templates/runs/gammaloop_train_sample.toml) uses a
+virtual-environment command; replace just that command to select the image.
+
+Compilation also needs a writable cache. Reuse it across workers of the same
+software/device setup, for example:
+
+```bash
+mkdir -p /scratch/network/users/$USER/glnis-compile
+CACHE=$(realpath /scratch/network/users/$USER/glnis-compile)
+export APPTAINERENV_TORCHINDUCTOR_CACHE_DIR=/cache/inductor
+export APPTAINERENV_TRITON_CACHE_DIR=/cache/triton
+apptainer exec --cleanenv --nv --bind "$CACHE:/cache" glnis.sif glnis-check --device cuda:0 --compile
+```
+
+Add that same explicit cache bind to a GammaBoard process command if it uses
+these environment variables. The image itself is read-only. Compiler caches are
+runtime data and are not stored in sampler checkpoints. GammaBoard's current
+300-second process request deadline still applies to first compilation; see
+[the process guide](../../docs/usage/gammaboard.md#compilation-and-the-process-deadline).
+
+## First UBELIX validation: still pending
+
+No UBELIX access was available during this rewrite. Local tests check source
+freezing, Slurm command construction, scratch use, failure handling and atomic
+publication. They cannot establish the cluster's namespace/fakeroot policy,
+compute-node network access, filesystem layout, or NVIDIA driver compatibility.
+
+The core image passed local CPU tests and compiled GPU training/checkpoint
+recovery on an NVIDIA A30 with PyTorch 2.14.1 / CUDA 12.6. Building on that NixOS
+host required temporary host mount setup and an apt UID workaround; neither is
+part of the cluster recipe. The unmodified recipe's rootless build on UBELIX
+and the optional native image remain unverified.
+
+When access becomes available:
+
+1. Submit the core build first. Check the job actually runs on a compute node,
+   the log's scratch path has enough node-local disk space, and the record ends
+   in `completed`. Confirm Apptainer's normal fakeroot mode works with apt/pip.
+2. On a CPU allocation, run `apptainer test --cleanenv glnis.sif`. For the optional
+   backend, build the separate native profile, check its companion import, and
+   exercise a state-backed mapping with the actual GammaLoop state and license.
+3. Request one GPU, for example
+   `srun --account=gratis --partition=gpu --gres=gpu:rtx3090:1 --cpus-per-task=4 --mem=16G --time=00:20:00 --pty bash`.
+   Confirm the current account/partition/type with the [GPU job guide](https://hpc-unibe-ch.github.io/runjobs/scheduled-jobs/gpus/).
+4. Record `nvidia-smi`, Slurm's `CUDA_VISIBLE_DEVICES`, the PyTorch/CUDA versions,
+   and `torch.cuda.get_arch_list()`. Forward the mask as above. Run
+   `apptainer exec --cleanenv --nv glnis.sif glnis-check --device cuda:0`, then
+   repeat with `--compile` and a persistent cache. A requested GPU check fails
+   if CUDA is unavailable; it does not silently pass on CPU.
+5. Repeat the compiled check in a fresh container process using the same cache.
+   Check checkpoint recovery, compiler startup cost and the GammaBoard deadline.
+6. Confirm data/checkpoint binds are writable where intended, and send a small
+   GammaBoard training/inference task through the process protocol. Test a
+   deliberately failed build and verify it leaves the previous SIF usable.
+
+Keep the job logs and record the tested GPU, driver, image hash and package
+manifest before treating an image as validated for cluster production.

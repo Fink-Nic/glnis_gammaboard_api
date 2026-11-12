@@ -1,6 +1,7 @@
 """Runtime callables owned by an orchestrator, outside proposal checkpoints."""
 from copy import deepcopy
 from dataclasses import dataclass, field
+import os
 
 import torch
 
@@ -47,6 +48,10 @@ class TorchCompileExecution(SamplerExecution):
             if options is False:
                 continue
             options = {"backend": self.cfg.backend, **options}
+            if options["backend"] == "inductor":
+                # Preserve the arithmetic used by our compilation benchmarks
+                # across Triton's default change, while honoring user overrides.
+                os.environ.setdefault("TRITON_DEFAULT_FP_FUSION", "1")
             setattr(self, name, torch.compile(getattr(module, name), **options))
             self.cuda_graphs |= options["backend"] == "inductor" and (
                 options.get("mode") in ("reduce-overhead", "max-autotune")

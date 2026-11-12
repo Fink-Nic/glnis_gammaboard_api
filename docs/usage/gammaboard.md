@@ -24,13 +24,18 @@ cwd = "$resources/.."
 For the Apptainer image:
 
 ```toml
-command = ["apptainer", "exec", "--no-mount", "/etc/localtime", "--nv", "--bind", "$resources/../..:$resources/../..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis-gammaboard-sampler"]
+command = ["apptainer", "exec", "--cleanenv", "--nv", "--bind", "$resources/../..:$resources/../..", "$resources/../../glnis_gammaboard_api/glnis.sif", "glnis-gammaboard-sampler"]
 cwd = "$resources/.."
 ```
 
-Adjust paths to the actual checkout layout. `--nv` exposes the host GPU stack;
-use a GPU allocation when requesting CUDA execution. The [UBELIX guide](../../ops/ubelix/README.md)
-covers image builds and cluster deployment.
+Adjust paths to the actual checkout layout. `--nv` exposes the host GPU driver
+and devices; the image supplies PyTorch's CUDA runtime. Use a GPU allocation when
+requesting CUDA execution. With `--cleanenv`, forward the allocation's mask in the
+worker job: `export APPTAINERENV_CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES"`.
+Forward `CUDA_DEVICE_ORDER` the same way when the job sets it.
+Forward `SYMBOLICA_LICENSE` using `APPTAINERENV_SYMBOLICA_LICENSE` only when the
+optional native backend is needed. The [UBELIX guide](../../ops/ubelix/README.md)
+covers these settings, compiler caches, and storage bindings.
 
 ## Supply process arguments
 
@@ -148,7 +153,8 @@ on first generation/probability use. A new shape or the transition to inference
 can trigger more work. The baseline defaults to eager execution; enable its
 compiled table when these requests fit within the deadline. Reusing a persistent
 `TORCHINDUCTOR_CACHE_DIR` in the worker-launch environment reduces recompilation
-cost, but does not remove first-use startup. If cold compilation exceeds five
+cost, but does not remove first-use startup. Warm the cache with the actual
+model, device, precision and batch shapes. If cold compilation exceeds five
 minutes, use eager execution or change GammaBoard's request-timeout implementation
 before enabling compilation for that workload. A 1,800-second configurable
 request window would need an upstream change; it cannot be enabled in these cards.

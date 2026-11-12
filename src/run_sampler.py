@@ -1,12 +1,8 @@
 # type: ignore
 from __future__ import annotations
 
-import glnis_runtime_bootstrap
-
-glnis_runtime_bootstrap.bootstrap()
-
-from gammaboard_process import run_sampler  # noqa: E402
-from gammaboard_sampler import GammaBoardSampler  # noqa: E402
+from gammaboard_process import run_sampler
+from gammaboard_sampler import GammaBoardSampler
 
 
 def main() -> None:

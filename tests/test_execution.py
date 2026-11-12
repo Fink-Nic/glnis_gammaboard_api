@@ -94,6 +94,23 @@ def test_invalid_compile_configuration(options):
         TorchCompileConfig.from_kwargs(**options)
 
 
+@pytest.mark.parametrize("override", [None, "0", "1"])
+def test_compiler_sets_an_explicit_fusion_default_and_honors_overrides(monkeypatch, override):
+    from types import SimpleNamespace
+
+    if override is None:
+        monkeypatch.delenv("TRITON_DEFAULT_FP_FUSION", raising=False)
+    else:
+        monkeypatch.setenv("TRITON_DEFAULT_FP_FUSION", override)
+    monkeypatch.setattr(torch, "compile", lambda method, **kwargs: method)
+    before = dict(os.environ)
+    module = SimpleNamespace(sample=lambda: None, prob=lambda: None)
+    SamplerExecution.from_kwargs(module=module, kind="torch_compile")
+    assert os.environ["TRITON_DEFAULT_FP_FUSION"] == (override or "1")
+    assert {key: value for key, value in os.environ.items() if key != "TRITON_DEFAULT_FP_FUSION"} == {
+        key: value for key, value in before.items() if key != "TRITON_DEFAULT_FP_FUSION"}
+
+
 def test_compiled_checkpoint_in_fresh_process(tmp_path, sampler_settings):
     # The default suite exercises capture. Run this same test with BACKEND=inductor
     # and DEVICE=cuda:0 / MODE=reduce-overhead to exercise actual code generation.

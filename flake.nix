@@ -2,15 +2,8 @@
   description = "glNIS GammaBoard API development environment";
 
   inputs = {
-    # Match GammaBoard's package set, including its Python 3.13.12 interpreter.
-    nixpkgs.url = "github:NixOS/nixpkgs/b6067cc0127d4db9c26c79e4de0513e58d0c40c9";
-    # Keep Maturin >= 1.12 without changing the runtime's Python package set.
-    build-tools-nixpkgs.url = "github:NixOS/nixpkgs/8edc0c72e3a38faf5434e40d1f19431125fe4b30";
-    fenix = {
-      url = "github:nix-community/fenix/04b421dace0f5bf18d3ca363e95e59395d4cc680";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.rust-analyzer-src.follows = "";
-    };
+    # One package set supplies Python 3.13, PyTorch, Rust >=1.96 and Maturin >=1.12.
+    nixpkgs.url = "github:NixOS/nixpkgs/8edc0c72e3a38faf5434e40d1f19431125fe4b30";
     flake-utils.url = "github:numtide/flake-utils";
     crane.url = "github:ipetkov/crane";
 
@@ -20,7 +13,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, build-tools-nixpkgs, fenix, flake-utils, crane, gammaboard-src, ... }:
+  outputs = { self, nixpkgs, flake-utils, crane, gammaboard-src, ... }:
     # The pinned scientific wheels below target Linux x86_64.
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
@@ -31,44 +24,23 @@
 
         inherit (pkgs) lib;
         python = pkgs.python313;
-        maturin = build-tools-nixpkgs.legacyPackages.${system}.maturin;
+        maturin = pkgs.maturin;
         projectVersion = (builtins.fromTOML (builtins.readFile ./pyproject.toml)).project.version;
-        # Use this package set's matching PyTorch, Triton, and CUDA 12 stack.
-        torch = python.pkgs.torch-bin.overridePythonAttrs (old: {
-          dependencies = (old.dependencies or []) ++ [ python.pkgs.fsspec ];
-          # The fetched filename omits the wheel's local CUDA version. Restore
-          # it so wheel unpack/repack can find the matching dist-info directory.
-          preBuild = (old.preBuild or "") + ''
-            for torch_wheel in dist/torch-${old.version}-*.whl; do
-              mv "$torch_wheel" "''${torch_wheel/torch-${old.version}-/torch-${old.version}+cu128-}"
-            done
-          '';
-          # Nix supplies these CUDA libraries through torch-bin's buildInputs.
-          pythonRemoveDeps = (old.pythonRemoveDeps or []) ++ [
-            "nvidia-cuda-nvrtc-cu12" "nvidia-cuda-runtime-cu12"
-            "nvidia-cuda-cupti-cu12" "nvidia-cudnn-cu12" "nvidia-cublas-cu12"
-            "nvidia-cufft-cu12" "nvidia-curand-cu12" "nvidia-cusolver-cu12"
-            "nvidia-cusparse-cu12" "nvidia-cusparselt-cu12" "nvidia-nccl-cu12"
-            "nvidia-nvshmem-cu12" "nvidia-nvtx-cu12" "nvidia-nvjitlink-cu12"
-            "nvidia-cufile-cu12"
-          ];
-          # Use the bindings packaged with this CUDA 12.8 stack.
-          pythonRelaxDeps = (old.pythonRelaxDeps or []) ++ [ "cuda-bindings" ];
-        });
-        # Symbolica 3.0.1 needs newer Rust than this nixpkgs pin provides.
-        rustToolchain = fenix.packages.${system}.stable.withComponents [
-          "cargo" "clippy" "rust-src" "rust-std" "rustc" "rustfmt"
-        ];
-        craneLib = ((crane.mkLib pkgs).overrideToolchain rustToolchain).overrideScope (_: previous: {
-          # Unsandboxed container builds must not create /homeless-shelter.
-          craneUtils = previous.craneUtils.overrideAttrs (old: {
-            nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ pkgs.writableTmpDirAsHomeHook ];
+        # The wheel in this pin targets CUDA 13.0; nixpkgs still defaults to 12.
+        cudaPackages = pkgs.cudaPackages_13_0.overrideScope (_final: previous: {
+          # Deploy the library, without compiling its GPU test/example programs.
+          libnvshmem = previous.libnvshmem.overrideAttrs (old: {
+            cmakeFlags = old.cmakeFlags ++ [
+              (lib.cmakeBool "NVSHMEM_BUILD_TESTS" false)
+              (lib.cmakeBool "NVSHMEM_BUILD_EXAMPLES" false)
+            ];
           });
         });
+        torch = python.pkgs.torch-bin.override { inherit cudaPackages; };
+        craneLib = crane.mkLib pkgs;
         rustTarget = pkgs.stdenv.hostPlatform.rust.rustcTarget;
         cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
         cc = "${pkgs.stdenv.cc}/bin/cc";
-        cxx = "${pkgs.stdenv.cc}/bin/c++";
 
         # Torch/Triton need the C/C++ runtime and compiler even in the core.
         coreLibs = with pkgs; [ stdenv.cc.cc.lib zlib ];
@@ -224,11 +196,10 @@
             gammaboard-process
             numpy
             torch
-            tomlkit
             matplotlib
           ];
 
-          pythonImportsCheck = [ "glnis.core.parser" "glnis_runtime_bootstrap" "madnis_sampler" "run_sampler" ];
+          pythonImportsCheck = [ "glnis.core.parser" "gammaboard_sampler" "run_sampler" ];
           preFixup = ''
             export LD_LIBRARY_PATH="${coreLibPath}:''${LD_LIBRARY_PATH:-}"
           '';
@@ -251,125 +222,87 @@
 
         mkPythonEnv = withGammaloop: python.withPackages (ps: [
           glnis-gammaboard-api
-          ps.setuptools
-          ps.wheel
-          ps.pip
         ] ++ lib.optionals withGammaloop [ glnis-gammaloop-native symbolica ps.pydot ]);
 
-        mkRuntimeConfig = withGammaloop: pkgs.writeText "glnis-runtime.json" (builtins.toJSON {
-          # The venv's GC root must retain its base interpreter as well.
-          python = "${python}/bin/python3.13";
-          library_dirs = map (p: "${lib.getLib p}/lib") (if withGammaloop then gammaloopLibs else coreLibs);
-          tool_dirs = [ "${pkgs.stdenv.cc}/bin" ];
-        });
-        coreRuntimeConfig = mkRuntimeConfig false;
-        gammaloopRuntimeConfig = mkRuntimeConfig true;
-
-        # The default launcher only references core dependencies. Opting into
-        # GammaLoop enters its shell before resolving the native toolchain.
+        # Nix wheel environments need shared libraries before Python starts.
+        # Normal Python/Apptainer installs use their platform loader unchanged.
+        runtimeEnvironment = withGammaloop: ''
+          export LD_LIBRARY_PATH="${if withGammaloop then gammaloopLibPath else coreLibPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export PATH="${lib.makeBinPath [ pkgs.stdenv.cc pkgs.openssl ]}:$PATH"
+          if [ -d /run/opengl-driver/lib ]; then
+            export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/run/opengl-driver/lib"
+            export TRITON_LIBCUDA_PATH="''${TRITON_LIBCUDA_PATH:-/run/opengl-driver/lib}"
+          fi
+        '';
+        # Preserve the invoked venv path for pyvenv.cfg and generated shebangs.
+        # The launcher is also a GC root for its interpreter/library/compiler paths.
+        venvPython = withGammaloop: pkgs.writeShellScript "glnis-venv-python" ''
+          ${runtimeEnvironment withGammaloop}
+          exec -a "$0" ${python}/bin/python3.13 "$@"
+        '';
         mkDevelopVenv = withGammaloop: pkgs.writeShellApplication {
           name = "glnis-dev";
-          runtimeInputs = [ pkgs.uv python pkgs.coreutils pkgs.nix ];
+          runtimeInputs = [ pkgs.uv pkgs.coreutils pkgs.nix ];
           text = ''
-            with_gammaloop=false
-            if [[ "''${1:-}" == --gammaloop ]]; then
-              with_gammaloop=true
-              shift
-            fi
             if [[ "''${1:-}" == --help ]]; then
-              echo "Usage: glnis-dev [--gammaloop] [venv-directory]"
-              echo "Install this checkout and test dependencies; defaults to the Python core in .venv."
-              echo "Use --gammaloop to also build the native companion (Rust required)."
+              echo "Usage: glnis-dev [venv-directory]"
+              echo "Use nix develop .#gammaloop for the optional native backend."
               exit 0
             fi
             if [[ $# -gt 1 || "''${1:-}" == --* || ! -f pyproject.toml || ! -d src/glnis ]]; then
-              echo "Run glnis-dev [--gammaloop] [venv-directory] from the project root." >&2
+              echo "Run glnis-dev [venv-directory] from the project root." >&2
               exit 2
             fi
-            ${lib.optionalString (!withGammaloop) ''
-              if [[ "$with_gammaloop" == true ]]; then
-                exec nix develop .#gammaloop --command glnis-dev --gammaloop "$@"
-              fi
-            ''}
             venv_dir="$(realpath -m "''${1:-.venv}")"
-            if [[ -x "$venv_dir/bin/python" ]]; then
-              "$venv_dir/bin/python" -I -S -c 'import sys; assert sys.version_info[:2] == (3, 13), "Use a Python 3.13 venv"'
-            fi
-            # Refresh the interpreter in place after nixpkgs updates.
-            if [[ ! -x "$venv_dir/bin/python" ]] || \
-               [[ "$(realpath "$venv_dir/bin/python")" != "$(realpath ${python}/bin/python3.13)" ]]; then
-              uv venv --allow-existing --python ${python}/bin/python3.13 "$venv_dir"
-            fi
-            runtime_config=${coreRuntimeConfig}
-            ${lib.optionalString withGammaloop ''
-              if [[ "$with_gammaloop" == true ]]; then
-                runtime_config=${gammaloopRuntimeConfig}
-              fi
+            uv venv --allow-existing --python ${python}/bin/python3.13 "$venv_dir"
+            ln -sf ${venvPython withGammaloop} "$venv_dir/bin/python"
+            nix-store --add-root "$venv_dir/.nix-runtime" --indirect \
+              --realise ${venvPython withGammaloop} >/dev/null
+            ${if withGammaloop then ''
+              uv pip install --python "$venv_dir/bin/python" -e '.[gammaloop,test]' -e ./native/gammaloop
+            '' else ''
+              uv pip install --python "$venv_dir/bin/python" -e '.[test]'
             ''}
-            # Update native paths before any editable-install startup hooks run.
-            install -m 644 "$runtime_config" "$venv_dir/glnis-runtime.json"
-            nix-store --add-root "$venv_dir/.glnis-native-runtime" --indirect \
-              --realise "$runtime_config" >/dev/null
-            if [[ "$with_gammaloop" == true ]]; then
-              export PYO3_PYTHON="$venv_dir/bin/python"
-              uv pip install --python "$venv_dir/bin/python" \
-                --reinstall-package glnis-gammaboard-api --reinstall-package glnis-gammaloop-native \
-                -e '.[test,gammaloop]' -e ./native/gammaloop
-            else
-              uv pip install --python "$venv_dir/bin/python" \
-                --reinstall-package glnis-gammaboard-api -e '.[test]'
-            fi
-            site_packages="$("$venv_dir/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
-            echo 'import glnis_runtime_bootstrap; glnis_runtime_bootstrap.bootstrap()' > "$site_packages/zz_glnis_runtime.pth"
             echo "Ready: source $venv_dir/bin/activate"
           '';
         };
-
+        entryPoints = {
+          glnis-gammaboard-sampler = "run_sampler";
+          glnis-integrate = "glnis.scripts.run";
+          glnis-compare-samplers = "glnis.scripts.sampler_comparison";
+          glnis-slice-plot = "glnis.scripts.slice_plots";
+        };
         mkRuntime = withGammaloop:
-          let
-            pythonEnv = mkPythonEnv withGammaloop;
-            libPath = if withGammaloop then gammaloopLibPath else coreLibPath;
-          in pkgs.runCommand "glnis-gammaboard-api-runtime${lib.optionalString withGammaloop "-gammaloop"}" {
-            nativeBuildInputs = [ pkgs.makeWrapper ];
-          } ''
+          let pythonEnv = mkPythonEnv withGammaloop;
+          in pkgs.runCommand "glnis-runtime${lib.optionalString withGammaloop "-gammaloop"}" {} ''
             mkdir -p "$out/bin"
-            makeWrapper ${pythonEnv}/bin/python "$out/bin/python" \
-              --prefix LD_LIBRARY_PATH : "${libPath}:/run/opengl-driver/lib:/.singularity.d/libs" \
-              --prefix PATH : "${pkgs.stdenv.cc}/bin" \
-              --set-default CC "${cc}" \
-              --set-default CXX "${cxx}" \
-              --set-default OMP_NUM_THREADS 64 \
-              --set UV_PYTHON_DOWNLOADS never
-            makeWrapper "$out/bin/python" "$out/bin/glnis-gammaboard-sampler" \
-              --add-flags "-u -m run_sampler"
+            cat > "$out/bin/python" <<'EOF'
+            #!${pkgs.bash}/bin/bash
+            ${runtimeEnvironment withGammaloop}
+            exec ${pythonEnv}/bin/python "$@"
+            EOF
+            chmod +x "$out/bin/python"
+            ${lib.concatStrings (lib.mapAttrsToList (name: module: ''
+              cat > "$out/bin/${name}" <<EOF
+              #!${pkgs.bash}/bin/bash
+              exec "$out/bin/python" -u -m ${module} "\$@"
+              EOF
+              chmod +x "$out/bin/${name}"
+            '') entryPoints)}
           '';
         runtime = mkRuntime false;
         runtime-gammaloop = mkRuntime true;
-        mkDevShell = withGammaloop:
-          let libPath = if withGammaloop then gammaloopLibPath else coreLibPath;
-          in pkgs.mkShell ({
-            packages = [ python (mkDevelopVenv withGammaloop) pkgs.uv pkgs.git ]
-              ++ (if withGammaloop then gammaloopLibs else coreLibs)
-              ++ lib.optionals withGammaloop [
-                rustToolchain pkgs.rust-analyzer maturin pkgs.pkg-config pkgs.m4
-              ];
-            CC = cc;
-            CXX = cxx;
-            GLNIS_LIBRARY_PATH = libPath;
-            GLNIS_TOOL_PATH = "${pkgs.stdenv.cc}/bin";
-            UV_PYTHON_DOWNLOADS = "never";
-            shellHook = ''
-              export LD_LIBRARY_PATH="${libPath}:/run/opengl-driver/lib:/.singularity.d/libs:''${LD_LIBRARY_PATH:-}"
-              export OMP_NUM_THREADS=''${OMP_NUM_THREADS:-64}
-            '';
-          } // lib.optionalAttrs withGammaloop { "${cargoLinkerVar}" = cc; });
+        mkDevShell = withGammaloop: pkgs.mkShell ({
+          packages = [ python (mkDevelopVenv withGammaloop) pkgs.uv pkgs.git pkgs.stdenv.cc ]
+            ++ lib.optionals withGammaloop [
+              pkgs.cargo pkgs.rustc pkgs.rustfmt pkgs.rust-analyzer maturin pkgs.pkg-config pkgs.m4
+            ];
+          shellHook = runtimeEnvironment withGammaloop;
+        } // lib.optionalAttrs withGammaloop { "${cargoLinkerVar}" = cc; });
       in
       {
         packages = {
           inherit runtime wheel runtime-gammaloop wheel-gammaloop;
-          # The container build remaps its only available UID to an ordinary
-          # user before running Nix, so unpackers never try to restore owners.
-          container-build-tools = pkgs.util-linux;
           default = runtime;
         };
         apps.default = {

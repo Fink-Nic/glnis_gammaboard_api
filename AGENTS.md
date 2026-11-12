@@ -18,7 +18,9 @@
   run configuration, concurrent evaluation, and numerical integrands.
 - `src/glnis/scripts/`: integration, comparison, and PDF-slice entry points.
 - `native/gammaloop/`: optional Rust/PyO3 companion, built independently.
-- `examples/local/`: current local-run examples; `ops/ubelix/`: HPC build tooling.
+- `examples/local/`: current local-run examples; `ubelix.py` submits frozen builds
+  to Slurm; `apptainer.def` installs Python packages without Nix. The canonical
+  cluster instructions and pending validation notes are in `ops/ubelix/README.md`.
 
 ## Implementation conventions
 
@@ -71,7 +73,7 @@ OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 CUDA_VISIBLE_DEVICES='' .venv/bin/python -m 
 ```
 
 Run the affected tests while developing; run the full suite for changes spanning
-the sampler's contracts. The full command includes `ops/ubelix/tests`. Add tests
+the sampler's contracts. Deployment checks live in `tests/test_deployment.py`. Add tests
 for observable numerical behavior and invariants, especially sample/probability
 agreement after parameter updates, conditioning, singleton axes, fragmented
 feedback windows, mapping factors, and recovery with outstanding feedback.

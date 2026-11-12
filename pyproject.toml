@@ -21,7 +21,7 @@ gammaloop = [
     "symbolica==3.0.0",
     "pydot>=3.0",
 ]
-test = ["pytest", "setuptools>=77"]
+test = ["pytest", "setuptools>=77", "tomli>=2.4"]
 
 [project.scripts]
 glnis-gammaboard-sampler = "run_sampler:main"
@@ -33,7 +33,6 @@ glnis-slice-plot = "glnis.scripts.slice_plots:main"
 package-dir = { "" = "src" }
 include-package-data = false
 py-modules = [
-    "glnis_runtime_bootstrap",
     "gammaboard_sampler",
     "run_sampler",
 ]

@@ -3,10 +3,6 @@
 
 from __future__ import annotations
 
-import glnis_runtime_bootstrap
-
-glnis_runtime_bootstrap.bootstrap()
-
 import argparse
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field

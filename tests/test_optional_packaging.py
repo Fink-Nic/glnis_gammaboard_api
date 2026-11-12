@@ -78,7 +78,6 @@ def _inspect_wheel(wheel: Path) -> None:
         for module in (
             "gammaboard_sampler.py",
             "run_sampler.py",
-            "glnis_runtime_bootstrap.py",
             "glnis/core/parser.py",
             "glnis/core/integrand.py",
             "glnis/core/mappings.py",

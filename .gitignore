@@ -2,13 +2,11 @@
 result
 result-*
 *.sif
-*.sif.meta.json
 *.sif.lock
-*.sif.build-*/
+*.sif.partial-*
 /artifacts/ubelix/
 /logs/slurm/build/
 build
-madnis_gammaboard_api.egg-info
 checkpoints/
 __pycache__/
 *.py[cod]

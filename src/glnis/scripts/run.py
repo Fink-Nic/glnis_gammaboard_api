@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import glnis_runtime_bootstrap
-
-glnis_runtime_bootstrap.bootstrap()
-
 import argparse
 import json
 import math
